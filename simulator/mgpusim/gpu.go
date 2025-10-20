@@ -46,7 +46,7 @@ type GPU struct {
 	MemoryControllers  []*idealmemcontroller.Comp
 	Storage            *mem.Storage
 	InternalConnection akita.Connection
-	MMUs               []*mmu.MMUImpl
+	MMUs               []mmu.MMU
 
 	ChipRDMAEngines               []*rdma.Engine
 	PageRDMAEngines               []*rdma.Engine

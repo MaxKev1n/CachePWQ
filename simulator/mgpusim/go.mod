@@ -29,4 +29,3 @@ replace gitlab.com/akita/util => ../util
 
 replace gitlab.com/akita/dnn => ../dnn
 
-// go 1.13

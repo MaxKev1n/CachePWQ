@@ -115,7 +115,7 @@ func (b *XORTLBH2GPUBuilder) connectMMUToL2(chiplet *Chiplet) {
 	}
 
 	chiplet.MMU.SetLowModuleFinder(pageTableLowModuleFinder)
-	l1ToL2Conn.PlugIn(chiplet.MMU.TranslationPort, 64)
+	l1ToL2Conn.PlugIn(chiplet.MMU.TranslationPortPort(), 64)
 }
 
 func (b *XORTLBH2GPUBuilder) setupInterchipNetwork() {

@@ -2,6 +2,8 @@ package builders
 
 import (
 	"fmt"
+	"math"
+
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
@@ -11,7 +13,6 @@ import (
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/remotetranslation"
 	"gitlab.com/akita/util/tracing"
-	"math"
 )
 
 type XorWithPTCachingGPUBuilder struct {
@@ -163,7 +164,7 @@ func (b *XorWithPTCachingGPUBuilder) connectMMUToL2(chiplet *Chiplet) {
 			l2.TopPort)
 	}
 	chiplet.MMU.SetLowModuleFinder(lowModuleFinder)
-	chiplet.L1ToL2Connection.PlugIn(chiplet.MMU.TranslationPort, 64)
+	chiplet.L1ToL2Connection.PlugIn(chiplet.MMU.TranslationPortPort(), 64)
 }
 
 func (b *XorWithPTCachingGPUBuilder) buildMemBanks(chiplet *Chiplet) {

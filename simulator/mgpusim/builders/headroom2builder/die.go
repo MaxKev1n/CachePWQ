@@ -48,7 +48,7 @@ type Chiplet struct {
 	L1IAddrTranslator []addresstranslator.AddressTranslator
 	L1SAddrTranslator []addresstranslator.AddressTranslator
 	DRAMs             []*idealmemcontroller.Comp
-	MMU               *mmu.MMUImpl
+	MMU               mmu.MMU
 
 	chipRdmaEngine           *rdma.Engine
 	pageRdmaEngine           *rdma.Engine

@@ -522,7 +522,7 @@ func (b *CommonBuilder) buildL2TLB(chiplet *Chiplet) {
 		WithNumMSHREntry(64).
 		WithNumReqPerCycle(4).
 		WithLog2PageSize(b.log2PageSize).
-		WithLowModule(chiplet.MMU.ToTop).
+		WithLowModule(chiplet.MMU.ToTopPort()).
 		WithIndexingMask(mask).
 		WithLatency(10)
 	fmt.Println("num TLB sets:", numSets)
@@ -532,7 +532,7 @@ func (b *CommonBuilder) buildL2TLB(chiplet *Chiplet) {
 	}
 	l2TLB := builder.Build(fmt.Sprintf("%s.L2TLB", chiplet.name))
 	l2TLB.SetLowModuleFinder(&cache.SingleLowModuleFinder{
-		LowModule: chiplet.MMU.ToTop,
+		LowModule: chiplet.MMU.ToTopPort(),
 	})
 
 	b.l2TLBs = append(b.l2TLBs, l2TLB)
@@ -545,7 +545,7 @@ func (b *CommonBuilder) buildL2TLB(chiplet *Chiplet) {
 }
 
 func (b *CommonBuilder) buildMMU(chiplet *Chiplet) {
-	mmuBuilder := mmu.MakeBuilder().
+	mmuBuilder := mmu.MakeMMUBuilder().
 		WithEngine(b.engine).
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).
@@ -556,9 +556,9 @@ func (b *CommonBuilder) buildMMU(chiplet *Chiplet) {
 		//		WithBankSize(b.memoryPerChiplet).
 		//		WithNumMemoryBankPerChiplet(uint64(b.numMemoryBankPerChiplet)).
 		WithMaxNumReqInFlight(16) // changed this here
-		//TODO: try increasing the number of walkers to 16 and see what happens
+	//TODO: try increasing the number of walkers to 16 and see what happens
 	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.MMU", chiplet.name))
-	chiplet.MMU.CommandProcessor = b.gpu.CommandProcessor.ToMMUs
+	chiplet.MMU.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
 	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
 	// mmu.ToTop =
 	// b.l2TLBs = append(b.l2TLBs, l2TLB)
@@ -665,7 +665,7 @@ func (b *CommonBuilder) connectCP() {
 
 func (b *CommonBuilder) connectMMUToL2(chiplet *Chiplet) {
 	chiplet.MMU.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
-	chiplet.L1ToL2Connection.PlugIn(chiplet.MMU.TranslationPort, 64)
+	chiplet.L1ToL2Connection.PlugIn(chiplet.MMU.TranslationPortPort(), 64)
 }
 
 func (b *CommonBuilder) connectCPWithCUs() {
@@ -777,8 +777,8 @@ func (b *CommonBuilder) connectCPWithRTUs() {
 func (b *CommonBuilder) connectCPWithMMUs() {
 	for _, chiplet := range b.chiplets {
 		mmu := chiplet.MMU
-		b.cp.MMUs = append(b.cp.MMUs, mmu.ControlPort)
-		b.internalConn.PlugIn(mmu.ControlPort, 10)
+		b.cp.MMUs = append(b.cp.MMUs, mmu.ControlPortPort())
+		b.internalConn.PlugIn(mmu.ControlPortPort(), 10)
 	}
 }
 
@@ -886,7 +886,7 @@ func (b *CommonBuilder) connectL1TLBToL2TLB(chiplet *Chiplet) {
 func (b *CommonBuilder) connectL2TLBTOMMU(chiplet *Chiplet) {
 	tlbToMMUConn := akita.NewDirectConnection(chiplet.name+".L2TLB-MMU",
 		b.engine, b.freq)
-	tlbToMMUConn.PlugIn(chiplet.MMU.ToTop, 64)
+	tlbToMMUConn.PlugIn(chiplet.MMU.ToTopPort(), 64)
 	for _, l2tlb := range chiplet.L2TLBs {
 		tlbToMMUConn.PlugIn(l2tlb.GetBottomPort(), 16)
 	}

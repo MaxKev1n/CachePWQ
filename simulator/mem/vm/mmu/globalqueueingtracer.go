@@ -9,8 +9,8 @@ import (
 type GlobalPageWalkerOccupancyTracer struct {
 	filter           tracing.TaskFilter
 	lock             sync.Mutex
-	this             *MMUImpl
-	all_mmus         []*MMUImpl
+	this             MMU
+	all_mmus         []MMU
 	averageImbalance float64
 	count            int
 	threshold        int
@@ -24,17 +24,17 @@ func NewGlobalPageWalkerOccupancyTracer(filter tracing.TaskFilter) *GlobalPageWa
 		// TODO: fix
 		threshold: 4,
 	}
-	t.all_mmus = make([]*MMUImpl, 0)
+	t.all_mmus = make([]MMU, 0)
 	return t
 }
 
 // the Mmu  corrosponding to this tracer
-func (t *GlobalPageWalkerOccupancyTracer) AddThis(mmu *MMUImpl) {
+func (t *GlobalPageWalkerOccupancyTracer) AddThis(mmu MMU) {
 	t.this = mmu
 }
 
 // list of all Mmu
-func (t *GlobalPageWalkerOccupancyTracer) AddMMU(mmu *MMUImpl) {
+func (t *GlobalPageWalkerOccupancyTracer) AddMMU(mmu MMU) {
 	t.all_mmus = append(t.all_mmus, mmu)
 }
 

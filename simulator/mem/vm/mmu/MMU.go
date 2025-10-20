@@ -17,30 +17,6 @@ import (
 	"gitlab.com/akita/util/tracing"
 )
 
-type transactionState int
-
-const (
-	newTransaction transactionState = iota
-	sentToPageWalkCache
-	pageWalkCacheDone
-	sentToMem
-	memDone
-	transactionFinished
-)
-
-type transaction struct {
-	req  *device.TranslationReq
-	page device.Page
-	//cycleLeft int
-	//migration *device.PageMigrationReqToDriver
-	level             int
-	msgID             string
-	state             transactionState
-	PPN               uint64
-	vAddr             uint64
-	remoteMemAccesses int
-}
-
 // MMUImpl is the default mmu implementation. It is also an akita Component.
 type MMUImpl struct {
 	akita.TickingComponent
@@ -117,13 +93,6 @@ func (mmu *MMUImpl) performCtrlReq(now akita.VTimeInSec) bool {
 		return true
 	}
 	panic("something is wrong!")
-}
-
-func div(x, y float64) float64 {
-	if y == 0 {
-		return 0
-	}
-	return x / y
 }
 
 func (mmu *MMUImpl) sendCollectedStatsToCP(now akita.VTimeInSec) bool {
@@ -373,28 +342,6 @@ func (mmu *MMUImpl) handlePageWalkCacheResponse(rsp *mem.DataReadyRsp, now akita
 	}
 }
 
-func getAccessResultString(accessResult mem.AccessResult) (str string) {
-	switch accessResult {
-	case mem.ReadHit:
-		str = "read-hit"
-		// fmt.Println("read hit")
-	case mem.ReadMiss:
-		str = "read-miss"
-		// fmt.Println("read miss")
-	case mem.ReadMSHRHit:
-		str = "read-mshr-hit"
-		// fmt.Println("read mshr hit")
-	default:
-		panic("unknown access type")
-	}
-	return
-}
-
-func getChipletNum(component string) (chipletNum string) {
-	chipletNum = strings.Split(component, "_")[1][1:2]
-	return
-}
-
 func (mmu *MMUImpl) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) {
 	for i := 0; i < len(mmu.walkingTranslations); i++ {
 		trans := &mmu.walkingTranslations[i]
@@ -448,12 +395,6 @@ func (mmu *MMUImpl) fillPageWalkCache(now akita.VTimeInSec, i int) bool {
 	return true
 }
 
-func uint64ToBytes(data uint64) []byte {
-	bytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(bytes, data)
-	return bytes
-}
-
 func (mmu *MMUImpl) finalizeTransaction(
 	now akita.VTimeInSec,
 	walkingIndex int,
@@ -501,25 +442,6 @@ func (mmu *MMUImpl) doPageWalkHit(
 	return true
 }
 
-func (mmu *MMUImpl) sendTranlationRsp(
-	now akita.VTimeInSec,
-	trans transaction,
-) (madeProgress bool) {
-	req := trans.req
-	page := trans.page
-
-	rsp := device.TranslationRspBuilder{}.
-		WithSendTime(now).
-		WithSrc(mmu.ToTop).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
-		WithPage(page).
-		Build()
-	mmu.topSender.Send(rsp)
-
-	return true
-}
-
 func (mmu *MMUImpl) parseFromTop(now akita.VTimeInSec) bool {
 	if len(mmu.walkingTranslations) >= mmu.maxRequestsInFlight {
 		return false
@@ -558,21 +480,34 @@ func (mmu *MMUImpl) startWalking(req *device.TranslationReq, now akita.VTimeInSe
 	tracing.TraceReqReceive(req, now, mmu)
 }
 
-//SetLowModuleFinder sets the table recording where to find an address.
+// SetLowModuleFinder sets the table recording where to find an address.
 func (mmu *MMUImpl) SetLowModuleFinder(lmf cache.LowModuleFinder) {
 	mmu.lowModuleFinder = lmf
 }
 
-func unique(intSlice []uint64) []uint64 {
-	keys := make(map[int]bool)
-	list := []uint64{}
-	for _, entry := range intSlice {
-		if _, value := keys[int(entry)]; !value {
-			keys[int(entry)] = true
-			list = append(list, entry)
-		}
-	}
-	return list
+// ToTop returns the port connecting to the top component.
+func (mmu *MMUImpl) ToTopPort() akita.Port {
+	return mmu.ToTop
+}
+
+// TranslationPort returns the port connecting to the lower memory system.
+func (mmu *MMUImpl) TranslationPortPort() akita.Port {
+	return mmu.TranslationPort
+}
+
+// CommandProcessorPort returns the port connecting to the command processor.
+func (mmu *MMUImpl) CommandProcessorPort() akita.Port {
+	return mmu.CommandProcessor
+}
+
+// ControlPortPort returns the port connecting to the control processor.
+func (mmu *MMUImpl) ControlPortPort() akita.Port {
+	return mmu.ControlPort
+}
+
+// SetCommandProcessorPort sets the command processor port.
+func (mmu *MMUImpl) SetCommandProcessorPort(port akita.Port) {
+	mmu.CommandProcessor = port
 }
 
 func (mmu *MMUImpl) GetNumActiveWalkers() int {

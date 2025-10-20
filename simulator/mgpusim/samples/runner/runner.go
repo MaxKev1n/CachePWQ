@@ -178,7 +178,7 @@ type AddressTranslatorLatencyTracer struct {
 
 type MMUMemoryLatencyTracer struct {
 	tracer *tracing.ConditionalAverageTimeTracer
-	mmu    akita.Component
+	mmu    mmu.MMU
 }
 
 type TLBHitRateTracer struct {
@@ -193,17 +193,17 @@ type CDMAAccessTracer struct {
 
 type PWCHitRateTracer struct {
 	tracer *tracing.StepCountTracer
-	mmu    akita.Component
+	mmu    mmu.MMU
 }
 
 type PageWalkLatencyTracer struct {
 	tracer *tracing.AverageTimeTracer
-	mmu    akita.Component
+	mmu    mmu.MMU
 }
 
 type ActivePageWalkerTracer struct {
 	tracer *tracing.AverageCountTracer
-	mmu    akita.Component
+	mmu    mmu.MMU
 }
 
 type RemoteTLBLatencyTracer struct {
@@ -246,7 +246,7 @@ type TLBQueueImbalanceTracer struct {
 
 type PageWalkerImbalanceTracer struct {
 	tracer *mmu.GlobalPageWalkerOccupancyTracer
-	mmu    *mmu.MMUImpl
+	mmu    mmu.MMU
 }
 
 type EntropyTracer struct {
@@ -365,6 +365,7 @@ type Runner struct {
 }
 
 // ParseFlag applies the runner flag to runner object
+//
 //nolint:gocyclo
 func (r *Runner) ParseFlag() *Runner {
 	if *parallelFlag {

@@ -534,12 +534,12 @@ func (b *MCMGPUBuilder) buildL2TLB(chiplet *Chiplet) {
 		WithNumMSHREntry(64).
 		WithNumReqPerCycle(4).
 		WithLog2PageSize(b.log2PageSize).
-		WithLowModule(chiplet.MMU.ToTop).
+		WithLowModule(chiplet.MMU.ToTopPort()).
 		WithLatency(10)
 
 	l2TLB := builder.Build(fmt.Sprintf("%s.L2TLB", chiplet.name))
 	l2TLB.SetLowModuleFinder(&cache.SingleLowModuleFinder{
-		LowModule: chiplet.MMU.ToTop,
+		LowModule: chiplet.MMU.ToTopPort(),
 	})
 
 	b.l2TLBs = append(b.l2TLBs, l2TLB)
@@ -552,7 +552,7 @@ func (b *MCMGPUBuilder) buildL2TLB(chiplet *Chiplet) {
 }
 
 func (b *MCMGPUBuilder) buildMMU(chiplet *Chiplet) {
-	mmuBuilder := mmu.MakeBuilder().
+	mmuBuilder := mmu.MakeMMUBuilder().
 		WithEngine(b.engine).
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).
@@ -780,7 +780,7 @@ func (b *MCMGPUBuilder) connectL1ToL2(chiplet *Chiplet) {
 	}
 
 	chiplet.MMU.SetLowModuleFinder(lowModuleFinder)
-	l1ToL2Conn.PlugIn(chiplet.MMU.TranslationPort, 64)
+	l1ToL2Conn.PlugIn(chiplet.MMU.TranslationPortPort(), 64)
 }
 
 func (b *MCMGPUBuilder) connectL2ToDRAM(chiplet *Chiplet) {
@@ -839,7 +839,7 @@ func (b *MCMGPUBuilder) connectL1TLBToL2TLB(chiplet *Chiplet) {
 func (b *MCMGPUBuilder) connectL2TLBTOMMU(chiplet *Chiplet) {
 	tlbToMMUConn := akita.NewDirectConnection(chiplet.name+".L2TLB-MMU",
 		b.engine, b.freq)
-	tlbToMMUConn.PlugIn(chiplet.MMU.ToTop, 64)
+	tlbToMMUConn.PlugIn(chiplet.MMU.ToTopPort(), 64)
 	for _, l2tlb := range chiplet.L2TLBs {
 		tlbToMMUConn.PlugIn(l2tlb.GetBottomPort(), 16)
 	}
