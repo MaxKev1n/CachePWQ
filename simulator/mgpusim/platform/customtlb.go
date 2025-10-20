@@ -94,6 +94,7 @@ func (b *CustomTLBGPUPlatformBuilder) createGPUBuilder(
 	gpuBuilder.UseCoalescingTLBPort(b.useCoalescingTLBPort)
 	gpuBuilder.UseCoalescingRTU(b.useCoalescingRTU)
 	gpuBuilder.WithCustomHSL(b.customHSLpmdUnits)
+	gpuBuilder.WithMMUType(b.mmuType)
 
 	b.setVisTracer(gpuDriver, gpuBuilder)
 	b.setTLBTracer(gpuBuilder)

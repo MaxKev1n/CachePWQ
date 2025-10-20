@@ -116,7 +116,6 @@ def main():
 
     # === Stage all changes ===
     print("\n📦 Staging changes...")
-    run(["git", "add", "-A"])
 
     diff_check = subprocess.run(["git", "diff", "--cached", "--quiet"])
     if diff_check.returncode == 0:

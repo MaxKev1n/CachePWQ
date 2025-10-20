@@ -129,6 +129,8 @@ var useCustomHSL = flag.Bool("use-custom-hsl", false,
 	"Specify if to use custom HSL as defined in program")
 var customHSL = flag.Uint64("custom-hsl", 1,
 	"Specify the value of custom HSL directly to the builder")
+var mmuFlag = flag.String("mmu", "default",
+	"Specify the type of MMU to use: default, mpw, ideal")
 
 type verificationPreEnablingBenchmark interface {
 	benchmarks.Benchmark
@@ -975,6 +977,7 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithSchedulingPartition(*schedulingPartition)
 		b.WithMemAllocatorType(*memAllocatorType)
 		b.WithLog2PageSize(*log2PageSize)
+		b.WithMMUType(*mmuFlag)
 		r.Engine, r.GPUDriver = b.Build()
 	case "privateh2tlb":
 		b := platform.MakePrivateH2TLBPlatformBuilder()
@@ -1064,6 +1067,7 @@ func (r *Runner) buildTimingPlatform() {
 		b.UseCoalescingTLBPort(*useCoalescingTLBPort)
 		b.UseCoalescingRTU(*useCoalescingRTU)
 		b.WithLog2PageSize(*log2PageSize)
+		b.WithMMUType(*mmuFlag)
 		b = b.WithL2TLBStriping(*l2TlbStriping)
 		b = b.SwitchL2TLBStriping(*useSwitching)
 		b = b.UsePtCaching(*ptCaching)
@@ -1345,6 +1349,7 @@ func (r *Runner) buildTimingPlatform() {
 		b.UseCoalescingTLBPort(*useCoalescingTLBPort)
 		b.UseCoalescingRTU(*useCoalescingRTU)
 		b.WithLog2PageSize(*log2PageSize)
+		b.WithMMUType(*mmuFlag)
 		b = b.WithL2TLBStriping(*l2TlbStriping)
 		b = b.SwitchL2TLBStriping(*useSwitching)
 		b = b.UsePtCaching(*ptCaching)

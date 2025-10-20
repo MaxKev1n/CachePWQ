@@ -40,6 +40,7 @@ type CommonPlatformBuilder struct {
 	useCoalescingRTU         bool
 	memAllocatorType         string
 	customHSLpmdUnits        uint64
+	mmuType                  string
 }
 
 // Makebuilder creates a EmuBuilder with default parameters.
@@ -76,6 +77,11 @@ func (b *CommonPlatformBuilder) WithVisTracing() {
 // WithTLBTracing lets the platform to trace memory operations.
 func (b *CommonPlatformBuilder) WithTLBTracing() {
 	b.traceTLB = true
+}
+
+// WithMMUType sets the type of MMU to use.
+func (b *CommonPlatformBuilder) WithMMUType(mmuType string) {
+	b.mmuType = mmuType
 }
 
 // WithMemTracing lets the platform to trace memory operations.

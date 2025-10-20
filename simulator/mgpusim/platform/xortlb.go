@@ -93,6 +93,7 @@ func (b *XORTLBGPUPlatformBuilder) createGPUBuilder(
 	gpuBuilder.WithSchedulingPartition(b.partition)
 	gpuBuilder.UseCoalescingTLBPort(b.useCoalescingTLBPort)
 	gpuBuilder.UseCoalescingRTU(b.useCoalescingRTU)
+	gpuBuilder.WithMMUType(b.mmuType)
 
 	b.setVisTracer(gpuDriver, gpuBuilder)
 	b.setTLBTracer(gpuBuilder)

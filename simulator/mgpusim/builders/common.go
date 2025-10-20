@@ -111,6 +111,8 @@ type CommonBuilder struct {
 	partition            string
 	useCoalescingTLBPort bool
 	useCoalescingRTU     bool
+
+	mmuType string
 }
 
 // MakeCommonBuilder provides a GPU builder that can builds the MCM GPU.
@@ -252,6 +254,10 @@ func (b *CommonBuilder) UseCoalescingTLBPort(u bool) {
 
 func (b *CommonBuilder) UseCoalescingRTU(u bool) {
 	b.useCoalescingRTU = u
+}
+
+func (b *CommonBuilder) WithMMUType(mmuType string) {
+	b.mmuType = mmuType
 }
 
 // CalculateMemoryParameters calculates
@@ -545,29 +551,57 @@ func (b *CommonBuilder) buildL2TLB(chiplet *Chiplet) {
 }
 
 func (b *CommonBuilder) buildMMU(chiplet *Chiplet) {
+	switch b.mmuType {
+	case "default":
+		b.buildDefaultMMU(chiplet)
+	case "mpw":
+		b.buildMPWMMU(chiplet)
+	case "ideal":
+		b.buildIdealMMU(chiplet)
+	default:
+		panic("unsupported mmu type")
+	}
+}
+
+func (b *CommonBuilder) buildIdealMMU(chiplet *Chiplet) {
+	mmuBuilder := mmu.MakeIdealMMUBuilder().
+		WithEngine(b.engine).
+		WithFreq(1 * akita.GHz).
+		WithLog2PageSize(b.log2PageSize).
+		WithPageTable(b.pageTable).
+		WithNumChiplets(uint64(b.numChiplet))
+
+	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.IdealMMU", chiplet.name))
+	chiplet.MMU.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
+	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
+}
+
+func (b *CommonBuilder) buildMPWMMU(chiplet *Chiplet) {
+	mmuBuilder := mmu.MakeMPWMMUBuilder().
+		WithEngine(b.engine).
+		WithFreq(1 * akita.GHz).
+		WithLog2PageSize(b.log2PageSize).
+		WithPageTable(b.pageTable).
+		WithNumChiplets(uint64(b.numChiplet)).
+		WithMaxNumReqInFlight(16)
+
+	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.MPWMMU", chiplet.name))
+	chiplet.MMU.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
+	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
+}
+
+func (b *CommonBuilder) buildDefaultMMU(chiplet *Chiplet) {
 	mmuBuilder := mmu.MakeMMUBuilder().
 		WithEngine(b.engine).
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).
 		WithPageTable(b.pageTable).
 		WithNumChiplets(uint64(b.numChiplet)).
-		//		WithLowAddr(b.memAddrOffset).
-		//		WithTotMem(b.totalMem).
-		//		WithBankSize(b.memoryPerChiplet).
-		//		WithNumMemoryBankPerChiplet(uint64(b.numMemoryBankPerChiplet)).
-		WithMaxNumReqInFlight(16) // changed this here
-	//TODO: try increasing the number of walkers to 16 and see what happens
-	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.MMU", chiplet.name))
+		WithMaxNumReqInFlight(16)
+
+	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.BaselineMMU", chiplet.name))
 	chiplet.MMU.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
 	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
-	// mmu.ToTop =
-	// b.l2TLBs = append(b.l2TLBs, l2TLB)
-	// b.gpu.L2TLBs = append(b.gpu.L2TLBs, l2TLB)
-	// chiplet.L2TLBs = append(chiplet.L2TLBs, l2TLB)
-
-	// if b.enableVisTracing {
-	// 	tracing.CollectTrace(l2TLB, b.visTracer)
-	// }
 }
 
 // func getChipletNumFromName(chipletName string) int {

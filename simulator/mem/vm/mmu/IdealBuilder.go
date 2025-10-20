@@ -1,8 +1,6 @@
 package mmu
 
 import (
-	"fmt"
-
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache/writeback"
@@ -11,8 +9,8 @@ import (
 	"gitlab.com/akita/util/akitaext"
 )
 
-// A MMUBuilder can build MMU component
-type MMUBuilder struct {
+// A IdealMMUBuilder can build MMU component
+type IdealMMUBuilder struct {
 	engine                   akita.Engine
 	freq                     akita.Freq
 	log2PageSize             uint64
@@ -28,8 +26,8 @@ type MMUBuilder struct {
 }
 
 // MakeBuilder creates a new builder
-func MakeMMUBuilder() MMUBuilder {
-	return MMUBuilder{
+func MakeIdealMMUBuilder() IdealMMUBuilder {
+	return IdealMMUBuilder{
 		freq:              1 * akita.GHz,
 		log2PageSize:      12,
 		maxNumReqInFlight: 8, //16,
@@ -37,25 +35,25 @@ func MakeMMUBuilder() MMUBuilder {
 }
 
 // WithEngine sets the engine to be used with the MMU
-func (b MMUBuilder) WithEngine(engine akita.Engine) MMUBuilder {
+func (b IdealMMUBuilder) WithEngine(engine akita.Engine) IdealMMUBuilder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency that the MMU to work at
-func (b MMUBuilder) WithFreq(freq akita.Freq) MMUBuilder {
+func (b IdealMMUBuilder) WithFreq(freq akita.Freq) IdealMMUBuilder {
 	b.freq = freq
 	return b
 }
 
 // WithLog2PageSize sets the page size that the mmu support.
-func (b MMUBuilder) WithLog2PageSize(log2PageSize uint64) MMUBuilder {
+func (b IdealMMUBuilder) WithLog2PageSize(log2PageSize uint64) IdealMMUBuilder {
 	b.log2PageSize = log2PageSize
 	return b
 }
 
 // WithPageTable sets the page table that the MMU uses.
-func (b MMUBuilder) WithPageTable(pageTable *device.PageTableImpl) MMUBuilder {
+func (b IdealMMUBuilder) WithPageTable(pageTable *device.PageTableImpl) IdealMMUBuilder {
 	b.pageTable = pageTable
 	return b
 }
@@ -63,14 +61,14 @@ func (b MMUBuilder) WithPageTable(pageTable *device.PageTableImpl) MMUBuilder {
 /*
 // WithMigrationServiceProvider sets the destination port that can perform
 // page migration.
-func (b MMUBuilder) WithMigrationServiceProvider(p akita.Port) MMUBuilder {
+func (b IdealMMUBuilder) WithMigrationServiceProvider(p akita.Port) IdealMMUBuilder {
 	b.migrationServiceProvider = p
 	return b
 }
 */
 // WithMaxNumReqInFlight sets the number of requests can be concurrently
 // processed by the MMU.
-func (b MMUBuilder) WithMaxNumReqInFlight(n int) MMUBuilder {
+func (b IdealMMUBuilder) WithMaxNumReqInFlight(n int) IdealMMUBuilder {
 	b.maxNumReqInFlight = n
 	return b
 }
@@ -78,14 +76,14 @@ func (b MMUBuilder) WithMaxNumReqInFlight(n int) MMUBuilder {
 /*
 // WithPageWalkingLatency sets the number of cycles required for walking a page
 // table.
-func (b MMUBuilder) WithPageWalkingLatency(n int) MMUBuilder {
+func (b IdealMMUBuilder) WithPageWalkingLatency(n int) IdealMMUBuilder {
 	b.pageWalkingLatency = n
 	return b
 }
 */
 // WithNumChiplets sets the number of cycles required for walking a page
 // table.
-func (b MMUBuilder) WithNumChiplets(n uint64) MMUBuilder {
+func (b IdealMMUBuilder) WithNumChiplets(n uint64) IdealMMUBuilder {
 	b.numChiplets = n
 	return b
 }
@@ -93,35 +91,35 @@ func (b MMUBuilder) WithNumChiplets(n uint64) MMUBuilder {
 /*
 // WithLowAddr sets the number of cycles required for walking a page
 // table.
-func (b MMUBuilder) WithLowAddr(la uint64) MMUBuilder {
+func (b IdealMMUBuilder) WithLowAddr(la uint64) IdealMMUBuilder {
 	b.lowAddr = la
 	return b
 }
 
 // WithTotMem sets the number of cycles required for walking a page
 // table.
-func (b MMUBuilder) WithTotMem(ha uint64) MMUBuilder {
+func (b IdealMMUBuilder) WithTotMem(ha uint64) IdealMMUBuilder {
 	b.totMem = ha
 	return b
 }
 
 // WithBankSize sets the number of cycles required for walking a page
 // table.
-func (b MMUBuilder) WithBankSize(n uint64) MMUBuilder {
+func (b IdealMMUBuilder) WithBankSize(n uint64) IdealMMUBuilder {
 	b.bankSize = n
 	return b
 }
 
 // WithNumMemoryBankPerChiplet sets the number of cycles required for walking a page
 // table.
-func (b MMUBuilder) WithNumMemoryBankPerChiplet(n uint64) MMUBuilder {
+func (b IdealMMUBuilder) WithNumMemoryBankPerChiplet(n uint64) IdealMMUBuilder {
 	b.numMemoryBanksPerChiplet = n
 	return b
 }
 */
 // Build returns a newly created MMU component
-func (b MMUBuilder) Build(name string) MMU {
-	mmu := new(MMUImpl)
+func (b IdealMMUBuilder) Build(name string) MMU {
+	mmu := new(IdealMMU)
 	mmu.TickingComponent = *akita.NewTickingComponent(
 		name, b.engine, b.freq, mmu)
 	//mmu.migrationQueueSize = 4096
@@ -140,26 +138,10 @@ func (b MMUBuilder) Build(name string) MMU {
 	} else {
 		panic("no page table!")
 	}
-	mmu.maxRequestsInFlight = b.maxNumReqInFlight
-	fmt.Println("num walkers:", mmu.maxRequestsInFlight)
-
-	for i := 0; i < mmu.maxRequestsInFlight; i++ {
-		walker := new(PageWalker)
-
-		walker.mmu = mmu
-		walker.queue = make([]*transaction, 0)
-		walker.outstandingReq = ""
-
-		mmu.pageWalkers = append(mmu.pageWalkers, walker)
-	}
-
-	mmu.nextPointer = 0
-	mmu.queueCapacity = 8
 
 	mmu.inflightPWCRequests = make(map[string]*transaction)
 	mmu.inflightMemRequests = make([]*mem.ReadReq, 0)
 	mmu.mappingMemAccess = make(map[string]*transaction)
-	mmu.maxMemRequestsInFlight = 32
 
 	//mmu.latency = b.pageWalkingLatency
 	//mmu.PageAccesedByDeviceID = make(map[uint64][]uint64)
