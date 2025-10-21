@@ -301,6 +301,8 @@ type Runner struct {
 	ConditionalRemoteTLBLatencyTracers []ConditionalRemoteTLBLatencyTracer
 	RDMATransactionCounters            []rdmaTransactionCountTracer
 	CDMATransactionCounters            []rdmaTransactionCountTracer
+	CDMATransactionDataCounters        []rdmaTransactionCountTracer
+	CDMATransactionPageCounters        []rdmaTransactionCountTracer
 	PageTransactionCounters            []rdmaTransactionCountTracer
 	RTUTransactionCounters             []rtuTransactionCountTracer
 	CDMAAccessTracers                  []CDMAAccessTracer
@@ -2057,6 +2059,104 @@ func (r *Runner) addCDMAEngineTracer() {
 
 			r.CDMATransactionCounters = append(r.CDMATransactionCounters, t)
 
+			t = rdmaTransactionCountTracer{}
+			t.rdmaEngine = cdmaEngine
+			t.incomingTracer = tracing.NewAverageTimeTracer(
+				func(task tracing.Task) bool {
+					if task.Kind != "req_in" {
+						return false
+					}
+
+					isMMU := task.Detail.(akita.Msg).Meta().PTW
+
+					if !isMMU {
+						return false
+					}
+
+					isFromOutside := strings.Contains(
+						task.Detail.(akita.Msg).Meta().Src.Name(), "ChipRDMA")
+					if !isFromOutside {
+						return false
+					}
+
+					return true
+				})
+			t.outgoingTracer = tracing.NewAverageTimeTracer(
+				func(task tracing.Task) bool {
+					if task.Kind != "req_in" {
+						return false
+					}
+
+					isMMU := strings.Contains(
+						task.Detail.(akita.Msg).Meta().Src.Name(), "MMU")
+
+					if !isMMU {
+						return false
+					}
+
+					isFromOutside := strings.Contains(
+						task.Detail.(akita.Msg).Meta().Src.Name(), "ChipRDMA")
+					if isFromOutside {
+						return false
+					}
+
+					return true
+				})
+
+			tracing.CollectTrace(t.rdmaEngine, t.incomingTracer)
+			tracing.CollectTrace(t.rdmaEngine, t.outgoingTracer)
+
+			r.CDMATransactionPageCounters = append(r.CDMATransactionPageCounters, t)
+
+			t = rdmaTransactionCountTracer{}
+			t.rdmaEngine = cdmaEngine
+			t.incomingTracer = tracing.NewAverageTimeTracer(
+				func(task tracing.Task) bool {
+					if task.Kind != "req_in" {
+						return false
+					}
+
+					isMMU := task.Detail.(akita.Msg).Meta().PTW
+
+					if isMMU {
+						return false
+					}
+
+					isFromOutside := strings.Contains(
+						task.Detail.(akita.Msg).Meta().Src.Name(), "ChipRDMA")
+					if !isFromOutside {
+						return false
+					}
+
+					return true
+				})
+			t.outgoingTracer = tracing.NewAverageTimeTracer(
+				func(task tracing.Task) bool {
+					if task.Kind != "req_in" {
+						return false
+					}
+
+					isMMU := strings.Contains(
+						task.Detail.(akita.Msg).Meta().Src.Name(), "MMU")
+
+					if isMMU {
+						return false
+					}
+
+					isFromOutside := strings.Contains(
+						task.Detail.(akita.Msg).Meta().Src.Name(), "ChipRDMA")
+					if isFromOutside {
+						return false
+					}
+
+					return true
+				})
+
+			tracing.CollectTrace(t.rdmaEngine, t.incomingTracer)
+			tracing.CollectTrace(t.rdmaEngine, t.outgoingTracer)
+
+			r.CDMATransactionDataCounters = append(r.CDMATransactionDataCounters, t)
+
 			tracer := tracing.NewStepCountTracer(
 				func(task tracing.Task) bool { /*return true*/
 					return task.Kind == "req_in"
@@ -2937,6 +3037,50 @@ func (r *Runner) reportCDMATransactionCount() {
 		r.metricsCollector.Collect(
 			t.rdmaEngine.Name(),
 			"incoming_trans_latency",
+			float64(t.incomingTracer.AverageTime()),
+		)
+	}
+	for _, t := range r.CDMATransactionPageCounters {
+		r.metricsCollector.Collect(
+			t.rdmaEngine.Name(),
+			"outgoing_trans_page_count",
+			float64(t.outgoingTracer.TotalCount()),
+		)
+		r.metricsCollector.Collect(
+			t.rdmaEngine.Name(),
+			"outgoing_trans_page_latency",
+			float64(t.outgoingTracer.AverageTime()),
+		)
+		r.metricsCollector.Collect(
+			t.rdmaEngine.Name(),
+			"incoming_trans_page_count",
+			float64(t.incomingTracer.TotalCount()),
+		)
+		r.metricsCollector.Collect(
+			t.rdmaEngine.Name(),
+			"incoming_trans_page_latency",
+			float64(t.incomingTracer.AverageTime()),
+		)
+	}
+	for _, t := range r.CDMATransactionDataCounters {
+		r.metricsCollector.Collect(
+			t.rdmaEngine.Name(),
+			"outgoing_trans_data_count",
+			float64(t.outgoingTracer.TotalCount()),
+		)
+		r.metricsCollector.Collect(
+			t.rdmaEngine.Name(),
+			"outgoing_trans_data_latency",
+			float64(t.outgoingTracer.AverageTime()),
+		)
+		r.metricsCollector.Collect(
+			t.rdmaEngine.Name(),
+			"incoming_trans_data_count",
+			float64(t.incomingTracer.TotalCount()),
+		)
+		r.metricsCollector.Collect(
+			t.rdmaEngine.Name(),
+			"incoming_trans_data_latency",
 			float64(t.incomingTracer.AverageTime()),
 		)
 	}

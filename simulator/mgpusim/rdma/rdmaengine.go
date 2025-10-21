@@ -302,6 +302,10 @@ func (e *Engine) processReqFromL1(
 	cloned.Meta().Dst = dst
 	cloned.Meta().SendTime = now
 
+	if strings.Contains(req.Meta().Src.Name(), "MMU") {
+		cloned.Meta().PTW = true
+	}
+
 	err := e.RequestPort.Send(cloned)
 	if err == nil {
 		e.ToL1.Retrieve(now)
@@ -343,6 +347,7 @@ func (e *Engine) processReqFromPwPort(
 	now akita.VTimeInSec,
 	req mem.AccessReq,
 ) bool {
+	panic("Panic!!!")
 	dst := e.RemoteRDMAAddressTable.Find(req.GetAddress())
 	cloned := e.cloneReq(req)
 	cloned.Meta().Src = e.RequestPort
