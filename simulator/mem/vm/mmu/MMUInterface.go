@@ -35,6 +35,8 @@ const (
 )
 
 type transaction struct {
+	akita.MsgMeta
+
 	req  *device.TranslationReq
 	page device.Page
 	//cycleLeft int
@@ -45,6 +47,10 @@ type transaction struct {
 	PPN               uint64
 	vAddr             uint64
 	remoteMemAccesses int
+}
+
+func (r *transaction) Meta() *akita.MsgMeta {
+	return &r.MsgMeta
 }
 
 func div(x, y float64) float64 {

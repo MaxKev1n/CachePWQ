@@ -558,6 +558,8 @@ func (b *CommonBuilder) buildMMU(chiplet *Chiplet) {
 		b.buildMPWMMU(chiplet)
 	case "ideal":
 		b.buildIdealMMU(chiplet)
+	case "caPWQ":
+		b.buildCAPWQMMU(chiplet)
 	default:
 		panic("unsupported mmu type")
 	}
@@ -572,6 +574,20 @@ func (b *CommonBuilder) buildIdealMMU(chiplet *Chiplet) {
 		WithNumChiplets(uint64(b.numChiplet))
 
 	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.IdealMMU", chiplet.name))
+	chiplet.MMU.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
+	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
+}
+
+func (b *CommonBuilder) buildCAPWQMMU(chiplet *Chiplet) {
+	mmuBuilder := mmu.MakecaPWQMMUBuilder().
+		WithEngine(b.engine).
+		WithFreq(1 * akita.GHz).
+		WithLog2PageSize(b.log2PageSize).
+		WithPageTable(b.pageTable).
+		WithNumChiplets(uint64(b.numChiplet)).
+		WithMaxNumReqInFlight(16)
+
+	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.caPWQMMU", chiplet.name))
 	chiplet.MMU.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
 	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
 }
