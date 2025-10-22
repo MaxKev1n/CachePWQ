@@ -23,6 +23,7 @@ type Builder struct {
 	maxInflightFetch    int
 	maxInflightEviction int
 	bankLatency         int
+	numBanks            int
 	pipelineLatency     int
 	rdmaPort            akita.Port
 }
@@ -39,6 +40,7 @@ func MakeBuilder() Builder {
 		maxInflightFetch:    128,
 		maxInflightEviction: 128,
 		bankLatency:         1,
+		numBanks:            1,
 		pipelineLatency:     10,
 	}
 }
@@ -111,6 +113,24 @@ func (b Builder) WithRDMAPort(rdmaPort akita.Port) Builder {
 	return b
 }
 
+// WithBankLatency sets the latency of each bank stage in cycles.
+func (b Builder) WithBankLatency(latency int) Builder {
+	b.bankLatency = latency
+	return b
+}
+
+// WithPipelineLatency sets the number of stages in the cache pipeline.
+func (b Builder) WithPipelineLatency(latency int) Builder {
+	b.pipelineLatency = latency
+	return b
+}
+
+// WithNumBanks sets the number of banks in the cache.
+func (b Builder) WithNumBanks(n int) Builder {
+	b.numBanks = n
+	return b
+}
+
 // Build creates a usable writeback cache.
 func (b *Builder) Build(name string) *Cache {
 	cache := new(Cache)
@@ -167,12 +187,16 @@ func (b *Builder) createPortSenders(cache *Cache) {
 func (b *Builder) createInternalStages(cache *Cache) {
 	cache.topParser = &topParser{cache: cache}
 	cache.dirStage = &directoryStage{cache: cache}
-	cache.bankStages = make([]*bankStage, 1)
-	cache.bankStages[0] = &bankStage{
-		cache:   cache,
-		bankID:  0,
-		latency: b.bankLatency,
+	cache.bankStages = make([]*bankStage, b.numBanks)
+
+	for i := 0; i < b.numBanks; i++ {
+		cache.bankStages[i] = &bankStage{
+			cache:   cache,
+			bankID:  i,
+			latency: b.bankLatency,
+		}
 	}
+
 	cache.mshrStage = &mshrStage{cache: cache}
 	cache.flusher = &flusher{cache: cache}
 	cache.writeBuffer = &writeBufferStage{
@@ -192,10 +216,16 @@ func (b *Builder) createInternalStages(cache *Cache) {
 
 func (b *Builder) createInternalBuffers(cache *Cache) {
 	cache.dirStageBuffer = util.NewBuffer(2 * cache.numReqPerCycle)
-	cache.dirToBankBuffers = make([]util.Buffer, 1)
-	cache.dirToBankBuffers[0] = util.NewBuffer(2 * cache.numReqPerCycle)
-	cache.writeBufferToBankBuffers = make([]util.Buffer, 1)
-	cache.writeBufferToBankBuffers[0] = util.NewBuffer(2 * cache.numReqPerCycle)
+	cache.dirToBankBuffers = make([]util.Buffer, b.numBanks)
+	cache.writeBufferToBankBuffers = make([]util.Buffer, b.numBanks)
+
+	for i := 0; i < b.numBanks; i++ {
+		cache.dirToBankBuffers[i] =
+			util.NewBuffer(2 * cache.numReqPerCycle)
+		cache.writeBufferToBankBuffers[i] =
+			util.NewBuffer(2 * cache.numReqPerCycle)
+	}
+
 	cache.mshrStageBuffer = util.NewBuffer(2 * cache.numReqPerCycle)
 	cache.writeBufferBuffer = util.NewBuffer(2 * cache.numReqPerCycle)
 }

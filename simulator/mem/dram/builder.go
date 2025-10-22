@@ -391,6 +391,18 @@ func (b Builder) WithRFCb(cycle int) Builder {
 	return b
 }
 
+// WithTCKESR sets the self-refresh entry to exit time in cycles.
+func (b Builder) WithTCKESR(cycle int) Builder {
+	b.tCKESR = cycle
+	return b
+}
+
+// WithTXS sets the self-refresh exit time in cycles.
+func (b Builder) WithTXS(cycle int) Builder {
+	b.tXS = cycle
+	return b
+}
+
 // Build builds a new MemController.
 func (b Builder) Build(name string) *MemController {
 	m := &MemController{

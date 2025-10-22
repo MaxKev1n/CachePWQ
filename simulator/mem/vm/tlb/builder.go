@@ -2,6 +2,8 @@ package tlb
 
 import (
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/util"
+	"gitlab.com/akita/util/pipelining"
 )
 
 // A Builder can build TLBs
@@ -13,6 +15,7 @@ type Builder struct {
 	numWays        int
 	pageSize       uint64
 	lowModule      akita.Port
+	latency        int
 	numMSHREntry   int
 }
 
@@ -24,6 +27,7 @@ func MakeBuilder() Builder {
 		numSets:        1,
 		numWays:        32,
 		pageSize:       4096,
+		latency:        1,
 		numMSHREntry:   4,
 	}
 }
@@ -67,6 +71,12 @@ func (b Builder) WithNumReqPerCycle(n int) Builder {
 	return b
 }
 
+// WithLatency sets the number of mshr entry
+func (b Builder) WithLatency(latency int) Builder {
+	b.latency = latency
+	return b
+}
+
 // WithLowModule sets the port that can provide the address translation in case
 // of tlb miss.
 func (b Builder) WithLowModule(lowModule akita.Port) Builder {
@@ -90,6 +100,7 @@ func (b Builder) Build(name string) *TLB {
 	tlb.numWays = b.numWays
 	tlb.numReqPerCycle = b.numReqPerCycle
 	tlb.pageSize = b.pageSize
+	tlb.latency = b.latency
 	tlb.LowModule = b.lowModule
 
 	tlb.TopPort = akita.NewLimitNumMsgPort(tlb, b.numReqPerCycle,
@@ -99,6 +110,10 @@ func (b Builder) Build(name string) *TLB {
 	tlb.ControlPort = akita.NewLimitNumMsgPort(tlb, 1,
 		name+".ControlPort")
 	tlb.mshr = newMSHR(b.numMSHREntry)
+
+	tlb.lookupBuffer = util.NewBuffer(2 * tlb.numReqPerCycle)
+	pipelineBuilder := pipelining.MakeBuilder().WithPipelineWidth(tlb.numReqPerCycle).WithNumStage(tlb.latency).WithCyclePerStage(1).WithPostPipelineBuffer(tlb.lookupBuffer)
+	tlb.pipeline = pipelineBuilder.Build(tlb.Name() + "_pipeline")
 
 	tlb.reset()
 

@@ -404,7 +404,10 @@ func (b *CommonBuilder) buildMemBanks(chiplet *Chiplet) {
 		WithWayAssociativity(16).
 		WithByteSize(256 * mem.KB).
 		WithNumMSHREntry(64).
-		WithNumReqPerCycle(2)
+		WithNumReqPerCycle(1).
+		WithBankLatency(140).
+		WithPipelineLatency(20).
+		WithNumBanks(8)
 
 	for i := 0; i < b.numMemoryBankPerChiplet; i++ {
 		dramName := fmt.Sprintf("%s.DRAM_%d", chiplet.name, i)
@@ -442,61 +445,56 @@ func (b *CommonBuilder) buildMemBanks(chiplet *Chiplet) {
 	}
 }
 
-// func (b *CommonBuilder) createDRAMControllerBuilder() dram.Builder {
-// 	memBankSize := 2 * mem.GB / uint64(b.numMemoryBankPerChiplet)
-// 	if 2*mem.GB%uint64(b.numMemoryBankPerChiplet) != 0 {
-// 		panic("GPU memory size is not a multiple of the number of memory banks")
-// 	}
-// 	dramCol := 64
-// 	dramRow := 4096
-// 	dramDeviceWidth := 32
-// 	dramBankSize := dramCol * dramRow * dramDeviceWidth
-// 	dramBank := 4
-// 	dramBankGroup := 1
-// 	dramBusWidth := 256
-// 	dramDevicePerRank := dramBusWidth / dramDeviceWidth
-// 	dramRankSize := dramBankSize * dramDevicePerRank * dramBank
-// 	dramRank := int(memBankSize) / dramRankSize
-
-// 	memCtrlBuilder := dram.MakeBuilder().
-// 		WithEngine(b.engine).
-// 		WithFreq(500 * akita.MHz).
-// 		WithProtocol(dram.GDDR5).
-// 		WithBurstLength(8).
-// 		WithDeviceWidth(dramDeviceWidth).
-// 		WithBusWidth(dramBusWidth).
-// 		WithNumChannel(1).
-// 		WithNumRank(dramRank).
-// 		WithNumBankGroup(dramBankGroup).
-// 		WithNumBank(dramBank).
-// 		WithNumCol(dramCol).
-// 		WithNumRow(dramRow).
-// 		WithCommandQueueSize(8).
-// 		WithTransactionQueueSize(32).
-// 		WithTCL(24).
-// 		WithTCWL(7).
-// 		WithTRCDRD(18).
-// 		WithTRCDWR(15).
-// 		WithTRP(18).
-// 		WithTRAS(42).
-// 		WithTREFI(11699).
-// 		WithTRRDS(9).
-// 		WithTRRDL(9).
-// 		WithTWTRS(8).
-// 		WithTWTRL(8).
-// 		WithTWR(18).
-// 		WithTCCDS(2).
-// 		WithTCCDL(3).
-// 		WithTRTRS(0).
-// 		WithTRTP(3).
-// 		WithTPPD(2)
-
-// 	if b.visTracer != nil {
-// 		memCtrlBuilder = memCtrlBuilder.WithAdditionalTracer(b.visTracer)
-// 	}
-
-// 	return memCtrlBuilder
-// }
+//func (b *CommonBuilder) createDRAMControllerBuilder() dram.Builder {
+//	dramCol := 2048
+//	dramRow := 16384
+//	dramDeviceWidth := 128
+//	dramBank := 16
+//	dramBankGroup := 4
+//	dramBusWidth := 128
+//	dramRank := 1
+//
+//	memCtrlBuilder := dram.MakeBuilder().
+//		WithEngine(b.engine).
+//		WithFreq(1 * akita.GHz).
+//		WithProtocol(dram.HBM).
+//		WithBurstLength(4).
+//		WithDeviceWidth(dramDeviceWidth).
+//		WithBusWidth(dramBusWidth).
+//		WithNumChannel(8).
+//		WithNumRank(dramRank).
+//		WithNumBankGroup(dramBankGroup).
+//		WithNumBank(dramBank).
+//		WithNumCol(dramCol).
+//		WithNumRow(dramRow).
+//		WithCommandQueueSize(16).
+//		WithTransactionQueueSize(64).
+//		WithTAL(0).
+//		WithTCL(14).
+//		WithTCWL(7).
+//		WithTRCD(14).
+//		WithTRCDRD(32).
+//		WithTRCDWR(28).
+//		WithTRP(14).
+//		WithTRAS(34).
+//		WithTREFI(7800).
+//		WithTRRDS(3).
+//		WithTRRDL(4).
+//		WithTWTRS(4).
+//		WithTWTRL(6).
+//		WithTWR(12).
+//		WithTCCDS(2).
+//		WithTCCDL(2).
+//		WithTRTRS(1).
+//		WithTRTP(8).
+//		WithTPPD(0).
+//		WithRFC(160).
+//		WithRFCb(1600).
+//		WithTCKESR(5).
+//		WithTXS(180)
+//
+//	return memCtrlBuilder
+//}
 
 func (b *CommonBuilder) buildL2TLB(chiplet *Chiplet) {
 	numSets := 64 // 128 // 256 // changed this here
@@ -530,7 +528,7 @@ func (b *CommonBuilder) buildL2TLB(chiplet *Chiplet) {
 		WithLog2PageSize(b.log2PageSize).
 		WithLowModule(chiplet.MMU.ToTopPort()).
 		WithIndexingMask(mask).
-		WithLatency(10)
+		WithLatency(80)
 	fmt.Println("num TLB sets:", numSets)
 	fmt.Println("num TLB ways:", numWays)
 	if b.useCoalescingTLBPort {

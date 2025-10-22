@@ -129,7 +129,7 @@ func (b IdealMMUBuilder) Build(name string) MMU {
 
 	//mmu.MigrationPort = akita.NewLimitNumMsgPort(mmu, 1, name+".MigrationPort")
 	//might want to change capacity later
-	mmu.TranslationPort = akita.NewLimitNumMsgPort(mmu, 16, name+".TranslationPort")
+	mmu.TranslationPort = akita.NewLimitNumMsgPort(mmu, 4096, name+".TranslationPort")
 	//mmu.MigrationServiceProvider = b.migrationServiceProvider
 
 	mmu.topSender = akitaext.NewBufferedSender(mmu.ToTop, util.NewBuffer(4096))

@@ -302,7 +302,8 @@ func (b *shaderArrayBuilder) buildL1VTLBs(sa *shaderArray) {
 		WithNumSets(1).
 		WithNumWays(32).
 		WithNumReqPerCycle(2).
-		WithPageSize(1 << b.log2PageSize)
+		WithPageSize(1 << b.log2PageSize).
+		WithLatency(20)
 
 	for i := 0; i < b.numCU; i++ {
 		name := fmt.Sprintf("%s.L1VTLB_%02d", b.name, i)
@@ -325,7 +326,8 @@ func (b *shaderArrayBuilder) buildL1VCaches(sa *shaderArray) {
 		WithWayAssocitivity(16).
 		WithNumMSHREntry(32).
 		WithTotalByteSize(64 * mem.KB).
-		WithNumReqsPerCycle(2)
+		WithNumReqsPerCycle(2).
+		WithBankLatency(28)
 
 	if b.visTracer != nil {
 		builder = builder.WithVisTracer(b.visTracer)
@@ -374,7 +376,8 @@ func (b *shaderArrayBuilder) buildL1STLB(sa *shaderArray) {
 		WithNumSets(1).
 		WithNumWays(32).
 		WithNumReqPerCycle(4).
-		WithPageSize(1 << b.log2PageSize)
+		WithPageSize(1 << b.log2PageSize).
+		WithLatency(20)
 
 	name := fmt.Sprintf("%s.L1STLB", b.name)
 	tlb := builder.Build(name)
@@ -395,7 +398,8 @@ func (b *shaderArrayBuilder) buildL1SCache(sa *shaderArray) {
 		WithWayAssocitivity(16).
 		WithNumMSHREntry(32).
 		WithTotalByteSize(64 * mem.KB).
-		WithNumReqsPerCycle(4)
+		WithNumReqsPerCycle(4).
+		WithBankLatency(28)
 
 	name := fmt.Sprintf("%s.L1SCache", b.name)
 	cache := builder.Build(name)
@@ -442,7 +446,8 @@ func (b *shaderArrayBuilder) buildL1ITLB(sa *shaderArray) {
 		WithNumSets(1).
 		WithNumWays(32).
 		WithNumReqPerCycle(4).
-		WithPageSize(1 << b.log2PageSize)
+		WithPageSize(1 << b.log2PageSize).
+		WithLatency(20)
 
 	name := fmt.Sprintf("%s.L1ITLB", b.name)
 	tlb := builder.Build(name)
@@ -463,7 +468,8 @@ func (b *shaderArrayBuilder) buildL1ICache(sa *shaderArray) {
 		WithWayAssocitivity(16).
 		WithNumMSHREntry(32).
 		WithTotalByteSize(64 * mem.KB).
-		WithNumReqsPerCycle(4)
+		WithNumReqsPerCycle(4).
+		WithBankLatency(28)
 
 	name := fmt.Sprintf("%s.L1ICache", b.name)
 	cache := builder.Build(name)

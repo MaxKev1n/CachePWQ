@@ -79,6 +79,7 @@ func (mmu *IdealMMU) Tick(now akita.VTimeInSec) bool {
 	madeProgress = mmu.topSender.Tick(now) || madeProgress
 	madeProgress = mmu.walkPageTable(now) || madeProgress
 	madeProgress = mmu.sendToMem(now) || madeProgress
+	madeProgress = mmu.sendToPageWalkCache(now) || madeProgress
 	madeProgress = mmu.parseFromPageWalkCache(now) || madeProgress
 	madeProgress = mmu.parseFromMem(now) || madeProgress
 	madeProgress = mmu.parseFromTop(now) || madeProgress
@@ -304,46 +305,40 @@ func (mmu *IdealMMU) parseFromMem(now akita.VTimeInSec) bool {
 }
 
 func (mmu *IdealMMU) sendToPageWalkCache(
-	req *device.TranslationReq,
 	now akita.VTimeInSec,
 ) bool {
-	readReq := mem.ReadReqBuilder{}.
-		WithSendTime(now).
-		WithSrc(mmu.pageWalkCachePort).
-		WithDst(mmu.PageWalkCache).
-		WithPID(req.PID).
-		WithAddress(mmu.pageTable.AlignToPage(req.VAddr)).
-		WithByteSize(8).
-		Build()
+	for i := 0; i < len(mmu.pageWalkers); i++ {
+		walker := mmu.pageWalkers[i]
 
-	err := mmu.pageWalkCachePort.Send(readReq)
+		if walker.trans.state == newTransaction {
+			readReq := mem.ReadReqBuilder{}.
+				WithSendTime(now).
+				WithSrc(mmu.pageWalkCachePort).
+				WithDst(mmu.PageWalkCache).
+				WithPID(walker.trans.req.PID).
+				WithAddress(mmu.pageTable.AlignToPage(walker.trans.req.VAddr)).
+				WithByteSize(8).
+				Build()
 
-	if err != nil {
-		return false
+			err := mmu.pageWalkCachePort.Send(readReq)
+
+			if err != nil {
+				return false
+			}
+
+			if _, ok := mmu.inflightPWCRequests[readReq.ID]; ok {
+				log.Panic("duplicate PWC request ID detected!")
+			}
+			mmu.inflightPWCRequests[readReq.ID] = walker.trans
+
+			walker.trans.msgID = readReq.ID
+			walker.trans.state = sentToPageWalkCache
+
+			return true
+		}
 	}
 
-	rearrangedVAddr := mmu.pageTable.Rearrange(req.VAddr)
-	root := mmu.pageTable.GetRoot(req.PID)
-	translationInPipeline := transaction{
-		req:   req,
-		level: 0,
-		msgID: readReq.ID,
-		state: sentToPageWalkCache,
-		vAddr: rearrangedVAddr,
-		PPN:   root,
-	}
-
-	if _, ok := mmu.inflightPWCRequests[readReq.ID]; ok {
-		log.Panic("duplicate PWC request ID detected!")
-	}
-
-	mmu.inflightPWCRequests[readReq.ID] = &translationInPipeline
-
-	tracing.TraceReqReceive(req, now, mmu)
-
-	mmu.ToTop.Retrieve(now)
-
-	return true
+	return false
 }
 
 func (mmu *IdealMMU) sendToMem(now akita.VTimeInSec) bool {
@@ -430,13 +425,6 @@ func (mmu *IdealMMU) handlePageWalkCacheResponse(
 
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
 		now, mmu, "pwc-hit-level"+strconv.Itoa(trans.level))
-
-	walker := new(IdealPageWalker)
-
-	walker.mmu = mmu
-	walker.trans = trans
-
-	mmu.pageWalkers = append(mmu.pageWalkers, walker)
 
 	return true
 }
@@ -561,10 +549,39 @@ func (mmu *IdealMMU) parseFromTop(now akita.VTimeInSec) bool {
 
 	switch req := req.(type) {
 	case *device.TranslationReq:
-		return mmu.sendToPageWalkCache(req, now)
+		return mmu.insertPageWalkQueue(req, now)
 	default:
 		log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(req))
 	}
+
+	return false
+}
+
+func (mmu *IdealMMU) insertPageWalkQueue(
+	req *device.TranslationReq,
+	now akita.VTimeInSec,
+) bool {
+	rearrangedVAddr := mmu.pageTable.Rearrange(req.VAddr)
+	root := mmu.pageTable.GetRoot(req.PID)
+	translationInPipeline := transaction{
+		req:   req,
+		level: 0,
+		msgID: "invalid",
+		state: newTransaction,
+		vAddr: rearrangedVAddr,
+		PPN:   root,
+	}
+
+	walker := new(IdealPageWalker)
+
+	walker.mmu = mmu
+	walker.trans = &translationInPipeline
+
+	mmu.pageWalkers = append(mmu.pageWalkers, walker)
+
+	tracing.TraceReqReceive(req, now, mmu)
+
+	mmu.ToTop.Retrieve(now)
 
 	return false
 }

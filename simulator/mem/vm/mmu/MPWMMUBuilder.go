@@ -168,7 +168,7 @@ func (b MPWMMUBuilder) Build(name string) MMU {
 	}
 	fmt.Println("num walkers:", b.maxNumReqInFlight)
 
-	mmu.maxMemRequestsInFlight = 512
+	mmu.maxMemRequestsInFlight = len(mmu.pageWalkers)
 
 	mmu.inflightPWCRequests = make(map[string]*transaction)
 	mmu.mappingMemAccess = make(map[string]*transaction)

@@ -11,6 +11,8 @@ import (
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mem/vm/tlb/internal"
+	"gitlab.com/akita/util"
+	"gitlab.com/akita/util/pipelining"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -29,8 +31,12 @@ type TLB struct {
 	numWays        int
 	pageSize       uint64
 	numReqPerCycle int
+	latency        int
 
 	Sets []internal.Set
+
+	pipeline     pipelining.Pipeline
+	lookupBuffer util.Buffer
 
 	mshr                mshr
 	respondingMSHREntry *mshrEntry
@@ -79,6 +85,14 @@ func (tlb *TLB) Tick(now akita.VTimeInSec) bool {
 		for i := 0; i < tlb.numReqPerCycle; i++ {
 			madeProgress = tlb.parseBottom(now) || madeProgress
 		}
+
+		madeProgress = tlb.pipeline.Tick(now) || madeProgress
+
+		// pipeline or queue cycling done here
+
+		for i := 0; i < tlb.numReqPerCycle; i++ {
+			madeProgress = tlb.parseFromTop(now) || madeProgress
+		}
 	}
 
 	return madeProgress
@@ -122,25 +136,23 @@ func (tlb *TLB) respondMSHREntry(now akita.VTimeInSec) bool {
 }
 
 func (tlb *TLB) lookup(now akita.VTimeInSec) bool {
-	msg := tlb.TopPort.Peek()
-	if msg == nil {
+	item := tlb.lookupBuffer.Peek()
+	if item == nil {
 		return false
 	}
-	req := msg.(*device.TranslationReq)
+	pipelineItem := item.(tlbPipelineItem)
+	req := pipelineItem.translationReq
 
 	mshrEntry := tlb.mshr.Query(req.PID, req.VAddr)
 	if mshrEntry != nil {
 		ok := tlb.processTLBMSHRHit(now, mshrEntry, req)
 		if ok {
-			tracing.TraceReqReceive(req, now, tlb)
 			tracing.AddTaskStep(
-				tracing.MsgIDAtReceiver(req /*mshrEntry.Requests[0]*/, tlb),
+				tracing.MsgIDAtReceiver(req, tlb),
 				now, tlb,
 				"tlb-mshr-hit",
 			)
-			tlb.TopPort.Retrieve(now)
-			tracing.TraceReqReceive(req, now, tlb)
-			tracing.StopTracingNetworkReq(req, now, tlb)
+			tlb.lookupBuffer.Pop()
 			return true
 		}
 		return false
@@ -169,10 +181,8 @@ func (tlb *TLB) handleTranslationHit(
 
 	// mruPos := tlb.visit(setID, wayID)
 	tlb.visit(setID, wayID)
-	tlb.TopPort.Retrieve(now)
+	tlb.lookupBuffer.Pop()
 
-	tracing.TraceReqReceive(req, now, tlb)
-	tracing.StopTracingNetworkReq(req, now, tlb)
 	tracing.AddTaskStep(
 		tracing.MsgIDAtReceiver(req, tlb),
 		now, tlb,
@@ -200,9 +210,7 @@ func (tlb *TLB) handleTranslationMiss(
 	}
 	fetched := tlb.fetchBottom(now, req)
 	if fetched {
-		tlb.TopPort.Retrieve(now)
-		tracing.StopTracingNetworkReq(req, now, tlb)
-		tracing.TraceReqReceive(req, now, tlb)
+		tlb.lookupBuffer.Pop()
 		tracing.AddTaskStep(
 			tracing.MsgIDAtReceiver(req, tlb),
 			now, tlb,
@@ -321,6 +329,29 @@ func getTaskStep(origin string, accessResult device.AccessResult) (step string) 
 		step += "TLBMshrHit"
 	}
 	return
+}
+
+func (tlb *TLB) parseFromTop(now akita.VTimeInSec) bool {
+	msg := tlb.TopPort.Peek()
+	if msg == nil {
+		return false
+	}
+
+	req := msg.(*device.TranslationReq)
+
+	// push to waiting queue
+	if tlb.pipeline.CanAccept() {
+		pipelineItem := tlbPipelineItem{
+			taskID:         akita.GetIDGenerator().Generate(),
+			translationReq: req,
+		}
+		tlb.pipeline.Accept(now, pipelineItem)
+		tlb.TopPort.Retrieve(now)
+		tracing.TraceReqReceive(req, now, tlb)
+		tracing.StopTracingNetworkReq(req, now, tlb)
+		return true
+	}
+	return false
 }
 
 func (tlb *TLB) parseBottom(now akita.VTimeInSec) bool {
