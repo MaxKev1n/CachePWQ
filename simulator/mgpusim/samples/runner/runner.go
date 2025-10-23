@@ -983,6 +983,37 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithLog2PageSize(*log2PageSize)
 		b.WithMMUType(*mmuFlag)
 		r.Engine, r.GPUDriver = b.Build()
+	case "monolithic":
+		b := platform.MakeMonolithicPlatformBuilder()
+		if r.Parallel {
+			b.WithParallelEngine()
+		}
+
+		if *isaDebug {
+			b.WithISADebugging()
+		}
+
+		if *visTracing {
+			b.WithVisTracing()
+		}
+
+		if *memTracing {
+			b.WithMemTracing()
+		}
+
+		if *tlbTracing {
+			b.WithTLBTracing()
+		}
+
+		if *disableProgressBar {
+			b.WithoutProgressBar()
+		}
+		b.WithAlg(*schedulingAlg)
+		b.WithSchedulingPartition(*schedulingPartition)
+		b.WithMemAllocatorType(*memAllocatorType)
+		b.WithLog2PageSize(*log2PageSize)
+		b.WithMMUType(*mmuFlag)
+		r.Engine, r.GPUDriver = b.Build()
 	case "privateh2tlb":
 		b := platform.MakePrivateH2TLBPlatformBuilder()
 		if r.Parallel {

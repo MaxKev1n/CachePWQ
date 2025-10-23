@@ -200,7 +200,7 @@ func New(
 ) *Comp {
 	c := new(Comp)
 	c.TickingComponent = akita.NewTickingComponent(name, engine, 1*akita.GHz, c)
-	c.Latency = 100
+	c.Latency = 200
 	c.MaxNumTransaction = 100 //100
 
 	c.Storage = mem.NewStorage(capacity)
