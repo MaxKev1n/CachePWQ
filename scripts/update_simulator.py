@@ -59,7 +59,7 @@ def validate_files(file_list):
     """Ensure only .go files are committed and exclude *_test.go files."""
     invalid_files = []
     forbidden_tests = []
-    allowed = re.compile(r".+\\.go$")
+    allowed = re.compile(r".+\.go$")
 
     for f in file_list:
         if "_test" in f:
