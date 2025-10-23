@@ -405,9 +405,9 @@ func (b *CommonBuilder) buildMemBanks(chiplet *Chiplet) {
 		WithByteSize(256 * mem.KB).
 		WithNumMSHREntry(64).
 		WithNumReqPerCycle(1).
-		WithBankLatency(120).
-		WithPipelineLatency(20).
-		WithNumBanks(8)
+		WithBankLatency(1).
+		WithPipelineLatency(140).
+		WithNumBanks(1)
 
 	for i := 0; i < b.numMemoryBankPerChiplet; i++ {
 		dramName := fmt.Sprintf("%s.DRAM_%d", chiplet.name, i)
@@ -568,8 +568,7 @@ func (b *CommonBuilder) buildIdealMMU(chiplet *Chiplet) {
 		WithEngine(b.engine).
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).
-		WithPageTable(b.pageTable).
-		WithNumChiplets(uint64(b.numChiplet))
+		WithPageTable(b.pageTable)
 
 	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.IdealMMU", chiplet.name))
 	chiplet.MMU.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)

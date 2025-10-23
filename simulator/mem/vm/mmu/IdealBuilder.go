@@ -2,11 +2,10 @@ package mmu
 
 import (
 	"gitlab.com/akita/akita"
-	"gitlab.com/akita/mem"
-	"gitlab.com/akita/mem/cache/writeback"
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/akitaext"
+	"gitlab.com/akita/util/pipelining"
 )
 
 // A IdealMMUBuilder can build MMU component
@@ -16,9 +15,7 @@ type IdealMMUBuilder struct {
 	log2PageSize             uint64
 	pageTable                *device.PageTableImpl
 	migrationServiceProvider akita.Port
-	maxNumReqInFlight        int
-	pageWalkingLatency       int
-	numChiplets              uint64
+	latency                  int
 	//	lowAddr                  uint64
 	//	totMem                   uint64
 	//	bankSize                 uint64
@@ -28,9 +25,9 @@ type IdealMMUBuilder struct {
 // MakeBuilder creates a new builder
 func MakeIdealMMUBuilder() IdealMMUBuilder {
 	return IdealMMUBuilder{
-		freq:              1 * akita.GHz,
-		log2PageSize:      12,
-		maxNumReqInFlight: 8, //16,
+		freq:         1 * akita.GHz,
+		log2PageSize: 12,
+		latency:      28,
 	}
 }
 
@@ -66,10 +63,9 @@ func (b IdealMMUBuilder) WithMigrationServiceProvider(p akita.Port) IdealMMUBuil
 	return b
 }
 */
-// WithMaxNumReqInFlight sets the number of requests can be concurrently
-// processed by the MMU.
-func (b IdealMMUBuilder) WithMaxNumReqInFlight(n int) IdealMMUBuilder {
-	b.maxNumReqInFlight = n
+// WithLatency sets the latency of the MMU in cycles.
+func (b IdealMMUBuilder) WithLatency(n int) IdealMMUBuilder {
+	b.latency = n
 	return b
 }
 
@@ -81,12 +77,6 @@ func (b IdealMMUBuilder) WithPageWalkingLatency(n int) IdealMMUBuilder {
 	return b
 }
 */
-// WithNumChiplets sets the number of cycles required for walking a page
-// table.
-func (b IdealMMUBuilder) WithNumChiplets(n uint64) IdealMMUBuilder {
-	b.numChiplets = n
-	return b
-}
 
 /*
 // WithLowAddr sets the number of cycles required for walking a page
@@ -132,6 +122,10 @@ func (b IdealMMUBuilder) Build(name string) MMU {
 	mmu.TranslationPort = akita.NewLimitNumMsgPort(mmu, 4096, name+".TranslationPort")
 	//mmu.MigrationServiceProvider = b.migrationServiceProvider
 
+	mmu.lookupBuffer = util.NewBuffer(4096)
+	pipelineBuilder := pipelining.MakeBuilder().WithPipelineWidth(1024).WithNumStage(b.latency).WithCyclePerStage(1).WithPostPipelineBuffer(mmu.lookupBuffer)
+	mmu.pipeline = pipelineBuilder.Build(mmu.Name() + "_pipeline")
+
 	mmu.topSender = akitaext.NewBufferedSender(mmu.ToTop, util.NewBuffer(4096))
 	if b.pageTable != nil {
 		mmu.pageTable = b.pageTable
@@ -139,22 +133,6 @@ func (b IdealMMUBuilder) Build(name string) MMU {
 		panic("no page table!")
 	}
 
-	mmu.inflightPWCRequests = make(map[string]*transaction)
-	mmu.inflightMemRequests = make([]*mem.ReadReq, 0)
-	mmu.mappingMemAccess = make(map[string]*transaction)
-
-	//mmu.latency = b.pageWalkingLatency
-	//mmu.PageAccesedByDeviceID = make(map[uint64][]uint64)
-	pageWalkCacheBuilder := writeback.MakePageWalkCacheBuilder().
-		WithEngine(b.engine).
-		WithLog2PageSize(b.log2PageSize).
-		WithBitsPerLevel(9)
-	pageWalkCache := pageWalkCacheBuilder.Build("PageWalkCache")
-	mmu.PageWalkCache = pageWalkCache.TopPort
-	mmu.pageWalkCachePort = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToTop")
-	mmuToPageWalkCache := akita.NewDirectConnection("MMUToPageWalkCache", b.engine, b.freq)
-	mmuToPageWalkCache.PlugIn(pageWalkCache.TopPort, 4)
-	mmuToPageWalkCache.PlugIn(mmu.pageWalkCachePort, 4)
 	mmu.sendStateInfo = false
 	return mmu
 }
