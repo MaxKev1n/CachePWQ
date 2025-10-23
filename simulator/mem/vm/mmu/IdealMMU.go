@@ -133,7 +133,7 @@ func (mmu *IdealMMU) trace(now akita.VTimeInSec, what string) {
 }
 
 func (mmu *IdealMMU) walkPageTable(now akita.VTimeInSec) bool {
-	numActiveTransactions := len(mmu.inflightMemRequests)
+	numActiveTransactions := len(mmu.mappingMemAccess)
 
 	for i, walker := range mmu.pageWalkers {
 		walksDone := walker.walkPageTable(now)
@@ -221,6 +221,8 @@ func (walker *IdealPageWalker) generateMemReq(
 		WithByteSize(8).
 		WithInfo(readReqInfo).
 		Build()
+
+	readReq.Meta().PTW = true
 
 	return readReq
 }

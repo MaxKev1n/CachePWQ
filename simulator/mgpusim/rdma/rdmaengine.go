@@ -384,6 +384,7 @@ func (e *Engine) processReqFromOutsideAux(
 	cloned.Meta().Src = e.ToL2
 	cloned.Meta().Dst = dst
 	cloned.Meta().SendTime = now
+	cloned.Meta().PTW = req.Meta().PTW
 
 	err := e.ToL2.Send(cloned)
 	if err == nil {

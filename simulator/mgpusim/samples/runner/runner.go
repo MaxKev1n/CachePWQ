@@ -285,6 +285,8 @@ type Runner struct {
 	PerGPUKernelTimeCounter            []*tracing.BusyTimeTracer
 	InstCountTracers                   []instCountTracer
 	CacheLatencyTracers                []cacheLatencyTracer
+	CacheDataLatencyTracers            []cacheLatencyTracer
+	CachePageLatencyTracers            []cacheLatencyTracer
 	TLBLatencyTracers                  []TLBLatencyTracer
 	DownTLBLatencyTracers              []TLBLatencyTracer
 	L2PipelineLatencyTracers           []L2PipelineLatencyTracer
@@ -1452,6 +1454,22 @@ func (r *Runner) addCacheLatencyTracer() {
 					return task.Kind == "req_in"
 				})
 			r.CacheLatencyTracers = append(r.CacheLatencyTracers,
+				cacheLatencyTracer{tracer: tracer, cache: cache})
+			tracing.CollectTrace(cache, tracer)
+
+			tracer = tracing.NewAverageTimeTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "req_in" && !task.Detail.(akita.Msg).Meta().PTW
+				})
+			r.CacheDataLatencyTracers = append(r.CacheDataLatencyTracers,
+				cacheLatencyTracer{tracer: tracer, cache: cache})
+			tracing.CollectTrace(cache, tracer)
+
+			tracer = tracing.NewAverageTimeTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "req_in" && task.Detail.(akita.Msg).Meta().PTW
+				})
+			r.CachePageLatencyTracers = append(r.CachePageLatencyTracers,
 				cacheLatencyTracer{tracer: tracer, cache: cache})
 			tracing.CollectTrace(cache, tracer)
 		}
@@ -2663,6 +2681,28 @@ func (r *Runner) reportCacheLatency() {
 		r.metricsCollector.Collect(
 			tracer.cache.Name(),
 			"req_average_latency",
+			float64(tracer.tracer.AverageTime()),
+		)
+	}
+	for _, tracer := range r.CacheDataLatencyTracers {
+		if tracer.tracer.AverageTime() == 0 {
+			continue
+		}
+
+		r.metricsCollector.Collect(
+			tracer.cache.Name(),
+			"req_data_average_latency",
+			float64(tracer.tracer.AverageTime()),
+		)
+	}
+	for _, tracer := range r.CachePageLatencyTracers {
+		if tracer.tracer.AverageTime() == 0 {
+			continue
+		}
+
+		r.metricsCollector.Collect(
+			tracer.cache.Name(),
+			"req_page_average_latency",
 			float64(tracer.tracer.AverageTime()),
 		)
 	}

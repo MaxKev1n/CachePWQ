@@ -405,7 +405,7 @@ func (b *CommonBuilder) buildMemBanks(chiplet *Chiplet) {
 		WithByteSize(256 * mem.KB).
 		WithNumMSHREntry(64).
 		WithNumReqPerCycle(1).
-		WithBankLatency(140).
+		WithBankLatency(120).
 		WithPipelineLatency(20).
 		WithNumBanks(8)
 
