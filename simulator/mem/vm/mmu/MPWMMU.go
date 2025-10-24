@@ -45,7 +45,6 @@ type MPWMMU struct {
 
 	pageTable *device.PageTableImpl
 	//	latency             int
-	maxMemRequestsInFlight int
 
 	pageWalkers   []*MPWPageWalker
 	nextPointer   int
@@ -89,8 +88,7 @@ func (mmu *MPWMMU) Tick(now akita.VTimeInSec) bool {
 	madeProgress = mmu.parseFromPageWalkCache(now) || madeProgress
 	madeProgress = mmu.parseFromMem(now) || madeProgress
 	madeProgress = mmu.parseFromTop(now) || madeProgress
-	return true
-	// return madeProgress
+	return madeProgress
 }
 
 func (mmu *MPWMMU) performCtrlReq(now akita.VTimeInSec) bool {
@@ -251,14 +249,6 @@ func (walker *MPWPageWalker) sendToMem() {
 			pendingTranslationIndices,
 			i,
 		)
-	}
-
-	numPendingMemAccesses := len(pendingMemAccesses)
-	mmuInflightMemAccesses := len(walker.mmu.inflightMemRequests)
-
-	if numPendingMemAccesses == 0 ||
-		numPendingMemAccesses+mmuInflightMemAccesses > walker.mmu.maxMemRequestsInFlight {
-		return
 	}
 
 	for i, req := range pendingMemAccesses {
@@ -433,22 +423,22 @@ func (mmu *MPWMMU) parseFromPageWalkCache(now akita.VTimeInSec) bool {
 }
 
 func (mmu *MPWMMU) parseFromMem(now akita.VTimeInSec) bool {
-	madeProgress := false
 	item := mmu.TranslationPort.Peek()
-	if item != nil {
-		switch msg := item.(type) {
-		case *mem.DataReadyRsp:
-			mmu.handleMemResponse(msg, now)
-		default:
-			panic("unknown message type")
-		}
-		madeProgress = true
+	if item == nil {
+		return false
 	}
-	mmu.TranslationPort.Retrieve(now)
-	return madeProgress
+
+	switch msg := item.(type) {
+	case *mem.DataReadyRsp:
+		return mmu.handleMemResponse(msg, now)
+	default:
+		panic("unknown message type")
+	}
+
+	return false
 }
 
-func (mmu *MPWMMU) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) {
+func (mmu *MPWMMU) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) bool {
 	for _, walker := range mmu.pageWalkers {
 		trans, ok := walker.outstandingReqs[rsp.RespondTo]
 		if !ok {
@@ -479,10 +469,17 @@ func (mmu *MPWMMU) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec
 
 		trans.PPN = binary.LittleEndian.Uint64(rsp.Data)
 		trans.state = memDone
+
+		var madeProgress bool
+
 		if trans.level+1 == 4 {
-			walker.finalizeTransaction(now, trans)
+			madeProgress = walker.finalizeTransaction(now, trans)
 		} else {
-			mmu.fillPageWalkCache(now, trans)
+			madeProgress = mmu.fillPageWalkCache(now, trans)
+		}
+
+		if !madeProgress {
+			return false
 		}
 
 		trans.level++
@@ -495,15 +492,18 @@ func (mmu *MPWMMU) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec
 			walker.status = 0
 		}
 
-		return
+		mmu.TranslationPort.Retrieve(now)
+
+		return true
 	}
 	log.Panicf("could not find matching mem access ID %s!", rsp.RespondTo)
+	return false
 }
 
 func (mmu *MPWMMU) fillPageWalkCache(
 	now akita.VTimeInSec,
 	trans *transaction,
-) {
+) bool {
 	level := uint64(trans.level)
 	data := uint64ToBytes(trans.PPN | level)
 	writeReq := mem.WriteReqBuilder{}.
@@ -516,7 +516,13 @@ func (mmu *MPWMMU) fillPageWalkCache(
 		Build()
 
 	trans.msgID = writeReq.ID
-	mmu.pageWalkCachePort.Send(writeReq)
+	err := mmu.pageWalkCachePort.Send(writeReq)
+
+	if err != nil {
+		return false
+	}
+
+	return true
 }
 
 func (walker *MPWPageWalker) finalizeTransaction(

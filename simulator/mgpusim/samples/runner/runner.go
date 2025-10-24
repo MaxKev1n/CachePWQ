@@ -16,6 +16,7 @@ import (
 
 	"github.com/tebeka/atexit"
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/mgpusim/yamlconfig"
 
 	// ram "gitlab.com/akita/mem/dram"
 	"gitlab.com/akita/mem/idealmemcontroller"
@@ -129,8 +130,8 @@ var useCustomHSL = flag.Bool("use-custom-hsl", false,
 	"Specify if to use custom HSL as defined in program")
 var customHSL = flag.Uint64("custom-hsl", 1,
 	"Specify the value of custom HSL directly to the builder")
-var mmuFlag = flag.String("mmu", "default",
-	"Specify the type of MMU to use: default, mpw, ideal")
+var yamlConfigFile = flag.String("yaml-config-file", "",
+	"Specify the path to a yaml config file to override default config values.")
 
 type verificationPreEnablingBenchmark interface {
 	benchmarks.Benchmark
@@ -577,6 +578,14 @@ func (r *Runner) Init() *Runner {
 
 	log.SetFlags(log.Llongfile | log.Ldate | log.Ltime)
 
+	if *yamlConfigFile != "" {
+		err := yamlconfig.LoadYAMLFile(*yamlConfigFile)
+
+		if err != nil {
+			panic(fmt.Sprintf("Failed to load yaml config file: %v", err))
+		}
+	}
+
 	if r.Timing {
 		r.buildTimingPlatform()
 	} else {
@@ -981,7 +990,6 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithSchedulingPartition(*schedulingPartition)
 		b.WithMemAllocatorType(*memAllocatorType)
 		b.WithLog2PageSize(*log2PageSize)
-		b.WithMMUType(*mmuFlag)
 		r.Engine, r.GPUDriver = b.Build()
 	case "monolithic":
 		b := platform.MakeMonolithicPlatformBuilder()
@@ -1012,7 +1020,6 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithSchedulingPartition(*schedulingPartition)
 		b.WithMemAllocatorType(*memAllocatorType)
 		b.WithLog2PageSize(*log2PageSize)
-		b.WithMMUType(*mmuFlag)
 		r.Engine, r.GPUDriver = b.Build()
 	case "privateh2tlb":
 		b := platform.MakePrivateH2TLBPlatformBuilder()
@@ -1102,7 +1109,6 @@ func (r *Runner) buildTimingPlatform() {
 		b.UseCoalescingTLBPort(*useCoalescingTLBPort)
 		b.UseCoalescingRTU(*useCoalescingRTU)
 		b.WithLog2PageSize(*log2PageSize)
-		b.WithMMUType(*mmuFlag)
 		b = b.WithL2TLBStriping(*l2TlbStriping)
 		b = b.SwitchL2TLBStriping(*useSwitching)
 		b = b.UsePtCaching(*ptCaching)
@@ -1384,7 +1390,6 @@ func (r *Runner) buildTimingPlatform() {
 		b.UseCoalescingTLBPort(*useCoalescingTLBPort)
 		b.UseCoalescingRTU(*useCoalescingRTU)
 		b.WithLog2PageSize(*log2PageSize)
-		b.WithMMUType(*mmuFlag)
 		b = b.WithL2TLBStriping(*l2TlbStriping)
 		b = b.SwitchL2TLBStriping(*useSwitching)
 		b = b.UsePtCaching(*ptCaching)

@@ -180,7 +180,6 @@ func (a *memoryAllocatorImpl) allocatePages(
 		if page.DeviceID != uint64(deviceID) {
 			panic("gpuid != deviceid")
 		}
-		fmt.Println("data page:", fmt.Sprintf("%x", pAddr), fmt.Sprintf("%x", pAddr-4096), fmt.Sprintf("%x", (((pAddr-4096)>>12)%32)/8))
 		a.pageTable.Insert(page)
 	}
 

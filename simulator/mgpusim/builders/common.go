@@ -2,7 +2,9 @@ package builders
 
 import (
 	"fmt"
+	"log"
 	"math"
+	"strconv"
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
@@ -21,6 +23,7 @@ import (
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
 	"gitlab.com/akita/mgpusim/timing/cp"
 	"gitlab.com/akita/mgpusim/timing/cu"
+	"gitlab.com/akita/mgpusim/yamlconfig"
 	"gitlab.com/akita/noc/networking/chipnetwork"
 	"gitlab.com/akita/util/tracing"
 )
@@ -111,8 +114,6 @@ type CommonBuilder struct {
 	partition            string
 	useCoalescingTLBPort bool
 	useCoalescingRTU     bool
-
-	mmuType string
 }
 
 // MakeCommonBuilder provides a GPU builder that can builds the MCM GPU.
@@ -254,10 +255,6 @@ func (b *CommonBuilder) UseCoalescingTLBPort(u bool) {
 
 func (b *CommonBuilder) UseCoalescingRTU(u bool) {
 	b.useCoalescingRTU = u
-}
-
-func (b *CommonBuilder) WithMMUType(mmuType string) {
-	b.mmuType = mmuType
 }
 
 // CalculateMemoryParameters calculates
@@ -404,7 +401,7 @@ func (b *CommonBuilder) buildMemBanks(chiplet *Chiplet) {
 		WithWayAssociativity(16).
 		WithByteSize(256 * mem.KB).
 		WithNumMSHREntry(64).
-		WithNumReqPerCycle(1).
+		WithNumReqPerCycle(2).
 		WithBankLatency(1).
 		WithPipelineLatency(140).
 		WithNumBanks(1)
@@ -549,17 +546,23 @@ func (b *CommonBuilder) buildL2TLB(chiplet *Chiplet) {
 }
 
 func (b *CommonBuilder) buildMMU(chiplet *Chiplet) {
-	switch b.mmuType {
-	case "default":
+	if yamlconfig.OverrideConfig == nil {
 		b.buildDefaultMMU(chiplet)
-	case "mpw":
-		b.buildMPWMMU(chiplet)
-	case "ideal":
-		b.buildIdealMMU(chiplet)
-	case "caPWQ":
-		b.buildCAPWQMMU(chiplet)
-	default:
-		panic("unsupported mmu type")
+	} else {
+		mmuType := yamlconfig.OverrideConfig["MMU.type"]
+
+		switch mmuType {
+		case "IdealMMU":
+			b.buildIdealMMU(chiplet)
+		case "caPWQMMU":
+			b.buildCAPWQMMU(chiplet)
+		case "MPWMMU":
+			b.buildMPWMMU(chiplet)
+		case "BaselineMMU":
+			b.buildDefaultMMU(chiplet)
+		default:
+			log.Panicf("Unsupported MMU type: %s\n", mmuType)
+		}
 	}
 }
 
@@ -569,6 +572,15 @@ func (b *CommonBuilder) buildIdealMMU(chiplet *Chiplet) {
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).
 		WithPageTable(b.pageTable)
+
+	if latency, ok := yamlconfig.OverrideConfig["MMU.walkLatency"]; ok {
+		latencyInt, err := strconv.Atoi(latency)
+		if err != nil {
+			log.Panicf("Invalid walk latency: %s\n", latency)
+		}
+
+		mmuBuilder = mmuBuilder.WithLatency(latencyInt)
+	}
 
 	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.IdealMMU", chiplet.name))
 	chiplet.MMU.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
@@ -598,6 +610,15 @@ func (b *CommonBuilder) buildMPWMMU(chiplet *Chiplet) {
 		WithNumChiplets(uint64(b.numChiplet)).
 		WithMaxNumReqInFlight(16)
 
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
+		}
+
+		mmuBuilder = mmuBuilder.WithMaxNumReqInFlight(numWalkersInt)
+	}
+
 	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.MPWMMU", chiplet.name))
 	chiplet.MMU.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
 	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
@@ -611,6 +632,15 @@ func (b *CommonBuilder) buildDefaultMMU(chiplet *Chiplet) {
 		WithPageTable(b.pageTable).
 		WithNumChiplets(uint64(b.numChiplet)).
 		WithMaxNumReqInFlight(16)
+
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
+		}
+
+		mmuBuilder = mmuBuilder.WithMaxNumReqInFlight(numWalkersInt)
+	}
 
 	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.BaselineMMU", chiplet.name))
 	chiplet.MMU.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)

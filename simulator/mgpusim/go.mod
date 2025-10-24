@@ -17,6 +17,7 @@ require (
 	gitlab.com/akita/noc v1.4.0
 	gitlab.com/akita/util v0.6.4
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208 // indirect
+	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776 // indirect
 )
 
 replace gitlab.com/akita/akita => ../akita
@@ -28,4 +29,3 @@ replace gitlab.com/akita/mem => ../mem
 replace gitlab.com/akita/util => ../util
 
 replace gitlab.com/akita/dnn => ../dnn
-

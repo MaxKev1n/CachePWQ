@@ -1,0 +1,8 @@
+# =============================
+# MMU Configuration Template
+# =============================
+
+MMU:
+  type: "IdealMMU"
+
+  walkLatency: 300
