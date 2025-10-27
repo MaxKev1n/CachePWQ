@@ -588,7 +588,7 @@ func (b *CommonBuilder) buildIdealMMU(chiplet *Chiplet) {
 }
 
 func (b *CommonBuilder) buildCAPWQMMU(chiplet *Chiplet) {
-	mmuBuilder := mmu.MakecaPWQMMUBuilder().
+	mmuBuilder := mmu.MakeCaPWQMMUBuilder().
 		WithEngine(b.engine).
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).

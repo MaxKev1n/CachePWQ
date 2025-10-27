@@ -344,7 +344,7 @@ func (mmu *MPWMMU) sendToMem(now akita.VTimeInSec) bool {
 
 		trans.msgID = req.ID
 
-		// remove from inflightMemRequests
+		// remove from pendingIssueToMem
 		mmu.inflightMemRequests = append(
 			mmu.inflightMemRequests[:i],
 			mmu.inflightMemRequests[i+1:]...,

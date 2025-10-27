@@ -136,10 +136,14 @@ func (mmu *MMUImpl) trace(now akita.VTimeInSec, what string) {
 }
 
 func (mmu *MMUImpl) walkPageTable(now akita.VTimeInSec) bool {
-	numActiveTransactions := len(mmu.inflightMemRequests)
+	numActiveTransactions := 0
 
 	for _, walker := range mmu.pageWalkers {
 		numWalksDone := walker.walkPageTable(now)
+
+		if len(walker.queue) > 0 {
+			numActiveTransactions++
+		}
 
 		if numWalksDone > 0 {
 			mmu.numWalksDone += uint64(numWalksDone)
@@ -374,8 +378,8 @@ func (mmu *MMUImpl) sendToPageWalkCache(
 func (mmu *MMUImpl) sendToMem(now akita.VTimeInSec) bool {
 	madeProgress := false
 
-	for i := 0; i < len(mmu.inflightMemRequests); {
-		req := mmu.inflightMemRequests[i]
+	for len(mmu.inflightMemRequests) > 0 {
+		req := mmu.inflightMemRequests[0]
 		req.SendTime = now
 
 		err := mmu.TranslationPort.Send(req)
@@ -417,11 +421,8 @@ func (mmu *MMUImpl) sendToMem(now akita.VTimeInSec) bool {
 
 		trans.msgID = req.ID
 
-		// remove from inflightMemRequests
-		mmu.inflightMemRequests = append(
-			mmu.inflightMemRequests[:i],
-			mmu.inflightMemRequests[i+1:]...,
-		)
+		// remove from pendingIssueToMem
+		mmu.inflightMemRequests = mmu.inflightMemRequests[1:]
 
 		madeProgress = true
 	}

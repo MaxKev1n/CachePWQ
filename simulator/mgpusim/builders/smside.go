@@ -235,7 +235,7 @@ func (b *SMSideGPUBuilder) buildMMU(chiplet *Chiplet) {
 		case "IdealMMU":
 			b.buildIdealMMU(chiplet)
 		case "caPWQMMU":
-			panic("SMSideGPUBuilder does not support caPWQMMU yet")
+			b.buildCAPWQMMU(chiplet)
 		case "MPWMMU":
 			panic("SMSideGPUBuilder does not support MPWMMU yet")
 		case "BaselineMMU":
@@ -271,13 +271,34 @@ func (b *SMSideGPUBuilder) buildIdealMMU(chiplet *Chiplet) {
 }
 
 func (b *SMSideGPUBuilder) buildCAPWQMMU(chiplet *Chiplet) {
-	mmuBuilder := mmu.MakecaPWQMMUBuilder().
+	maxNumReqInFlight := 16
+
+	if maxNumReqInFlight%b.numL2TLBSlices != 0 {
+		log.Panicf("maxNumReqInFlight %d is not divisible by numL2TLBSlices %d",
+			maxNumReqInFlight, b.numL2TLBSlices)
+	}
+
+	mmuBuilder := mmu.MakeCaPWQMMUBuilder().
 		WithEngine(b.engine).
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).
 		WithPageTable(b.pageTable).
 		WithNumChiplets(uint64(b.numChiplet)).
-		WithMaxNumReqInFlight(16)
+		WithMaxNumReqInFlight(maxNumReqInFlight / b.numL2TLBSlices)
+
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
+		}
+
+		if numWalkersInt%b.numL2TLBSlices != 0 {
+			log.Panicf("numWalkers %d is not divisible by numL2TLBSlices %d",
+				numWalkersInt, b.numL2TLBSlices)
+		}
+
+		mmuBuilder = mmuBuilder.WithMaxNumReqInFlight(numWalkersInt / b.numL2TLBSlices)
+	}
 
 	for i := 0; i < b.numL2TLBSlices; i++ {
 		mmu := mmuBuilder.Build(fmt.Sprintf("%s.caPWQMMU[%d]", chiplet.name, i))

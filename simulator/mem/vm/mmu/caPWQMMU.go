@@ -20,6 +20,8 @@ import (
 type caPWQPageWalker struct {
 	mmu *caPWQMMU
 
+	capacity int
+
 	queue []*transaction
 }
 
@@ -65,10 +67,9 @@ type caPWQMMU struct {
 	interleaving uint64
 
 	inflightPWCRequests map[string]*transaction
-	inflightMemRequests []*mem.ReadReq
+	pendingIssueToMem   []*mem.ReadReq
 
-	maxMemRequestsInFlight int
-	mappingMemAccess       map[string]*transaction
+	inflightTransactions map[string]*transaction
 
 	tickingBuffer        *TickingBuffer
 	pendingIssueToBuffer []*transaction
@@ -143,10 +144,10 @@ func (mmu *caPWQMMU) trace(now akita.VTimeInSec, what string) {
 }
 
 func (mmu *caPWQMMU) walkPageTable(now akita.VTimeInSec) bool {
-	numActiveTransactions := len(mmu.inflightMemRequests)
+	numActiveTransactions := len(mmu.inflightTransactions) + len(mmu.pendingIssueToBuffer)
 
 	for _, walker := range mmu.pageWalkers {
-		numWalksDone := walker.walkPageTable(now)
+		numWalksDone := walker.walkPageTable()
 
 		if numWalksDone > 0 {
 			mmu.numWalksDone += uint64(numWalksDone)
@@ -183,7 +184,7 @@ func (mmu *caPWQMMU) walkPageTable(now akita.VTimeInSec) bool {
 	return numTranslations > 0
 }
 
-func (walker *caPWQPageWalker) walkPageTable(now akita.VTimeInSec) int {
+func (walker *caPWQPageWalker) walkPageTable() int {
 	if len(walker.queue) == 0 {
 		return 0
 	}
@@ -213,20 +214,14 @@ func (walker *caPWQPageWalker) walkPageTable(now akita.VTimeInSec) int {
 func (walker *caPWQPageWalker) sendToMem() {
 	req := walker.generateMemReq(walker.queue[0])
 
-	mmuInflightMemAccesses := len(walker.mmu.inflightMemRequests)
-
-	if mmuInflightMemAccesses+1 > walker.mmu.maxMemRequestsInFlight {
-		return
-	}
-
-	if _, ok := walker.mmu.mappingMemAccess[req.ID]; ok {
+	if _, ok := walker.mmu.inflightTransactions[req.ID]; ok {
 		panic("duplicate mem access ID detected!")
 	}
 
 	walker.queue[0].state = sentToMem
-	walker.mmu.mappingMemAccess[req.ID] = walker.queue[0]
-	walker.mmu.inflightMemRequests = append(
-		walker.mmu.inflightMemRequests,
+	walker.mmu.inflightTransactions[req.ID] = walker.queue[0]
+	walker.mmu.pendingIssueToMem = append(
+		walker.mmu.pendingIssueToMem,
 		req,
 	)
 }
@@ -302,20 +297,24 @@ func (mmu *caPWQMMU) switchIndexing(now akita.VTimeInSec,
 }
 
 func (mmu *caPWQMMU) parseFromPageWalkCache(now akita.VTimeInSec) bool {
-	madeProgress := false
 	item := mmu.pageWalkCachePort.Peek()
-	if item != nil {
-		switch msg := item.(type) {
-		case *mem.DataReadyRsp:
-			mmu.handlePageWalkCacheResponse(msg, now)
-		case *mem.WriteDoneRsp:
-		default:
-			panic("unknown message type")
-		}
-		madeProgress = true
+
+	if item == nil {
+		return false
 	}
-	mmu.pageWalkCachePort.Retrieve(now)
-	return madeProgress
+
+	switch msg := item.(type) {
+	case *mem.DataReadyRsp:
+		return mmu.handlePageWalkCacheResponse(msg, now)
+	case *mem.WriteDoneRsp:
+		// Do nothing for write done response
+		mmu.pageWalkCachePort.Retrieve(now)
+
+		return true
+	default:
+		panic("unknown message type")
+	}
+	return false
 }
 
 func (mmu *caPWQMMU) parseFromMem(now akita.VTimeInSec) bool {
@@ -401,7 +400,7 @@ func (mmu *caPWQMMU) sendRspToBuffer(
 
 			trans.level++
 
-			delete(mmu.mappingMemAccess, rsp.RespondTo)
+			delete(mmu.inflightTransactions, rsp.RespondTo)
 
 			mmu.TranslationPort.Retrieve(now)
 
@@ -480,8 +479,8 @@ func (mmu *caPWQMMU) sendToPageWalkCache(
 func (mmu *caPWQMMU) sendToMem(now akita.VTimeInSec) bool {
 	madeProgress := false
 
-	for i := 0; i < len(mmu.inflightMemRequests); {
-		req := mmu.inflightMemRequests[i]
+	for len(mmu.pendingIssueToMem) > 0 {
+		req := mmu.pendingIssueToMem[0]
 		req.SendTime = now
 
 		err := mmu.TranslationPort.Send(req)
@@ -502,7 +501,7 @@ func (mmu *caPWQMMU) sendToMem(now akita.VTimeInSec) bool {
 		dstsplits := strings.Split(req.Dst.Name(), ".")
 		dstType := dstsplits[2]
 
-		trans, ok := mmu.mappingMemAccess[req.ID]
+		trans, ok := mmu.inflightTransactions[req.ID]
 		if !ok {
 			log.Panic("could not find matching mem access ID!")
 		}
@@ -523,12 +522,8 @@ func (mmu *caPWQMMU) sendToMem(now akita.VTimeInSec) bool {
 
 		trans.msgID = req.ID
 
-		// remove from inflightMemRequests
-		mmu.inflightMemRequests = append(
-			mmu.inflightMemRequests[:i],
-			mmu.inflightMemRequests[i+1:]...,
-		)
-
+		// remove from pendingIssueToMem
+		mmu.pendingIssueToMem = mmu.pendingIssueToMem[1:]
 		mmu.pendingIssueToBuffer = append(
 			mmu.pendingIssueToBuffer,
 			trans,
@@ -580,7 +575,7 @@ func (mmu *caPWQMMU) handlePageWalkCacheResponse(
 	for i := 0; i < len(mmu.pageWalkers); i++ {
 		walkerIndex := (mmu.nextPointer + i) % len(mmu.pageWalkers)
 		walker := mmu.pageWalkers[walkerIndex]
-		if walker.canAcceptNewReq(mmu.queueCapacity) {
+		if walker.canAcceptNewReq() {
 			trans, ok := mmu.inflightPWCRequests[rsp.RespondTo]
 			if !ok {
 				log.Panic("could not find matching PWC request ID!")
@@ -608,6 +603,8 @@ func (mmu *caPWQMMU) handlePageWalkCacheResponse(
 
 			mmu.nextPointer++
 
+			mmu.pageWalkCachePort.Retrieve(now)
+
 			return true
 		}
 	}
@@ -621,10 +618,6 @@ func (mmu *caPWQMMU) handleMemResponse(trans *transaction, now akita.VTimeInSec)
 		walker := mmu.pageWalkers[walkerIndex]
 
 		mmu.nextPointer++
-
-		if len(walker.queue) >= mmu.queueCapacity+8 {
-			continue
-		}
 
 		walker.queue = append([]*transaction{trans}, walker.queue...)
 
@@ -662,7 +655,7 @@ func (mmu *caPWQMMU) handleMemResponse(trans *transaction, now akita.VTimeInSec)
 
 		trans.level++
 
-		delete(mmu.mappingMemAccess, rsp.RespondTo)
+		delete(mmu.inflightTransactions, rsp.RespondTo)
 		delete(mmu.pendingRspFromBuffer, rsp.RespondTo)
 
 		mmu.ToBuffer.Retrieve(now)
@@ -755,10 +748,8 @@ func (mmu *caPWQMMU) parseFromTop(now akita.VTimeInSec) bool {
 	return false
 }
 
-func (walker *caPWQPageWalker) canAcceptNewReq(
-	queueCapacity int,
-) bool {
-	return len(walker.queue) < queueCapacity
+func (walker *caPWQPageWalker) canAcceptNewReq() bool {
+	return len(walker.queue) < walker.capacity
 }
 
 // SetLowModuleFinder sets the table recording where to find an address.
@@ -792,5 +783,5 @@ func (mmu *caPWQMMU) SetCommandProcessorPort(port akita.Port) {
 }
 
 func (mmu *caPWQMMU) GetNumActiveWalkers() int {
-	return len(mmu.inflightMemRequests)
+	return len(mmu.pendingIssueToMem)
 }

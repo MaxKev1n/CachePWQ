@@ -28,7 +28,7 @@ type caPWQMMUBuilder struct {
 }
 
 // MakeBuilder creates a new builder
-func MakecaPWQMMUBuilder() caPWQMMUBuilder {
+func MakeCaPWQMMUBuilder() caPWQMMUBuilder {
 	return caPWQMMUBuilder{
 		freq:              1 * akita.GHz,
 		log2PageSize:      12,
@@ -126,6 +126,8 @@ func (b caPWQMMUBuilder) Build(name string) MMU {
 		name, b.engine, b.freq, mmu)
 	//mmu.migrationQueueSize = 4096
 
+	mmu.queueCapacity = 8
+
 	mmu.ToTop = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToTop")
 	mmu.ControlPort = akita.NewLimitNumMsgPort(mmu, 1, name+".ControlPort")
 
@@ -148,17 +150,16 @@ func (b caPWQMMUBuilder) Build(name string) MMU {
 
 		walker.mmu = mmu
 		walker.queue = make([]*transaction, 0)
+		walker.capacity = mmu.queueCapacity
 
 		mmu.pageWalkers = append(mmu.pageWalkers, walker)
 	}
 
 	mmu.nextPointer = 0
-	mmu.queueCapacity = 8
 
 	mmu.inflightPWCRequests = make(map[string]*transaction)
-	mmu.inflightMemRequests = make([]*mem.ReadReq, 0)
-	mmu.mappingMemAccess = make(map[string]*transaction)
-	mmu.maxMemRequestsInFlight = 512
+	mmu.pendingIssueToMem = make([]*mem.ReadReq, 0)
+	mmu.inflightTransactions = make(map[string]*transaction)
 
 	//mmu.latency = b.pageWalkingLatency
 	//mmu.PageAccesedByDeviceID = make(map[uint64][]uint64)

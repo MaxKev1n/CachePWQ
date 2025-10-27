@@ -1,8 +1,6 @@
 package mmu
 
 import (
-	"log"
-
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/util"
@@ -27,8 +25,11 @@ type TickingBuffer struct {
 
 	pendingIssues []*transaction
 
-	pipeline     pipelining.Pipeline
-	lookupBuffer util.Buffer
+	inPipeline     pipelining.Pipeline
+	inLookupBuffer util.Buffer
+
+	outPipeline     pipelining.Pipeline
+	outLookupBuffer util.Buffer
 
 	mmu MMU
 }
@@ -36,17 +37,19 @@ type TickingBuffer struct {
 func (buffer *TickingBuffer) Tick(now akita.VTimeInSec) bool {
 	madeProgress := false
 
-	for i := 0; i < 32; i++ {
+	for i := 0; i < 4; i++ {
 		madeProgress = madeProgress || buffer.parseFromTop(now)
 	}
 
-	//madeProgress = madeProgress || buffer.pipeline.Tick(now)
-	//
-	//for i := 0; i < 4; i++ {
-	//	madeProgress = madeProgress || buffer.check()
-	//}
+	madeProgress = madeProgress || buffer.inPipeline.Tick(now)
+	madeProgress = madeProgress || buffer.outPipeline.Tick(now)
 
-	for i := 0; i < 32; i++ {
+	for i := 0; i < 4; i++ {
+		madeProgress = madeProgress || buffer.checkInBuffer()
+		madeProgress = madeProgress || buffer.checkOutBuffer()
+	}
+
+	for i := 0; i < 4; i++ {
 		madeProgress = madeProgress || buffer.sendToTop(now)
 	}
 
@@ -54,34 +57,34 @@ func (buffer *TickingBuffer) Tick(now akita.VTimeInSec) bool {
 }
 
 func (buffer *TickingBuffer) parseFromTop(now akita.VTimeInSec) bool {
-	item := buffer.ToTop.Retrieve(now)
+	item := buffer.ToTop.Peek()
 	if item == nil {
 		return false
 	}
 
 	switch msg := item.(type) {
 	case *transaction:
-		buffer.insert(msg)
+		return buffer.push(now, msg)
 	case *mem.DataReadyRsp:
-		buffer.remove(msg)
+		return buffer.pop(now, msg)
 	default:
 		panic("unknown message type in TickingBuffer")
 	}
 
-	return true
+	return false
 }
 
 func (buffer *TickingBuffer) push(
 	now akita.VTimeInSec,
 	msg akita.Msg,
 ) bool {
-	if buffer.pipeline.CanAccept() {
+	if buffer.inPipeline.CanAccept() {
 		pipelineItem := &PipelineItem{
 			taskID: akita.GetIDGenerator().Generate(),
 			msg:    msg,
 		}
 
-		buffer.pipeline.Accept(now, pipelineItem)
+		buffer.inPipeline.Accept(now, pipelineItem)
 
 		buffer.ToTop.Retrieve(now)
 
@@ -91,8 +94,28 @@ func (buffer *TickingBuffer) push(
 	return false
 }
 
-func (buffer *TickingBuffer) check() bool {
-	item := buffer.lookupBuffer.Peek()
+func (buffer *TickingBuffer) pop(
+	now akita.VTimeInSec,
+	msg akita.Msg,
+) bool {
+	if buffer.outPipeline.CanAccept() {
+		pipelineItem := &PipelineItem{
+			taskID: akita.GetIDGenerator().Generate(),
+			msg:    msg,
+		}
+
+		buffer.outPipeline.Accept(now, pipelineItem)
+
+		buffer.ToTop.Retrieve(now)
+
+		return true
+	}
+
+	return false
+}
+
+func (buffer *TickingBuffer) checkInBuffer() bool {
+	item := buffer.inLookupBuffer.Peek()
 	if item == nil {
 		return false
 	}
@@ -101,39 +124,61 @@ func (buffer *TickingBuffer) check() bool {
 
 	switch msg := pipelineItem.msg.(type) {
 	case *transaction:
-		buffer.insert(msg)
-	case *mem.DataReadyRsp:
-		buffer.remove(msg)
+		return buffer.insert(msg)
 	default:
 		panic("unknown message type in TickingBuffer")
 	}
 
-	buffer.lookupBuffer.Pop()
+	return false
+}
 
-	return true
+func (buffer *TickingBuffer) checkOutBuffer() bool {
+	item := buffer.outLookupBuffer.Peek()
+	if item == nil {
+		return false
+	}
+
+	pipelineItem := item.(*PipelineItem)
+
+	switch msg := pipelineItem.msg.(type) {
+	case *mem.DataReadyRsp:
+		return buffer.remove(msg)
+	default:
+		panic("unknown message type in TickingBuffer")
+	}
+
+	return false
 }
 
 func (buffer *TickingBuffer) insert(
 	trans *transaction,
-) {
+) bool {
 	if _, exists := buffer.storage[trans.msgID]; exists {
 		panic("duplicated transaction in buffer")
 	}
 
 	buffer.storage[trans.msgID] = trans
+
+	buffer.inLookupBuffer.Pop()
+
+	return true
 }
 
 func (buffer *TickingBuffer) remove(
 	rsp *mem.DataReadyRsp,
-) {
+) bool {
 	if _, exists := buffer.storage[rsp.RespondTo]; !exists {
-		log.Panicf("transaction %s not found in buffer\n", rsp.RespondTo)
+		return false
 	}
 
 	trans := buffer.storage[rsp.RespondTo]
 	delete(buffer.storage, rsp.RespondTo)
 
 	buffer.pendingIssues = append(buffer.pendingIssues, trans)
+
+	buffer.outLookupBuffer.Pop()
+
+	return true
 }
 
 func (buffer *TickingBuffer) sendToTop(
@@ -176,13 +221,21 @@ func NewTickingBuffer(
 
 	buffer.ToTop = akita.NewLimitNumMsgPort(buffer, 512, buffer.Name()+".ToTop")
 
-	buffer.lookupBuffer = util.NewBuffer(8)
+	buffer.inLookupBuffer = util.NewBuffer(32)
 	pipelineBuilder := pipelining.MakeBuilder().
 		WithPipelineWidth(4).
-		WithNumStage(1).
+		WithNumStage(28).
 		WithCyclePerStage(1).
-		WithPostPipelineBuffer(buffer.lookupBuffer)
-	buffer.pipeline = pipelineBuilder.Build(buffer.Name() + "_pipeline")
+		WithPostPipelineBuffer(buffer.inLookupBuffer)
+	buffer.inPipeline = pipelineBuilder.Build(buffer.Name() + "_in_pipeline")
+
+	buffer.outLookupBuffer = util.NewBuffer(32)
+	outPipelineBuilder := pipelining.MakeBuilder().
+		WithPipelineWidth(4).
+		WithNumStage(28).
+		WithCyclePerStage(1).
+		WithPostPipelineBuffer(buffer.outLookupBuffer)
+	buffer.outPipeline = outPipelineBuilder.Build(buffer.Name() + "_out_pipeline")
 
 	buffer.storage = make(map[string]*transaction)
 
