@@ -3,6 +3,7 @@ package tlb
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	// "math"
 	"reflect"
@@ -19,66 +20,8 @@ import (
 	"gitlab.com/akita/util/tracing"
 )
 
-type tlbPipelineItem struct {
-	taskID         string
-	translationReq *device.TranslationReq
-}
-
-func (t tlbPipelineItem) TaskID() string {
-	return t.taskID
-}
-
-type L2TLB interface {
-	tracing.NamedHookable
-	GetTopPort() akita.Port
-	GetBottomPort() akita.Port
-	GetControlPort() akita.Port
-	SetLowModuleFinder(cache.LowModuleFinder)
-	GetPipeline() pipelining.Pipeline
-	GetNocPipeline() pipelining.Pipeline
-	GetFrontQueueLength() int
-
-	SetCommandProcessor(akita.Port)
-	SetTLBFinder(cache.LowModuleFinder)
-}
-
-type TLBStats struct {
-	numAccess                uint64
-	lastChecked              uint64
-	numHit, numMiss, numMSHR uint64
-	numSamples               uint64
-	averageQueueLength       float64
-	missesReturned           uint64
-
-	hitsInPrevEpoch           uint64
-	missesInPrevEpoch         uint64
-	accessesInPrevEpoch       uint64
-	missesReturnedInPrevEpoch uint64
-	timesMeasuredInPrevEpoch  uint64
-	avgQueueLengthInPrevEpoch float64
-	numMSHRStallsInPrevEpoch  uint64
-	avgMSHRLenInPrevEpoch     float64
-	numStalledInPrevEpoch     uint64
-
-	hitsInCurEpoch           uint64
-	missesInCurEpoch         uint64
-	missesReturnedInCurEpoch uint64
-	accessesInCurEpoch       uint64
-	timesMeasuredInCurEpoch  uint64
-	avgQueueLengthInCurEpoch float64
-	numMSHRStallsInCurEpoch  uint64
-	avgMSHRLenInCurEpoch     float64
-	numStalledInCurEpoch     uint64
-
-	sendStateInfo bool
-	interleaving  uint64
-
-	perEpochWhatIf   [4]uint64
-	epochCountWhatIf uint64
-}
-
-// A LatTLB is a cache that maintains some page information.
-type LatTLB struct {
+// A SMSideTLB is a cache that maintains some page information.
+type SMSideTLB struct {
 	*akita.TickingComponent
 
 	TopPort     akita.Port
@@ -99,13 +42,17 @@ type LatTLB struct {
 	numWays        int
 	pageSize       uint64
 	numReqPerCycle int
-	latency        int
+	nocLatency     int
+	accessLatency  int
 	indexingMask   uint64
 
 	Sets []internal.Set
 
 	pipeline     pipelining.Pipeline
 	lookupBuffer util.Buffer
+
+	nocPipeline     pipelining.Pipeline
+	nocLookupBuffer util.Buffer
 
 	mshr                mshr
 	respondingMSHREntry *mshrEntry
@@ -118,48 +65,50 @@ type LatTLB struct {
 	setsAccessed [256]uint64
 	mode4Kstrip  bool
 	hysterisis   bool
+
+	ID int
 }
 
-// GetPipeline gets the pipeline in the LatTLB
-func (tlb *LatTLB) GetPipeline() pipelining.Pipeline {
+// GetPipeline gets the pipeline in the SMSideTLB
+func (tlb *SMSideTLB) GetPipeline() pipelining.Pipeline {
 	return tlb.pipeline
 }
 
-// GetPipeline gets the pipeline in the LatTLB
-func (tlb *LatTLB) GetTopPort() akita.Port {
+// GetPipeline gets the pipeline in the SMSideTLB
+func (tlb *SMSideTLB) GetTopPort() akita.Port {
 	return tlb.TopPort
 }
 
-// GetPipeline gets the pipeline in the LatTLB
-func (tlb *LatTLB) GetBottomPort() akita.Port {
+// GetPipeline gets the pipeline in the SMSideTLB
+func (tlb *SMSideTLB) GetBottomPort() akita.Port {
 	return tlb.BottomPort
 }
 
-// GetPipeline gets the pipeline in the LatTLB
-func (tlb *LatTLB) GetControlPort() akita.Port {
+// GetPipeline gets the pipeline in the SMSideTLB
+func (tlb *SMSideTLB) GetControlPort() akita.Port {
 	return tlb.ControlPort
 }
 
-// GetNumSets gets the number of sets in the LatTLB
-func (tlb *LatTLB) GetNumSets() int {
+// GetNumSets gets the number of sets in the SMSideTLB
+func (tlb *SMSideTLB) GetNumSets() int {
 	return tlb.numSets
 }
 
-// GetNumWays gets the number of ways in the LatTLB
-func (tlb *LatTLB) GetNumWays() int {
+// GetNumWays gets the number of ways in the SMSideTLB
+func (tlb *SMSideTLB) GetNumWays() int {
 	return tlb.numWays
 }
 
-func (tlb *LatTLB) SetLowModuleFinder(lmf cache.LowModuleFinder) {
+func (tlb *SMSideTLB) SetLowModuleFinder(lmf cache.LowModuleFinder) {
 	tlb.LowModuleFinder = lmf
 }
 
-func (tlb *LatTLB) SetCommandProcessor(cp akita.Port) {
+func (tlb *SMSideTLB) SetCommandProcessor(cp akita.Port) {
 	tlb.CommandProcessor = cp
 }
 
-// Reset sets all the entries int he LatTLB to be invalid
-func (tlb *LatTLB) reset() {
+// Reset sets all the entries int he SMSideTLB to be invalid
+func (tlb *SMSideTLB) reset() {
 	tlb.Sets = make([]internal.Set, tlb.numSets)
 	for i := 0; i < tlb.numSets; i++ {
 		set := internal.NewSet(tlb.numWays)
@@ -167,8 +116,8 @@ func (tlb *LatTLB) reset() {
 	}
 }
 
-// Tick defines how LatTLB update states at each cycle
-func (tlb *LatTLB) Tick(now akita.VTimeInSec) bool {
+// Tick defines how SMSideTLB update states at each cycle
+func (tlb *SMSideTLB) Tick(now akita.VTimeInSec) bool {
 	madeProgress := false
 
 	madeProgress = tlb.performCtrlReq(now) || madeProgress
@@ -196,17 +145,22 @@ func (tlb *LatTLB) Tick(now akita.VTimeInSec) bool {
 		}
 
 		madeProgress = tlb.pipeline.Tick(now) || madeProgress
+		madeProgress = tlb.nocPipeline.Tick(now) || madeProgress
 
 		// pipeline or queue cycling done here
 
 		for i := 0; i < tlb.numReqPerCycle; i++ {
 			madeProgress = tlb.parseFromTop(now) || madeProgress
 		}
+
+		for i := 0; i < tlb.numReqPerCycle; i++ {
+			madeProgress = tlb.parseFromNoc(now) || madeProgress
+		}
 	}
 	return madeProgress
 }
 
-func (tlb *LatTLB) respondMSHREntry(now akita.VTimeInSec) bool {
+func (tlb *SMSideTLB) respondMSHREntry(now akita.VTimeInSec) bool {
 	if tlb.respondingMSHREntry == nil {
 		return false
 	}
@@ -249,36 +203,7 @@ func (tlb *LatTLB) respondMSHREntry(now akita.VTimeInSec) bool {
 	return true
 }
 
-func collectCoalescingStat(tlb L2TLB, now akita.VTimeInSec) {
-	bufContainer := tlb.GetTopPort().(akita.MsgBufferContainer) //.(*akita.LimitNumMsgPort)
-	buf := bufContainer.GetBuffer()
-	coalMine := make(map[uint64]int)
-	for _, msg := range buf {
-		t := msg.(*device.TranslationReq)
-		addr := t.VAddr
-		coalMine[addr] = coalMine[addr] + 1
-	}
-	count := 0
-	totalcoal := 0
-	for addr := range coalMine {
-		if coalMine[addr] > 1 {
-			count++
-			totalcoal += coalMine[addr]
-		}
-	}
-	tracing.StartTask("", "", now, tlb,
-		"buflen", strconv.Itoa(len(buf)), nil)
-	if len(buf) > 0 {
-		tracing.StartTask("", "", now, tlb,
-			"bufleng0", strconv.Itoa(len(buf)), nil)
-		tracing.StartTask("", "", now, tlb,
-			"coalesceaddr", strconv.Itoa(count), nil)
-		tracing.StartTask("", "", now, tlb,
-			"coalesce", strconv.Itoa(totalcoal), nil)
-	}
-}
-
-func (tlb *LatTLB) collectMSHROccupancy(now akita.VTimeInSec) {
+func (tlb *SMSideTLB) collectMSHROccupancy(now akita.VTimeInSec) {
 	m := tlb.mshr
 	uniqEntries := len(m.AllEntries())
 	totalEntries := 0
@@ -298,7 +223,7 @@ func (tlb *LatTLB) collectMSHROccupancy(now akita.VTimeInSec) {
 	}
 }
 
-func (tlb *LatTLB) parseFromTop(now akita.VTimeInSec) bool {
+func (tlb *SMSideTLB) parseFromTop(now akita.VTimeInSec) bool {
 	msg := tlb.TopPort.Peek()
 	collectCoalescingStat(tlb, now)
 	tlb.collectMSHROccupancy(now)
@@ -308,8 +233,18 @@ func (tlb *LatTLB) parseFromTop(now akita.VTimeInSec) bool {
 
 	req := msg.(*device.TranslationReq)
 
+	pipeline := tlb.nocPipeline
+
+	if strings.Contains(req.Src.Name(), "L1VTLB") {
+		partitionID := req.TLBID / 8
+
+		if partitionID == tlb.ID {
+			pipeline = tlb.pipeline
+		}
+	}
+
 	// push to waiting queue
-	if tlb.pipeline.CanAccept() {
+	if pipeline.CanAccept() {
 		/*tlb.stats.sendStateInfo && */
 		if now-req.SendTime > 1e-9 {
 
@@ -332,7 +267,7 @@ func (tlb *LatTLB) parseFromTop(now akita.VTimeInSec) bool {
 			taskID:         akita.GetIDGenerator().Generate(),
 			translationReq: req,
 		}
-		tlb.pipeline.Accept(now, pipelineItem)
+		pipeline.Accept(now, pipelineItem)
 		tlb.TopPort.Retrieve(now)
 		tracing.TraceReqReceive(req, now, tlb)
 		tracing.StopTracingNetworkReq(req, now, tlb)
@@ -342,23 +277,7 @@ func (tlb *LatTLB) parseFromTop(now akita.VTimeInSec) bool {
 	return false
 }
 
-func balanceCheck(perEpochWhatIf [4]uint64) bool {
-	sum := uint64(0)
-	for i := 0; i < 4; i++ {
-		sum += perEpochWhatIf[i]
-	}
-	if sum == 0 {
-		return false
-	}
-	for i := 0; i < 4; i++ {
-		if (float32(perEpochWhatIf[i]) / float32(sum)) > 0.5 {
-			return false
-		}
-	}
-	return true
-}
-
-func (tlb *LatTLB) updateReverseSwitchStats(vAddr uint64) {
+func (tlb *SMSideTLB) updateReverseSwitchStats(vAddr uint64) {
 	if (tlb.stats.epochCountWhatIf % 5000) == 0 {
 		if balanceCheck(tlb.stats.perEpochWhatIf) {
 			if tlb.hysterisis == true {
@@ -382,7 +301,25 @@ func (tlb *LatTLB) updateReverseSwitchStats(vAddr uint64) {
 
 }
 
-func (tlb *LatTLB) lookup(now akita.VTimeInSec) bool {
+func (tlb *SMSideTLB) parseFromNoc(now akita.VTimeInSec) bool {
+	item := tlb.nocLookupBuffer.Peek()
+
+	if item == nil {
+		return false
+	}
+
+	if tlb.pipeline.CanAccept() {
+		pipelineItem := item.(tlbPipelineItem)
+
+		tlb.pipeline.Accept(now, pipelineItem)
+		tlb.nocLookupBuffer.Pop()
+
+		return true
+	}
+	return false
+}
+
+func (tlb *SMSideTLB) lookup(now akita.VTimeInSec) bool {
 	// pop from waiting queue
 	item := tlb.lookupBuffer.Peek()
 	if item == nil {
@@ -430,7 +367,7 @@ func (tlb *LatTLB) lookup(now akita.VTimeInSec) bool {
 	return tlb.handleTranslationMiss(now, req, setID)
 }
 
-func (tlb *LatTLB) handleTranslationHit(
+func (tlb *SMSideTLB) handleTranslationHit(
 	now akita.VTimeInSec,
 	req *device.TranslationReq,
 	setID, wayID int,
@@ -463,7 +400,7 @@ func (tlb *LatTLB) handleTranslationHit(
 	return true
 }
 
-func (tlb *LatTLB) handleTranslationMiss(
+func (tlb *SMSideTLB) handleTranslationMiss(
 	now akita.VTimeInSec,
 	req *device.TranslationReq,
 	setID int,
@@ -522,12 +459,12 @@ func (tlb *LatTLB) handleTranslationMiss(
 	}
 }
 
-func (tlb *LatTLB) doPageWalk(vAddr uint64) (doWalk bool) {
-	return tlb.Name() == tlb.TLBFinder.Find(vAddr).Name()[0:21]
+func (tlb *SMSideTLB) doPageWalk(vAddr uint64) (doWalk bool) {
+	return true
 }
 
 // we are assuimg 4K pages here. TODO: FIX THIS!
-func (tlb *LatTLB) vAddrToSetIDxor7(vAddr uint64) (setID int) {
+func (tlb *SMSideTLB) vAddrToSetIDxor7(vAddr uint64) (setID int) {
 	index := uint64(0)
 	sp1 := (vAddr >> 12) & 0x7f
 	sp2 := (vAddr >> 19) & 0x7f
@@ -537,7 +474,7 @@ func (tlb *LatTLB) vAddrToSetIDxor7(vAddr uint64) (setID int) {
 	return int(index)
 }
 
-func (tlb *LatTLB) vAddrToSetID(vAddr uint64) (setID int) {
+func (tlb *SMSideTLB) vAddrToSetID(vAddr uint64) (setID int) {
 	index := uint64(0)
 	vpn := vAddr >> tlb.log2PageSize
 	// usefulBits := (uint64(1) << 28) - 1
@@ -550,7 +487,7 @@ func (tlb *LatTLB) vAddrToSetID(vAddr uint64) (setID int) {
 	return
 }
 
-func (tlb *LatTLB) sendRspToTop(
+func (tlb *SMSideTLB) sendRspToTop(
 	now akita.VTimeInSec,
 	req *device.TranslationReq,
 	page device.Page,
@@ -573,7 +510,7 @@ func (tlb *LatTLB) sendRspToTop(
 	return false
 }
 
-func (tlb *LatTLB) processTLBMSHRHit(
+func (tlb *SMSideTLB) processTLBMSHRHit(
 	now akita.VTimeInSec,
 	mshrEntry *mshrEntry,
 	req *device.TranslationReq,
@@ -585,7 +522,7 @@ func (tlb *LatTLB) processTLBMSHRHit(
 	// return false
 }
 
-func (tlb *LatTLB) fetchBottom(now akita.VTimeInSec, req *device.TranslationReq) bool {
+func (tlb *SMSideTLB) fetchBottom(now akita.VTimeInSec, req *device.TranslationReq) bool {
 	dstPort := tlb.LowModuleFinder.Find(req.VAddr)
 
 	fetchBottom := device.TranslationReqBuilder{}.
@@ -614,7 +551,7 @@ func (tlb *LatTLB) fetchBottom(now akita.VTimeInSec, req *device.TranslationReq)
 	return true
 }
 
-func (tlb *LatTLB) parseBottom(now akita.VTimeInSec) bool {
+func (tlb *SMSideTLB) parseBottom(now akita.VTimeInSec) bool {
 	if tlb.respondingMSHREntry != nil {
 		return false
 	}
@@ -661,7 +598,7 @@ func (tlb *LatTLB) parseBottom(now akita.VTimeInSec) bool {
 	return true
 }
 
-func (tlb *LatTLB) performCtrlReq(now akita.VTimeInSec) bool {
+func (tlb *SMSideTLB) performCtrlReq(now akita.VTimeInSec) bool {
 	item := tlb.ControlPort.Peek()
 	if item == nil {
 		return false
@@ -687,13 +624,13 @@ func (tlb *LatTLB) performCtrlReq(now akita.VTimeInSec) bool {
 	return false
 }
 
-func (tlb *LatTLB) visit(setID, wayID int) int {
+func (tlb *SMSideTLB) visit(setID, wayID int) int {
 	set := tlb.Sets[setID]
 	mruPosition := set.Visit(wayID)
 	return mruPosition
 }
 
-func (tlb *LatTLB) handleTLBFlush(now akita.VTimeInSec, req *TLBFlushReq) bool {
+func (tlb *SMSideTLB) handleTLBFlush(now akita.VTimeInSec, req *TLBFlushReq) bool {
 	rsp := TLBFlushRspBuilder{}.
 		WithSrc(tlb.ControlPort).
 		WithDst(req.Src).
@@ -723,7 +660,7 @@ func (tlb *LatTLB) handleTLBFlush(now akita.VTimeInSec, req *TLBFlushReq) bool {
 	return true
 }
 
-func (tlb *LatTLB) handleTLBRestart(now akita.VTimeInSec, req *TLBRestartReq) bool {
+func (tlb *SMSideTLB) handleTLBRestart(now akita.VTimeInSec, req *TLBRestartReq) bool {
 	rsp := TLBRestartRspBuilder{}.
 		WithSendTime(now).
 		WithSrc(tlb.ControlPort).
@@ -748,13 +685,13 @@ func (tlb *LatTLB) handleTLBRestart(now akita.VTimeInSec, req *TLBRestartReq) bo
 	return true
 }
 
-func (tlb *LatTLB) GetFrontQueueLength() int {
+func (tlb *SMSideTLB) GetFrontQueueLength() int {
 	bufContainer := tlb.GetTopPort().(akita.MsgBufferContainer) //.(*akita.LimitNumMsgPort)
 	buf := bufContainer.GetBuffer()
 	return len(buf)
 }
 
-func (tlb *LatTLB) switchIndexing(now akita.VTimeInSec,
+func (tlb *SMSideTLB) switchIndexing(now akita.VTimeInSec,
 	req *akita.TLBIndexingSwitchMsg) bool {
 
 	tlb.stats.numAccess = 0
@@ -816,14 +753,7 @@ func (tlb *LatTLB) switchIndexing(now akita.VTimeInSec,
 	return true
 }
 
-func div(x, y float64) float64 {
-	if y == 0 {
-		return 0
-	}
-	return x / y
-}
-
-func (tlb *LatTLB) sendCollectedStatsToCP(now akita.VTimeInSec) bool {
+func (tlb *SMSideTLB) sendCollectedStatsToCP(now akita.VTimeInSec) bool {
 
 	// TODO: set hits and misses appropriately
 	req := akita.CollectedStatsMsgBuilder{}.
@@ -840,7 +770,7 @@ func (tlb *LatTLB) sendCollectedStatsToCP(now akita.VTimeInSec) bool {
 	return true
 }
 
-func (tlb *LatTLB) doStatsCollection(now akita.VTimeInSec) bool {
+func (tlb *SMSideTLB) doStatsCollection(now akita.VTimeInSec) bool {
 	currentQueueLength := float64(tlb.GetFrontQueueLength())
 	tlb.stats.avgQueueLengthInCurEpoch = (float64(tlb.stats.timesMeasuredInCurEpoch)*tlb.stats.avgQueueLengthInCurEpoch + currentQueueLength) / float64(tlb.stats.timesMeasuredInCurEpoch+1)
 	if tlb.stats.accessesInCurEpoch > 5000 {
@@ -866,12 +796,12 @@ func (tlb *LatTLB) doStatsCollection(now akita.VTimeInSec) bool {
 	return true
 }
 
-// SetTLBFinder sets the TLBFinder of the LatTLB
-func (tlb *LatTLB) SetTLBFinder(lmf cache.LowModuleFinder) {
-	tlb.TLBFinder = lmf
+// SetTLBFinder sets the TLBFinder of the SMSideTLB
+func (tlb *SMSideTLB) SetTLBFinder(tlbFinder cache.LowModuleFinder) {
+	tlb.TLBFinder = tlbFinder
 }
 
-// GetNocPipeline gets the noc pipeline in the LatTLB
-func (tlb *LatTLB) GetNocPipeline() pipelining.Pipeline {
-	return nil
+// GetNocPipeline gets the noc pipeline in the SMSideTLB
+func (tlb *SMSideTLB) GetNocPipeline() pipelining.Pipeline {
+	return tlb.nocPipeline
 }

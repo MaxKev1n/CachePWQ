@@ -44,6 +44,8 @@ type shaderArrayBuilder struct {
 	log2CacheLineSize uint64
 	log2PageSize      uint64
 	visTracer         tracing.Tracer
+
+	saID int
 }
 
 func makeShaderArrayBuilder() shaderArrayBuilder {
@@ -92,8 +94,9 @@ func (b *shaderArrayBuilder) withVisTracer(
 	b.visTracer = visTracer
 }
 
-func (b *shaderArrayBuilder) Build(name string) shaderArray {
+func (b *shaderArrayBuilder) Build(name string, i int) shaderArray {
 	b.name = name
+	b.saID = i
 	sa := shaderArray{}
 
 	b.buildComponents(&sa)
@@ -308,6 +311,7 @@ func (b *shaderArrayBuilder) buildL1VTLBs(sa *shaderArray) {
 	for i := 0; i < b.numCU; i++ {
 		name := fmt.Sprintf("%s.L1VTLB_%02d", b.name, i)
 		tlb := builder.Build(name)
+		tlb.GlobalIndex = b.saID*b.numCU + i
 		sa.l1vTLBs = append(sa.l1vTLBs, tlb)
 
 		if b.visTracer != nil {

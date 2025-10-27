@@ -21,6 +21,7 @@ type TranslationReq struct {
 	VAddr    uint64
 	PID      ca.PID
 	DeviceID uint64
+	TLBID    int
 }
 
 // Meta returns the meta data associated with the message.
@@ -35,6 +36,7 @@ type TranslationReqBuilder struct {
 	vAddr    uint64
 	pid      ca.PID
 	deviceID uint64
+	tlbID    int
 }
 
 // WithSendTime sets the send time of the request to build.:w
@@ -75,6 +77,12 @@ func (b TranslationReqBuilder) WithDeviceID(deviceID uint64) TranslationReqBuild
 	return b
 }
 
+// WithTLBID sets the TLB ID of the request to build.
+func (b TranslationReqBuilder) WithTLBID(tlbID int) TranslationReqBuilder {
+	b.tlbID = tlbID
+	return b
+}
+
 // Build creats a new TranslationReq
 func (b TranslationReqBuilder) Build() *TranslationReq {
 	r := &TranslationReq{}
@@ -85,6 +93,7 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 	r.VAddr = b.vAddr
 	r.PID = b.pid
 	r.DeviceID = b.deviceID
+	r.TLBID = b.tlbID
 	return r
 }
 
@@ -151,7 +160,7 @@ func (b TranslationRspBuilder) WithAccessResult(hitOrMiss AccessResult) Translat
 	return b
 }
 
-//WithAccessType sets the AccessType of the respond to build.
+// WithAccessType sets the AccessType of the respond to build.
 func (b TranslationRspBuilder) WithSrcL2TLB(srcL2TLB string) TranslationRspBuilder {
 	b.srcL2TLB = srcL2TLB
 	return b
@@ -175,7 +184,7 @@ type PageMigrationInfo struct {
 	GPUReqToVAddrMap map[uint64][]uint64
 }
 
-//PageMigrationReqToDriver is a req to driver from MMU to start page migration process
+// PageMigrationReqToDriver is a req to driver from MMU to start page migration process
 type PageMigrationReqToDriver struct {
 	akita.MsgMeta
 
@@ -205,7 +214,7 @@ func NewPageMigrationReqToDriver(
 	return cmd
 }
 
-//PageMigrationRspFromDriver is a rsp from driver to MMU marking completion of migration
+// PageMigrationRspFromDriver is a rsp from driver to MMU marking completion of migration
 type PageMigrationRspFromDriver struct {
 	akita.MsgMeta
 

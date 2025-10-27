@@ -42,6 +42,8 @@ type TLB struct {
 	respondingMSHREntry *mshrEntry
 
 	isPaused bool
+
+	GlobalIndex int
 }
 
 // GetNumSets gets the number of sets in the TLB
@@ -277,6 +279,7 @@ func (tlb *TLB) fetchBottom(now akita.VTimeInSec, req *device.TranslationReq) bo
 		WithPID(req.PID).
 		WithVAddr(req.VAddr).
 		WithDeviceID(req.DeviceID).
+		WithTLBID(tlb.GlobalIndex).
 		Build()
 	err := tlb.BottomPort.Send(fetchBottom)
 	if err != nil {

@@ -326,7 +326,7 @@ func (b *CommonBuilder) BuildSAs(chiplet *Chiplet) {
 
 	for i := 0; i < b.numShaderArrayPerChiplet; i++ {
 		saName := fmt.Sprintf("%s.SA_%02d", chiplet.name, i)
-		sa := saBuilder.Build(saName)
+		sa := saBuilder.Build(saName, i)
 		b.collectSAComponents(sa, chiplet)
 	}
 }

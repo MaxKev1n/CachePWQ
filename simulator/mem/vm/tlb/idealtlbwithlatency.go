@@ -279,3 +279,13 @@ func (tlb *IdealLatTLB) GetFrontQueueLength() int {
 func (tlb *IdealLatTLB) SetCommandProcessor(cp akita.Port) {
 	tlb.CommandProcessor = cp
 }
+
+// SetTLBFinder sets the low module finder for the TLB
+func (tlb *IdealLatTLB) SetTLBFinder(lmf cache.LowModuleFinder) {
+	panic("idealLatTlb has no low module!")
+}
+
+// GetNocPipeline gets the noc pipeline
+func (tlb *IdealLatTLB) GetNocPipeline() pipelining.Pipeline {
+	return nil
+}

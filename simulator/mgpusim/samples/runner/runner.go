@@ -1021,6 +1021,36 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithMemAllocatorType(*memAllocatorType)
 		b.WithLog2PageSize(*log2PageSize)
 		r.Engine, r.GPUDriver = b.Build()
+	case "SMSide":
+		b := platform.MakeSMSideBuilder()
+		if r.Parallel {
+			b.WithParallelEngine()
+		}
+
+		if *isaDebug {
+			b.WithISADebugging()
+		}
+
+		if *visTracing {
+			b.WithVisTracing()
+		}
+
+		if *memTracing {
+			b.WithMemTracing()
+		}
+
+		if *tlbTracing {
+			b.WithTLBTracing()
+		}
+
+		if *disableProgressBar {
+			b.WithoutProgressBar()
+		}
+		b.WithAlg(*schedulingAlg)
+		b.WithSchedulingPartition(*schedulingPartition)
+		b.WithMemAllocatorType(*memAllocatorType)
+		b.WithLog2PageSize(*log2PageSize)
+		r.Engine, r.GPUDriver = b.Build()
 	case "privateh2tlb":
 		b := platform.MakePrivateH2TLBPlatformBuilder()
 		if r.Parallel {
@@ -1572,6 +1602,17 @@ func (r *Runner) addTLBLatencyTracer() {
 
 		for _, tlb := range gpu.L2TLBs {
 			pipeline := tlb.GetPipeline()
+			tracer := tracing.NewAverageTimeTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "pipeline"
+				})
+			r.TLBPipelineLatencyTracers = append(r.TLBPipelineLatencyTracers,
+				TLBPipelineLatencyTracer{tracer: tracer, pipeline: pipeline})
+			tracing.CollectTrace(pipeline, tracer)
+		}
+
+		for _, tlb := range gpu.L2TLBs {
+			pipeline := tlb.GetNocPipeline()
 			tracer := tracing.NewAverageTimeTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "pipeline"

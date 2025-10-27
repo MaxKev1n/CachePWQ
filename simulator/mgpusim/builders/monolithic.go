@@ -5,7 +5,6 @@ import (
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem/cache"
-	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/noc/networking/chipnetwork"
 )
@@ -109,7 +108,7 @@ func (b *MonolithicGPUBuilder) connectL1TLBToL2TLB(chiplet *Chiplet) {
 	singeLowModuleFinder := new(cache.SingleLowModuleFinder)
 	singeLowModuleFinder.LowModule = chiplet.L2TLBs[0].GetTopPort()
 
-	chiplet.L2TLBs[0].(*tlb.LatTLB).TLBFinder = singeLowModuleFinder
+	chiplet.L2TLBs[0].SetTLBFinder(singeLowModuleFinder)
 
 	lowModuleFinder = singeLowModuleFinder
 
