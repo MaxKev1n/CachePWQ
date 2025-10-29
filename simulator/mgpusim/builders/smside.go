@@ -23,6 +23,7 @@ type SMSideGPUBuilder struct {
 	MMUs []mmu.MMU
 
 	numL2TLBSlices int
+	numL2TLBSets   int
 }
 
 // WithNumL2TLBSlices sets the number of L2 TLB slices.
@@ -81,12 +82,12 @@ func (b SMSideGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
 }
 
 func (b *SMSideGPUBuilder) buildL2TLB(chiplet *Chiplet) {
-	numSets := 64 // 128 // 256 // changed this here
-	numWays := 8  // 8 // changed this here
+	b.numL2TLBSets = 64 // 128 // 256 // changed this here
+	numWays := 8        // 8 // changed this here
 
-	if numSets%b.numL2TLBSlices != 0 {
-		log.Panicf("numSets %d is not divisible by numL2TLBSlices %d",
-			numSets, b.numL2TLBSlices)
+	if b.numL2TLBSets%b.numL2TLBSlices != 0 {
+		log.Panicf("numL2TLBSets %d is not divisible by numL2TLBSlices %d",
+			b.numL2TLBSets, b.numL2TLBSlices)
 	}
 
 	numMSHREntry := 64
@@ -101,7 +102,7 @@ func (b *SMSideGPUBuilder) buildL2TLB(chiplet *Chiplet) {
 			WithEngine(b.engine).
 			WithFreq(b.freq).
 			WithNumWays(numWays).
-			WithNumSets(numSets / b.numL2TLBSlices).
+			WithNumSets(b.numL2TLBSets / b.numL2TLBSlices).
 			WithNumMSHREntry(numMSHREntry / b.numL2TLBSlices).
 			WithNumReqPerCycle(1).
 			WithLog2PageSize(b.log2PageSize).
@@ -168,12 +169,13 @@ func (b *SMSideGPUBuilder) connectL1TLBToL2TLB(chiplet *Chiplet) {
 
 	var lowModuleFinder cache.LowModuleFinder
 
-	numBits := int(math.Log2(float64(b.numL2TLBSlices)))
-	xorLowModuleFinder := cache.NewXORLowModuleFinder(
-		b.numL2TLBSlices,
+	numElemBits := int(math.Log2(float64(b.numL2TLBSets) / float64(b.numL2TLBSlices)))
+	numBits := int(math.Log2(float64(b.numL2TLBSets)))
+	xorLowModuleFinder := cache.NewPartitionedXORLowModuleFinder(
+		numElemBits,
 		4,
 		numBits,
-		16,
+		int(b.log2PageSize),
 	)
 
 	for i := 0; i < b.numL2TLBSlices; i++ {

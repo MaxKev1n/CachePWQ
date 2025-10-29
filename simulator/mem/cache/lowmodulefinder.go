@@ -109,6 +109,41 @@ func NewXORLowModuleFinder(numModules int, numTerms int, numBitsPerTerm int,
 	return f
 }
 
+type PartitionedXORLowModuleFinder struct {
+	numElemBits    int
+	NumTerms       int
+	NumBitsPerTerm int
+	OffsetBits     int
+	LowModules     []akita.Port
+}
+
+func (f *PartitionedXORLowModuleFinder) Find(address uint64) akita.Port {
+	index := uint64(0)
+	address = address >> f.OffsetBits
+	mask := (uint64(1) << f.NumBitsPerTerm) - 1
+	for i := 0; i < f.NumTerms; i++ {
+		index = index ^ (address & mask)
+		address = address >> f.NumBitsPerTerm
+	}
+	index = index >> f.numElemBits
+	return f.LowModules[index]
+}
+
+func NewPartitionedXORLowModuleFinder(
+	numElemBits int,
+	numTerms int,
+	numBitsPerTerm int,
+	offsetBits int,
+) *PartitionedXORLowModuleFinder {
+	f := new(PartitionedXORLowModuleFinder)
+	f.numElemBits = numElemBits
+	f.NumTerms = numTerms
+	f.NumBitsPerTerm = numBitsPerTerm
+	f.OffsetBits = offsetBits
+
+	return f
+}
+
 // BankedLowModuleFinder defines the lower level modules by address banks
 type StripedLowModuleFinder struct {
 	MemAddrOffset uint64

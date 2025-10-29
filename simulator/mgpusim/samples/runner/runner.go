@@ -1613,6 +1613,11 @@ func (r *Runner) addTLBLatencyTracer() {
 
 		for _, tlb := range gpu.L2TLBs {
 			pipeline := tlb.GetNocPipeline()
+
+			if pipeline == nil {
+				continue
+			}
+
 			tracer := tracing.NewAverageTimeTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "pipeline"
