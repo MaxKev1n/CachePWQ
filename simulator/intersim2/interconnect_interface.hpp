@@ -54,7 +54,9 @@ public:
   //node side functions
   virtual void Init();
   virtual void Push(unsigned input_deviceID, unsigned output_deviceID, void* data, unsigned int size);
+  virtual void Push(unsigned input_deviceID, unsigned output_deviceID, void* data, int type, unsigned int size);
   virtual void* Pop(unsigned ouput_deviceID);
+  virtual void* Get(unsigned output_deviceID);
   virtual bool Peek(unsigned output_deviceID);
   virtual void Advance();
   virtual bool Busy() const;

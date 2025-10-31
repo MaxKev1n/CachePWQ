@@ -11,7 +11,7 @@ booksim_net_t booksim_create(const char* cfg_path, int n_nodes) {
     auto wrap = new booksim_net_wrap;
     wrap->iface = InterconnectInterface::New(cfg_path);
 
-    wrap->iface->CreateInterconnect(1, 1);
+    wrap->iface->CreateInterconnect(385, 33);
     wrap->iface->Init();
 
     g_icnt_interface = wrap->iface; // for compatibility
@@ -37,9 +37,9 @@ int booksim_can_inject(booksim_net_t net, int src, int n_flits) {
 }
 
 int booksim_inject(booksim_net_t net, int src, int dst,
-                   unsigned long long pkt_id, int n_flits, int size_bytes) {
+                   unsigned long long pkt_id, int type, int size_bytes) {
     auto wrap = reinterpret_cast<booksim_net_wrap*>(net);
-    wrap->iface->Push(src, dst, (void*)pkt_id, size_bytes);
+    wrap->iface->Push(src, dst, (void*)pkt_id, type, size_bytes);
     recv_counter++;
     return 1;
 }
@@ -49,18 +49,20 @@ int booksim_busy(booksim_net_t net) {
     return wrap->iface->Busy() ? 1 : 0;
 }
 
-int booksim_peek_packet(booksim_net_t net, int node) {
+int booksim_peek(booksim_net_t net, int node, unsigned long long* pkt_id_out) {
     auto wrap = reinterpret_cast<booksim_net_wrap*>(net);
-    return wrap->iface->Peek(node) ? 1 : 0;
-}
-
-int booksim_recv(booksim_net_t net, int node, unsigned long long* pkt_id_out) {
-    auto wrap = reinterpret_cast<booksim_net_wrap*>(net);
-    auto data = wrap->iface->Pop(node);
+    auto data = wrap->iface->Get(node);
     if (data) {
         *pkt_id_out = reinterpret_cast<unsigned long long>(data);
-        send_counter++;
         return 1;
     }
     return 0;
+}
+
+void booksim_pop(booksim_net_t net, int node) {
+    auto wrap = reinterpret_cast<booksim_net_wrap*>(net);
+    auto data = wrap->iface->Pop(node);
+
+    assert(data == nullptr);
+    send_counter++;
 }

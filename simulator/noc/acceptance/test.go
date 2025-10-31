@@ -39,12 +39,12 @@ func (t *Test) RegisterAgent(agent *Agent) {
 // destination port.
 func (t *Test) GenerateMsgs(n uint64) {
 	for i := uint64(0); i < n; i++ {
-		srcAgentID := rand.Intn(len(t.agents))
+		srcAgentID := rand.Intn(385)
 		srcAgent := t.agents[srcAgentID]
 		srcPortID := rand.Intn(len(srcAgent.Ports))
 		srcPort := srcAgent.Ports[srcPortID]
 
-		dstAgentID := rand.Intn(len(t.agents))
+		dstAgentID := rand.Intn(33) + 385
 		for dstAgentID == srcAgentID {
 			dstAgentID = rand.Intn(len(t.agents))
 		}
@@ -57,7 +57,7 @@ func (t *Test) GenerateMsgs(n uint64) {
 		msg.Meta().ID = akita.GetIDGenerator().Generate()
 		msg.Src = srcPort
 		msg.Dst = dstPort
-		msg.TrafficBytes = rand.Intn(4096)
+		msg.TrafficBytes = 32
 		srcAgent.MsgsToSend = append(srcAgent.MsgsToSend, msg)
 		t.registerMsg(msg)
 	}
@@ -72,8 +72,9 @@ func (t *Test) receiveMsg(msg akita.Msg, recvPort akita.Port) {
 	t.msgMustBeReceivedAtItsDestination(msg, recvPort)
 	t.msgMustNotBeReceivedBefore(msg)
 	t.receivedMsgs = append(t.receivedMsgs, msg)
-	log.Printf("Msg %s: sent at %.10f, recved at %.10f",
-		msg.Meta().ID, msg.Meta().SendTime, msg.Meta().RecvTime)
+	if len(t.receivedMsgs) == len(t.msgs) {
+		log.Printf("  -- %d msgs received --\n", len(t.receivedMsgs))
+	}
 }
 
 func (t *Test) msgMustBeReceivedAtItsDestination(

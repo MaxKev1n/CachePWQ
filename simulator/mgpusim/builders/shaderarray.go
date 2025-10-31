@@ -6,6 +6,7 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
+	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mem/vm/addresstranslator"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim/timing/caches/l1v"
@@ -46,6 +47,8 @@ type shaderArrayBuilder struct {
 	visTracer         tracing.Tracer
 
 	saID int
+
+	pageTable device.PageTable
 }
 
 func makeShaderArrayBuilder() shaderArrayBuilder {
@@ -92,6 +95,10 @@ func (b *shaderArrayBuilder) withVisTracer(
 	visTracer tracing.Tracer,
 ) {
 	b.visTracer = visTracer
+}
+
+func (b *shaderArrayBuilder) withPageTable(pt device.PageTable) {
+	b.pageTable = pt
 }
 
 func (b *shaderArrayBuilder) Build(name string, i int) shaderArray {

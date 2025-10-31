@@ -114,6 +114,9 @@ type CommonBuilder struct {
 	partition            string
 	useCoalescingTLBPort bool
 	useCoalescingRTU     bool
+
+	numSMsideComp  int
+	numMemsideComp int
 }
 
 // MakeCommonBuilder provides a GPU builder that can builds the MCM GPU.
@@ -319,6 +322,7 @@ func (b *CommonBuilder) BuildSAs(chiplet *Chiplet) {
 	saBuilder.withLog2CachelineSize(b.log2CacheLineSize)
 	saBuilder.withLog2PageSize(b.log2PageSize)
 	saBuilder.withNumCU(b.numCUPerShaderArray)
+	saBuilder.withPageTable(b.pageTable)
 
 	if b.enableVisTracing {
 		saBuilder.withVisTracer(b.visTracer)
@@ -401,9 +405,9 @@ func (b *CommonBuilder) buildMemBanks(chiplet *Chiplet) {
 		WithWayAssociativity(16).
 		WithByteSize(256 * mem.KB).
 		WithNumMSHREntry(64).
-		WithNumReqPerCycle(2).
-		WithBankLatency(1).
-		WithPipelineLatency(140).
+		WithNumReqPerCycle(8).
+		WithBankLatency(10).
+		WithPipelineLatency(80).
 		WithNumBanks(1)
 
 	for i := 0; i < b.numMemoryBankPerChiplet; i++ {

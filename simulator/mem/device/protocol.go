@@ -6,6 +6,10 @@ import (
 	"gitlab.com/akita/util/ca"
 )
 
+var accessReqByteOverhead = 12
+var accessRspByteOverhead = 4
+var controlMsgByteOverhead = 4
+
 type AccessResult int
 
 const (
@@ -90,6 +94,7 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 	r.Src = b.src
 	r.Dst = b.dst
 	r.SendTime = b.sendTime
+	r.TrafficBytes = accessReqByteOverhead
 	r.VAddr = b.vAddr
 	r.PID = b.pid
 	r.DeviceID = b.deviceID
@@ -173,6 +178,7 @@ func (b TranslationRspBuilder) Build() *TranslationRsp {
 	r.Src = b.src
 	r.Dst = b.dst
 	r.SendTime = b.sendTime
+	r.TrafficBytes = accessRspByteOverhead
 	r.RespondTo = b.rspTo
 	r.Page = b.page
 	r.HitOrMiss = b.hitOrMiss

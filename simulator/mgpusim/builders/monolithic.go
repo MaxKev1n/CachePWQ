@@ -2,10 +2,12 @@ package builders
 
 import (
 	"fmt"
+	"log"
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mgpusim"
+	noc "gitlab.com/akita/noc/networking/booksim"
 	"gitlab.com/akita/noc/networking/chipnetwork"
 )
 
@@ -47,11 +49,14 @@ func (b MonolithicGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
 	b.configChipRDMAEngine(chiplet, chipRdmaAddressTable, rdmaResponsePorts)
 	// b.configRemoteAddressTranslationUnit(chiplet, remoteAddressTranslationTable, rtuResponsePorts)
 
-	b.connectL1ToL2(chiplet)
+	b.createIntraChipletNoC(chiplet)
+	b.calculateTwoSideComponents(chiplet)
+
+	b.connectL1ToL2NoC(chiplet)
 	b.connectL2ToDRAM(chiplet)
-	b.connectL1TLBToL2TLB(chiplet)
+	b.connectL1TLBToL2TLBNoC(chiplet)
 	b.connectL2TLBTOMMU(chiplet)
-	b.connectMMUToL2(chiplet)
+	b.connectMMUToL2NoC(chiplet)
 
 	b.chiplets = append(b.chiplets, chiplet)
 
@@ -126,6 +131,118 @@ func (b *MonolithicGPUBuilder) connectL1TLBToL2TLB(chiplet *Chiplet) {
 		l1sTLB.SetLowModuleFinder(lowModuleFinder)
 		tlbConn.PlugIn(l1sTLB.BottomPort, 16)
 	}
+}
+
+func (b *MonolithicGPUBuilder) calculateTwoSideComponents(chiplet *Chiplet) {
+	for range chiplet.L1VCaches {
+		b.numSMsideComp++
+	}
+
+	for range chiplet.L1SCaches {
+		b.numSMsideComp++
+	}
+
+	for range chiplet.L1IAddrTranslator {
+		b.numSMsideComp++
+	}
+
+	for range chiplet.L2Caches {
+		b.numMemsideComp++
+	}
+
+	for range chiplet.L1VTLBs {
+		b.numSMsideComp++
+	}
+
+	for range chiplet.L1ITLBs {
+		b.numSMsideComp++
+	}
+
+	for range chiplet.L1STLBs {
+		b.numSMsideComp++
+	}
+
+	// Monolithic L2 TLB
+	b.numMemsideComp++
+
+	// Monolithic MMU
+	b.numSMsideComp++
+
+	chiplet.BookSimNoC.MaxNumSMSidePort = b.numSMsideComp
+	chiplet.BookSimNoC.MaxNumMemSidePort = b.numSMsideComp + b.numMemsideComp
+
+	log.Printf("Chiplet %d has %d SM side components and %d Mem side components\n",
+		chiplet.ChipletID, b.numSMsideComp, b.numMemsideComp)
+}
+
+func (b *MonolithicGPUBuilder) createIntraChipletNoC(chiplet *Chiplet) {
+	chiplet.BookSimNoC = noc.NewBookSimNoC(
+		fmt.Sprintf("L1ToL2NoC[%d]", chiplet.ChipletID),
+		"",
+		b.engine,
+		418)
+}
+
+func (b *MonolithicGPUBuilder) connectL1ToL2NoC(chiplet *Chiplet) {
+	fmt.Println("memory address offset:", b.memAddrOffset)
+	lowModuleFinder := cache.NewStripedLocalVRemoteLowModuleFinder(b.memAddrOffset, uint64(b.numChiplet*b.numMemoryBankPerChiplet),
+		1<<b.log2MemoryBankInterleavingSize, uint64(b.numMemoryBankPerChiplet)*chiplet.ChipletID, uint64(b.numMemoryBankPerChiplet)*chiplet.ChipletID+uint64(b.numMemoryBankPerChiplet-1))
+	lowModuleFinder.ModuleForOtherAddresses = chiplet.chipRdmaEngine.ToL1
+
+	for _, l1v := range chiplet.L1VCaches {
+		l1v.SetLowModuleFinder(lowModuleFinder)
+		chiplet.BookSimNoC.PlugInSMSide(l1v.BottomPort, 16)
+	}
+
+	for _, l1s := range chiplet.L1SCaches {
+		l1s.SetLowModuleFinder(lowModuleFinder)
+		chiplet.BookSimNoC.PlugInSMSide(l1s.BottomPort, 16)
+	}
+
+	for _, l1iAT := range chiplet.L1IAddrTranslator {
+		l1iAT.SetLowModuleFinder(lowModuleFinder)
+		chiplet.BookSimNoC.PlugInSMSide(l1iAT.GetBottomPort(), 16)
+	}
+
+	for _, l2 := range chiplet.L2Caches {
+		lowModuleFinder.LowModules = append(lowModuleFinder.LowModules,
+			l2.TopPort)
+		chiplet.BookSimNoC.PlugInMemSide(l2.TopPort, 64)
+	}
+	chiplet.lowModuleFinderForL1 = lowModuleFinder
+}
+
+func (b *MonolithicGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
+	var lowModuleFinder cache.LowModuleFinder
+
+	singeLowModuleFinder := new(cache.SingleLowModuleFinder)
+	singeLowModuleFinder.LowModule = chiplet.L2TLBs[0].GetTopPort()
+
+	chiplet.L2TLBs[0].SetTLBFinder(singeLowModuleFinder)
+
+	lowModuleFinder = singeLowModuleFinder
+
+	for _, l1vTLB := range chiplet.L1VTLBs {
+		l1vTLB.SetLowModuleFinder(lowModuleFinder)
+		chiplet.BookSimNoC.PlugInSMSide(l1vTLB.BottomPort, 16)
+	}
+
+	for _, l1iTLB := range chiplet.L1ITLBs {
+		l1iTLB.SetLowModuleFinder(lowModuleFinder)
+		chiplet.BookSimNoC.PlugInSMSide(l1iTLB.BottomPort, 16)
+	}
+
+	for _, l1sTLB := range chiplet.L1STLBs {
+		l1sTLB.SetLowModuleFinder(lowModuleFinder)
+		chiplet.BookSimNoC.PlugInSMSide(l1sTLB.BottomPort, 16)
+	}
+
+	chiplet.BookSimNoC.PlugInMemSide(chiplet.L2TLBs[0].GetTopPort(), 64)
+}
+
+func (b *MonolithicGPUBuilder) connectMMUToL2NoC(chiplet *Chiplet) {
+	chiplet.MMU.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
+	chiplet.BookSimNoC.PlugInSMSide(chiplet.MMU.TranslationPortPort(), 64)
 }
 
 func (b *MonolithicGPUBuilder) setupInterchipNetwork() {

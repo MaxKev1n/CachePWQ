@@ -354,7 +354,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/SMSide-baselineMMU64",
+            input_dir="../../data/SMSide-baselineMMU-64",
         )
 
         Opt2 = pd.concat(

@@ -13,6 +13,7 @@ import (
 	"gitlab.com/akita/mgpusim/timing/caches/l1v"
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
 	"gitlab.com/akita/mgpusim/timing/cu"
+	noc "gitlab.com/akita/noc/networking/booksim"
 )
 
 type Chiplet struct {
@@ -46,6 +47,8 @@ type Chiplet struct {
 	L1TLBToL2TLBConnection *akita.DirectConnection
 	L1ToL2Connection       *akita.DirectConnection
 	L2ToDramConnection     *akita.DirectConnection
+
+	BookSimNoC *noc.BookSimNoC
 
 	name      string
 	ChipletID uint64
