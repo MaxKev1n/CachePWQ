@@ -30,9 +30,9 @@ type shaderArray struct {
 	l1sCache  *l1v.Cache
 	l1iCache  *l1v.Cache
 
-	l1vTLBs []*tlb.TLB
-	l1sTLB  *tlb.TLB
-	l1iTLB  *tlb.TLB
+	l1vTLBs []tlb.L1TLB
+	l1sTLB  tlb.L1TLB
+	l1iTLB  tlb.L1TLB
 }
 
 type shaderArrayBuilder struct {
@@ -49,6 +49,8 @@ type shaderArrayBuilder struct {
 	saID int
 
 	pageTable device.PageTable
+
+	SMSide bool
 }
 
 func makeShaderArrayBuilder() shaderArrayBuilder {
@@ -101,6 +103,10 @@ func (b *shaderArrayBuilder) withPageTable(pt device.PageTable) {
 	b.pageTable = pt
 }
 
+func (b *shaderArrayBuilder) withSMSide() {
+	b.SMSide = true
+}
+
 func (b *shaderArrayBuilder) Build(name string, i int) shaderArray {
 	b.name = name
 	b.saID = i
@@ -115,17 +121,29 @@ func (b *shaderArrayBuilder) Build(name string, i int) shaderArray {
 func (b *shaderArrayBuilder) buildComponents(sa *shaderArray) {
 	b.buildCUs(sa)
 
-	b.buildL1VTLBs(sa)
+	if b.SMSide {
+		b.buildSMSideL1VTLBs(sa)
+	} else {
+		b.buildL1VTLBs(sa)
+	}
 	b.buildL1VAddressTranslators(sa)
 	b.buildL1VReorderBuffers(sa)
 	b.buildL1VCaches(sa)
 
-	b.buildL1STLB(sa)
+	if b.SMSide {
+		b.buildSMSideL1STLB(sa)
+	} else {
+		b.buildL1STLB(sa)
+	}
 	b.buildL1SAddressTranslator(sa)
 	b.buildL1SReorderBuffer(sa)
 	b.buildL1SCache(sa)
 
-	b.buildL1ITLB(sa)
+	if b.SMSide {
+		b.buildSMSideL1ITLB(sa)
+	} else {
+		b.buildL1ITLB(sa)
+	}
 	b.buildL1IAddressTranslator(sa)
 	b.buildL1IReorderBuffer(sa)
 	b.buildL1ICache(sa)
@@ -138,9 +156,9 @@ func (b *shaderArrayBuilder) connectComponents(sa *shaderArray) {
 	b.connectVM(sa)
 }
 
-func (b *shaderArrayBuilder) connectATToL1TLB(at addresstranslator.AddressTranslator, tlb *tlb.TLB) {
-	at.SetTranslationProvider(tlb.TopPort)
-	b.connectWithDirectConnection(at.GetTranslationPort(), tlb.TopPort, 2)
+func (b *shaderArrayBuilder) connectATToL1TLB(at addresstranslator.AddressTranslator, tlb tlb.L1TLB) {
+	at.SetTranslationProvider(tlb.GetTopPort())
+	b.connectWithDirectConnection(at.GetTranslationPort(), tlb.GetTopPort(), 2)
 }
 
 func (b *shaderArrayBuilder) connectVM(sa *shaderArray) {
@@ -327,6 +345,29 @@ func (b *shaderArrayBuilder) buildL1VTLBs(sa *shaderArray) {
 	}
 }
 
+func (b *shaderArrayBuilder) buildSMSideL1VTLBs(sa *shaderArray) {
+	builder := tlb.MakeSMSideL1TLBBuilder().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithNumMSHREntry(8).
+		WithNumSets(1).
+		WithNumWays(32).
+		WithNumReqPerCycle(2).
+		WithPageSize(1 << b.log2PageSize).
+		WithLatency(20)
+
+	for i := 0; i < b.numCU; i++ {
+		name := fmt.Sprintf("%s.L1VTLB_%02d", b.name, i)
+		tlb := builder.Build(name)
+		tlb.GlobalIndex = b.saID*b.numCU + i
+		sa.l1vTLBs = append(sa.l1vTLBs, tlb)
+
+		if b.visTracer != nil {
+			tracing.CollectTrace(tlb, b.visTracer)
+		}
+	}
+}
+
 func (b *shaderArrayBuilder) buildL1VCaches(sa *shaderArray) {
 	builder := l1v.NewBuilder().
 		WithEngine(b.engine).
@@ -399,6 +440,26 @@ func (b *shaderArrayBuilder) buildL1STLB(sa *shaderArray) {
 	}
 }
 
+func (b *shaderArrayBuilder) buildSMSideL1STLB(sa *shaderArray) {
+	builder := tlb.MakeSMSideL1TLBBuilder().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithNumMSHREntry(8).
+		WithNumSets(1).
+		WithNumWays(32).
+		WithNumReqPerCycle(4).
+		WithPageSize(1 << b.log2PageSize).
+		WithLatency(20)
+
+	name := fmt.Sprintf("%s.L1STLB", b.name)
+	tlb := builder.Build(name)
+	sa.l1sTLB = tlb
+
+	if b.visTracer != nil {
+		tracing.CollectTrace(tlb, b.visTracer)
+	}
+}
+
 func (b *shaderArrayBuilder) buildL1SCache(sa *shaderArray) {
 	builder := l1v.NewBuilder().
 		WithEngine(b.engine).
@@ -451,6 +512,26 @@ func (b *shaderArrayBuilder) buildL1IAddressTranslator(sa *shaderArray) {
 
 func (b *shaderArrayBuilder) buildL1ITLB(sa *shaderArray) {
 	builder := tlb.MakeBuilder().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithNumMSHREntry(8).
+		WithNumSets(1).
+		WithNumWays(32).
+		WithNumReqPerCycle(4).
+		WithPageSize(1 << b.log2PageSize).
+		WithLatency(20)
+
+	name := fmt.Sprintf("%s.L1ITLB", b.name)
+	tlb := builder.Build(name)
+	sa.l1iTLB = tlb
+
+	if b.visTracer != nil {
+		tracing.CollectTrace(tlb, b.visTracer)
+	}
+}
+
+func (b *shaderArrayBuilder) buildSMSideL1ITLB(sa *shaderArray) {
+	builder := tlb.MakeSMSideL1TLBBuilder().
 		WithEngine(b.engine).
 		WithFreq(b.freq).
 		WithNumMSHREntry(8).

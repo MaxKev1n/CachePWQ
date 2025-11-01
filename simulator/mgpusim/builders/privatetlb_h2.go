@@ -122,17 +122,17 @@ func (b *PrivateH2TLBGPUBuilder) connectL1TLBToL2TLB(chiplet *Chiplet) {
 
 	for _, l1vTLB := range chiplet.L1VTLBs {
 		l1vTLB.SetLowModuleFinder(lowModuleFinder)
-		tlbConn.PlugIn(l1vTLB.BottomPort, 16)
+		tlbConn.PlugIn(l1vTLB.GetBottomPort(), 16)
 	}
 
 	for _, l1iTLB := range chiplet.L1ITLBs {
 		l1iTLB.SetLowModuleFinder(lowModuleFinder)
-		tlbConn.PlugIn(l1iTLB.BottomPort, 16)
+		tlbConn.PlugIn(l1iTLB.GetBottomPort(), 16)
 	}
 
 	for _, l1sTLB := range chiplet.L1STLBs {
 		l1sTLB.SetLowModuleFinder(lowModuleFinder)
-		tlbConn.PlugIn(l1sTLB.BottomPort, 16)
+		tlbConn.PlugIn(l1sTLB.GetBottomPort(), 16)
 	}
 }
 

@@ -87,17 +87,17 @@ func (b *H3Builder) connectL1TLBToL2TLBMagic() {
 
 	for _, l1vTLB := range b.gpu.L1VTLBs {
 		l1vTLB.SetLowModuleFinder(lowModuleFinder)
-		tlbConn.PlugIn(l1vTLB.BottomPort, 16)
+		tlbConn.PlugIn(l1vTLB.GetBottomPort(), 16)
 	}
 
 	for _, l1iTLB := range b.gpu.L1ITLBs {
 		l1iTLB.SetLowModuleFinder(lowModuleFinder)
-		tlbConn.PlugIn(l1iTLB.BottomPort, 16)
+		tlbConn.PlugIn(l1iTLB.GetBottomPort(), 16)
 	}
 
 	for _, l1sTLB := range b.gpu.L1STLBs {
 		l1sTLB.SetLowModuleFinder(lowModuleFinder)
-		tlbConn.PlugIn(l1sTLB.BottomPort, 16)
+		tlbConn.PlugIn(l1sTLB.GetBottomPort(), 16)
 	}
 }
 

@@ -119,17 +119,17 @@ func (b *MonolithicGPUBuilder) connectL1TLBToL2TLB(chiplet *Chiplet) {
 
 	for _, l1vTLB := range chiplet.L1VTLBs {
 		l1vTLB.SetLowModuleFinder(lowModuleFinder)
-		tlbConn.PlugIn(l1vTLB.BottomPort, 16)
+		tlbConn.PlugIn(l1vTLB.GetBottomPort(), 16)
 	}
 
 	for _, l1iTLB := range chiplet.L1ITLBs {
 		l1iTLB.SetLowModuleFinder(lowModuleFinder)
-		tlbConn.PlugIn(l1iTLB.BottomPort, 16)
+		tlbConn.PlugIn(l1iTLB.GetBottomPort(), 16)
 	}
 
 	for _, l1sTLB := range chiplet.L1STLBs {
 		l1sTLB.SetLowModuleFinder(lowModuleFinder)
-		tlbConn.PlugIn(l1sTLB.BottomPort, 16)
+		tlbConn.PlugIn(l1sTLB.GetBottomPort(), 16)
 	}
 }
 
@@ -224,17 +224,17 @@ func (b *MonolithicGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 
 	for _, l1vTLB := range chiplet.L1VTLBs {
 		l1vTLB.SetLowModuleFinder(lowModuleFinder)
-		chiplet.BookSimNoC.PlugInSMSide(l1vTLB.BottomPort, 16)
+		chiplet.BookSimNoC.PlugInSMSide(l1vTLB.GetBottomPort(), 16)
 	}
 
 	for _, l1iTLB := range chiplet.L1ITLBs {
 		l1iTLB.SetLowModuleFinder(lowModuleFinder)
-		chiplet.BookSimNoC.PlugInSMSide(l1iTLB.BottomPort, 16)
+		chiplet.BookSimNoC.PlugInSMSide(l1iTLB.GetBottomPort(), 16)
 	}
 
 	for _, l1sTLB := range chiplet.L1STLBs {
 		l1sTLB.SetLowModuleFinder(lowModuleFinder)
-		chiplet.BookSimNoC.PlugInSMSide(l1sTLB.BottomPort, 16)
+		chiplet.BookSimNoC.PlugInSMSide(l1sTLB.GetBottomPort(), 16)
 	}
 
 	chiplet.BookSimNoC.PlugInMemSide(chiplet.L2TLBs[0].GetTopPort(), 64)

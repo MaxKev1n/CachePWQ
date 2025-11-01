@@ -3,8 +3,6 @@ package tlb
 import (
 	"fmt"
 	"log"
-	"strings"
-
 	// "math"
 	"reflect"
 	"strconv"
@@ -24,10 +22,11 @@ import (
 type SMSideTLB struct {
 	*akita.TickingComponent
 
-	TopPort     akita.Port
-	BottomPort  akita.Port
-	ControlPort akita.Port
-	ToRTU       akita.Port
+	LocalTopPort  akita.Port
+	RemoteTopPort akita.Port
+	BottomPort    akita.Port
+	ControlPort   akita.Port
+	ToRTU         akita.Port
 
 	LowModule       akita.Port
 	LowModuleFinder cache.LowModuleFinder
@@ -51,9 +50,6 @@ type SMSideTLB struct {
 	pipeline     pipelining.Pipeline
 	lookupBuffer util.Buffer
 
-	nocPipeline     pipelining.Pipeline
-	nocLookupBuffer util.Buffer
-
 	mshr                mshr
 	respondingMSHREntry *mshrEntry
 
@@ -76,7 +72,8 @@ func (tlb *SMSideTLB) GetPipeline() pipelining.Pipeline {
 
 // GetPipeline gets the pipeline in the SMSideTLB
 func (tlb *SMSideTLB) GetTopPort() akita.Port {
-	return tlb.TopPort
+	// TODO: fix this later
+	return tlb.RemoteTopPort
 }
 
 // GetPipeline gets the pipeline in the SMSideTLB
@@ -145,16 +142,12 @@ func (tlb *SMSideTLB) Tick(now akita.VTimeInSec) bool {
 		}
 
 		madeProgress = tlb.pipeline.Tick(now) || madeProgress
-		madeProgress = tlb.nocPipeline.Tick(now) || madeProgress
 
 		// pipeline or queue cycling done here
 
 		for i := 0; i < tlb.numReqPerCycle; i++ {
-			madeProgress = tlb.parseFromTop(now) || madeProgress
-		}
-
-		for i := 0; i < tlb.numReqPerCycle; i++ {
-			madeProgress = tlb.parseFromNoc(now) || madeProgress
+			madeProgress = tlb.parseFromLocalTop(now) || madeProgress
+			madeProgress = tlb.parseFromRemoteTop(now) || madeProgress
 		}
 	}
 	return madeProgress
@@ -180,16 +173,19 @@ func (tlb *SMSideTLB) respondMSHREntry(now akita.VTimeInSec) bool {
 	} else {
 		accessResult = device.TLBMshrHit
 	}
+
+	TopPort := req.Dst
+
 	rspToTop := device.TranslationRspBuilder{}.
 		WithSendTime(now).
-		WithSrc(tlb.TopPort).
+		WithSrc(TopPort).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		WithPage(page).
 		WithAccessResult(accessResult).
 		WithSrcL2TLB(tlb.Name()).
 		Build()
-	err := tlb.TopPort.Send(rspToTop)
+	err := TopPort.Send(rspToTop)
 	if err != nil {
 		return false
 	}
@@ -223,8 +219,8 @@ func (tlb *SMSideTLB) collectMSHROccupancy(now akita.VTimeInSec) {
 	}
 }
 
-func (tlb *SMSideTLB) parseFromTop(now akita.VTimeInSec) bool {
-	msg := tlb.TopPort.Peek()
+func (tlb *SMSideTLB) parseFromLocalTop(now akita.VTimeInSec) bool {
+	msg := tlb.LocalTopPort.Peek()
 	collectCoalescingStat(tlb, now)
 	tlb.collectMSHROccupancy(now)
 	if msg == nil {
@@ -233,18 +229,8 @@ func (tlb *SMSideTLB) parseFromTop(now akita.VTimeInSec) bool {
 
 	req := msg.(*device.TranslationReq)
 
-	pipeline := tlb.nocPipeline
-
-	if strings.Contains(req.Src.Name(), "L1VTLB") {
-		partitionID := req.TLBID / 8
-
-		if partitionID == tlb.ID {
-			pipeline = tlb.pipeline
-		}
-	}
-
 	// push to waiting queue
-	if pipeline.CanAccept() {
+	if tlb.pipeline.CanAccept() {
 		/*tlb.stats.sendStateInfo && */
 		if now-req.SendTime > 1e-9 {
 
@@ -267,8 +253,52 @@ func (tlb *SMSideTLB) parseFromTop(now akita.VTimeInSec) bool {
 			taskID:         akita.GetIDGenerator().Generate(),
 			translationReq: req,
 		}
-		pipeline.Accept(now, pipelineItem)
-		tlb.TopPort.Retrieve(now)
+		tlb.pipeline.Accept(now, pipelineItem)
+		tlb.LocalTopPort.Retrieve(now)
+		tracing.TraceReqReceive(req, now, tlb)
+		tracing.StopTracingNetworkReq(req, now, tlb)
+		tracing.StartTask(strconv.FormatUint(req.VAddr, 10), "", now, tlb, "entropy", "", nil)
+		return true
+	}
+	return false
+}
+
+func (tlb *SMSideTLB) parseFromRemoteTop(now akita.VTimeInSec) bool {
+	msg := tlb.RemoteTopPort.Peek()
+	collectCoalescingStat(tlb, now)
+	tlb.collectMSHROccupancy(now)
+	if msg == nil {
+		return false
+	}
+
+	req := msg.(*device.TranslationReq)
+
+	// push to waiting queue
+	if tlb.pipeline.CanAccept() {
+		/*tlb.stats.sendStateInfo && */
+		if now-req.SendTime > 1e-9 {
+
+			tlb.stats.numStalledInCurEpoch++
+
+			tracing.AddTaskStep(
+				tracing.MsgIDAtReceiver(req, tlb),
+				now, tlb,
+				"stalled-l2-tlb-req-count",
+			)
+		}
+
+		tracing.AddTaskStep(
+			tracing.MsgIDAtReceiver(req, tlb),
+			now, tlb,
+			"l2-tlb-req-count",
+		)
+
+		pipelineItem := tlbPipelineItem{
+			taskID:         akita.GetIDGenerator().Generate(),
+			translationReq: req,
+		}
+		tlb.pipeline.Accept(now, pipelineItem)
+		tlb.RemoteTopPort.Retrieve(now)
 		tracing.TraceReqReceive(req, now, tlb)
 		tracing.StopTracingNetworkReq(req, now, tlb)
 		tracing.StartTask(strconv.FormatUint(req.VAddr, 10), "", now, tlb, "entropy", "", nil)
@@ -299,24 +329,6 @@ func (tlb *SMSideTLB) updateReverseSwitchStats(vAddr uint64) {
 	tlb.stats.epochCountWhatIf += 1
 	tlb.stats.perEpochWhatIf[tlb.HashFuncHSL(vAddr)] += 1
 
-}
-
-func (tlb *SMSideTLB) parseFromNoc(now akita.VTimeInSec) bool {
-	item := tlb.nocLookupBuffer.Peek()
-
-	if item == nil {
-		return false
-	}
-
-	if tlb.pipeline.CanAccept() {
-		pipelineItem := item.(tlbPipelineItem)
-
-		tlb.pipeline.Accept(now, pipelineItem)
-		tlb.nocLookupBuffer.Pop()
-
-		return true
-	}
-	return false
 }
 
 func (tlb *SMSideTLB) lookup(now akita.VTimeInSec) bool {
@@ -443,19 +455,7 @@ func (tlb *SMSideTLB) handleTranslationMiss(
 
 		return false
 	} else {
-		req.Dst = tlb.ToRTU
-		req.PutInL2TLBBuffer = true
-		err := tlb.TopPort.Send(req)
-		if err != nil {
-			return false
-		}
-		tracing.AddTaskStep(
-			tracing.MsgIDAtReceiver(req, tlb),
-			now, tlb,
-			"tlb-redirect",
-		)
-		tlb.lookupBuffer.Pop()
-		return true
+		panic("DO NOT SUPPORT")
 	}
 }
 
@@ -492,9 +492,11 @@ func (tlb *SMSideTLB) sendRspToTop(
 	req *device.TranslationReq,
 	page device.Page,
 ) bool {
+	TopPort := req.Dst
+
 	rsp := device.TranslationRspBuilder{}.
 		WithSendTime(now).
-		WithSrc(tlb.TopPort).
+		WithSrc(TopPort).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		WithPage(page).
@@ -502,7 +504,7 @@ func (tlb *SMSideTLB) sendRspToTop(
 		WithSrcL2TLB(tlb.Name()).
 		Build()
 
-	err := tlb.TopPort.Send(rsp)
+	err := TopPort.Send(rsp)
 	if err == nil {
 		tracing.StartTracingNetworkReq(rsp, now, tlb, req)
 		return true
@@ -674,8 +676,12 @@ func (tlb *SMSideTLB) handleTLBRestart(now akita.VTimeInSec, req *TLBRestartReq)
 
 	tlb.isPaused = false
 
-	for tlb.TopPort.Retrieve(now) != nil {
-		tlb.TopPort.Retrieve(now)
+	for tlb.LocalTopPort.Retrieve(now) != nil {
+		tlb.LocalTopPort.Retrieve(now)
+	}
+
+	for tlb.RemoteTopPort.Retrieve(now) != nil {
+		tlb.RemoteTopPort.Retrieve(now)
 	}
 
 	for tlb.BottomPort.Retrieve(now) != nil {
@@ -799,9 +805,4 @@ func (tlb *SMSideTLB) doStatsCollection(now akita.VTimeInSec) bool {
 // SetTLBFinder sets the TLBFinder of the SMSideTLB
 func (tlb *SMSideTLB) SetTLBFinder(tlbFinder cache.LowModuleFinder) {
 	tlb.TLBFinder = tlbFinder
-}
-
-// GetNocPipeline gets the noc pipeline in the SMSideTLB
-func (tlb *SMSideTLB) GetNocPipeline() pipelining.Pipeline {
-	return tlb.nocPipeline
 }

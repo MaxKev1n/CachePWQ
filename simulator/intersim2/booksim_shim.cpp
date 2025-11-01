@@ -11,7 +11,7 @@ booksim_net_t booksim_create(const char* cfg_path, int n_nodes) {
     auto wrap = new booksim_net_wrap;
     wrap->iface = InterconnectInterface::New(cfg_path);
 
-    wrap->iface->CreateInterconnect(385, 33);
+    wrap->iface->CreateInterconnect(400, 48);
     wrap->iface->Init();
 
     g_icnt_interface = wrap->iface; // for compatibility

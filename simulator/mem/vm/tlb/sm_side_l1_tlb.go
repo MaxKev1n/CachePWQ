@@ -1,11 +1,8 @@
 package tlb
 
 import (
-	// "fmt"
-	"fmt"
 	"log"
 	"reflect"
-	"strings"
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem/cache"
@@ -16,27 +13,18 @@ import (
 	"gitlab.com/akita/util/tracing"
 )
 
-type L1TLB interface {
-	tracing.NamedHookable
-
-	GetNumSets() int
-	GetNumWays() int
-	GetTopPort() akita.Port
-	GetBottomPort() akita.Port
-	SetLowModuleFinder(cache.LowModuleFinder)
-	GetLowModuleFinder() cache.LowModuleFinder
-}
-
-// A TLB is a cache that maintains some page information.
-type TLB struct {
+// A SMSideL1TLB is a cache that maintains some page information.
+type SMSideL1TLB struct {
 	*akita.TickingComponent
 
 	TopPort     akita.Port
 	BottomPort  akita.Port
+	RemotePort  akita.Port
+	LocalPort   akita.Port
 	ControlPort akita.Port
 
 	LowModule       akita.Port
-	LowModuleFinder cache.LowModuleFinder
+	LowModuleFinder *cache.PartitionedXORLowModuleFinder
 
 	numSets        int
 	numWays        int
@@ -54,37 +42,42 @@ type TLB struct {
 
 	isPaused bool
 
-	GlobalIndex int
+	GlobalIndex   int
+	PartitionIdex uint64
 }
 
 // GetNumSets gets the number of sets in the TLB
-func (tlb *TLB) GetNumSets() int {
+func (tlb *SMSideL1TLB) GetNumSets() int {
 	return tlb.numSets
 }
 
 // GetNumWays gets the number of ways in the TLB
-func (tlb *TLB) GetNumWays() int {
+func (tlb *SMSideL1TLB) GetNumWays() int {
 	return tlb.numWays
 }
 
-func (tlb *TLB) SetLowModuleFinder(lmf cache.LowModuleFinder) {
+func (tlb *SMSideL1TLB) SetLowModuleFinder(lmf cache.LowModuleFinder) {
+	panic("SMSideL1TLB only supports PartitionedXORLowModuleFinder")
+}
+
+func (tlb *SMSideL1TLB) SetPartitionedXORLowModuleFinder(lmf *cache.PartitionedXORLowModuleFinder) {
 	tlb.LowModuleFinder = lmf
 }
 
-func (tlb *TLB) GetLowModuleFinder() cache.LowModuleFinder {
+func (tlb *SMSideL1TLB) GetLowModuleFinder() cache.LowModuleFinder {
 	return tlb.LowModuleFinder
 }
 
-func (tlb *TLB) GetTopPort() akita.Port {
+func (tlb *SMSideL1TLB) GetTopPort() akita.Port {
 	return tlb.TopPort
 }
 
-func (tlb *TLB) GetBottomPort() akita.Port {
-	return tlb.BottomPort
+func (tlb *SMSideL1TLB) GetBottomPort() akita.Port {
+	panic("SMSideL1TLB does not have BottomPort")
 }
 
-// Reset sets all the entries int he TLB to be invalid
-func (tlb *TLB) reset() {
+// Reset sets all the entries int he SMSideL1TLB to be invalid
+func (tlb *SMSideL1TLB) reset() {
 	tlb.Sets = make([]internal.Set, tlb.numSets)
 	for i := 0; i < tlb.numSets; i++ {
 		set := internal.NewSet(tlb.numWays)
@@ -92,8 +85,8 @@ func (tlb *TLB) reset() {
 	}
 }
 
-// Tick defines how TLB update states at each cycle
-func (tlb *TLB) Tick(now akita.VTimeInSec) bool {
+// Tick defines how SMSideL1TLB update states at each cycle
+func (tlb *SMSideL1TLB) Tick(now akita.VTimeInSec) bool {
 	madeProgress := false
 
 	madeProgress = tlb.performCtrlReq(now) || madeProgress
@@ -109,6 +102,13 @@ func (tlb *TLB) Tick(now akita.VTimeInSec) bool {
 
 		for i := 0; i < tlb.numReqPerCycle; i++ {
 			madeProgress = tlb.parseBottom(now) || madeProgress
+
+			// Round-robin between local and remote port
+			if tlb.BottomPort == tlb.LocalPort {
+				tlb.BottomPort = tlb.RemotePort
+			} else {
+				tlb.BottomPort = tlb.LocalPort
+			}
 		}
 
 		madeProgress = tlb.pipeline.Tick(now) || madeProgress
@@ -123,7 +123,7 @@ func (tlb *TLB) Tick(now akita.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (tlb *TLB) respondMSHREntry(now akita.VTimeInSec) bool {
+func (tlb *SMSideL1TLB) respondMSHREntry(now akita.VTimeInSec) bool {
 	if tlb.respondingMSHREntry == nil {
 		return false
 	}
@@ -160,7 +160,7 @@ func (tlb *TLB) respondMSHREntry(now akita.VTimeInSec) bool {
 	return true
 }
 
-func (tlb *TLB) lookup(now akita.VTimeInSec) bool {
+func (tlb *SMSideL1TLB) lookup(now akita.VTimeInSec) bool {
 	item := tlb.lookupBuffer.Peek()
 	if item == nil {
 		return false
@@ -193,7 +193,7 @@ func (tlb *TLB) lookup(now akita.VTimeInSec) bool {
 	return tlb.handleTranslationMiss(now, req)
 }
 
-func (tlb *TLB) handleTranslationHit(
+func (tlb *SMSideL1TLB) handleTranslationHit(
 	now akita.VTimeInSec,
 	req *device.TranslationReq,
 	setID, wayID int,
@@ -225,7 +225,7 @@ func (tlb *TLB) handleTranslationHit(
 	return true
 }
 
-func (tlb *TLB) handleTranslationMiss(
+func (tlb *SMSideL1TLB) handleTranslationMiss(
 	now akita.VTimeInSec,
 	req *device.TranslationReq,
 ) bool {
@@ -246,11 +246,11 @@ func (tlb *TLB) handleTranslationMiss(
 	return false
 }
 
-func (tlb *TLB) vAddrToSetID(vAddr uint64) (setID int) {
+func (tlb *SMSideL1TLB) vAddrToSetID(vAddr uint64) (setID int) {
 	return int(vAddr / tlb.pageSize % uint64(tlb.numSets))
 }
 
-func (tlb *TLB) sendRspToTop(
+func (tlb *SMSideL1TLB) sendRspToTop(
 	now akita.VTimeInSec,
 	req *device.TranslationReq,
 	page device.Page,
@@ -272,7 +272,7 @@ func (tlb *TLB) sendRspToTop(
 	return false
 }
 
-func (tlb *TLB) processTLBMSHRHit(
+func (tlb *SMSideL1TLB) processTLBMSHRHit(
 	now akita.VTimeInSec,
 	mshrEntry *mshrEntry,
 	req *device.TranslationReq,
@@ -291,20 +291,24 @@ func (tlb *TLB) processTLBMSHRHit(
 	) */
 }
 
-func (tlb *TLB) fetchBottom(now akita.VTimeInSec, req *device.TranslationReq) bool {
-	dstPort := tlb.LowModuleFinder.Find(req.VAddr)
+func (tlb *SMSideL1TLB) fetchBottom(now akita.VTimeInSec, req *device.TranslationReq) bool {
+	dstPort, local := tlb.LowModuleFinder.FindID(tlb.PartitionIdex, req.VAddr)
+
+	bottomPort := tlb.RemotePort
+	if local {
+		bottomPort = tlb.LocalPort
+	}
 
 	fetchBottom := device.TranslationReqBuilder{}.
 		WithSendTime(now).
-		WithSrc(tlb.BottomPort).
-		// WithDst(tlb.LowModule).
+		WithSrc(bottomPort).
 		WithDst(dstPort).
 		WithPID(req.PID).
 		WithVAddr(req.VAddr).
 		WithDeviceID(req.DeviceID).
 		WithTLBID(tlb.GlobalIndex).
 		Build()
-	err := tlb.BottomPort.Send(fetchBottom)
+	err := bottomPort.Send(fetchBottom)
 	if err != nil {
 		return false
 	}
@@ -330,7 +334,7 @@ func (tlb *TLB) fetchBottom(now akita.VTimeInSec, req *device.TranslationReq) bo
 	return true
 }
 
-func (tlb *TLB) getRemoteVLocal(rspSrc string) (str string) {
+func (tlb *SMSideL1TLB) getRemoteVLocal(rspSrc string) (str string) {
 	if getChipletNum(tlb.Name()) != getChipletNum(rspSrc) {
 		str = "remote"
 	} else {
@@ -339,25 +343,7 @@ func (tlb *TLB) getRemoteVLocal(rspSrc string) (str string) {
 	return
 }
 
-func getChipletNum(srcL2TLB string) (i string) {
-	i = "chiplet-" + strings.Split(srcL2TLB, "_")[1][1:2]
-	return
-}
-
-func getTaskStep(origin string, accessResult device.AccessResult) (step string) {
-	step = origin + "-"
-	switch accessResult {
-	case device.TLBHit:
-		step += "TLBHit"
-	case device.TLBMiss:
-		step += "TLBMiss"
-	case device.TLBMshrHit:
-		step += "TLBMshrHit"
-	}
-	return
-}
-
-func (tlb *TLB) parseFromTop(now akita.VTimeInSec) bool {
+func (tlb *SMSideL1TLB) parseFromTop(now akita.VTimeInSec) bool {
 	msg := tlb.TopPort.Peek()
 	if msg == nil {
 		return false
@@ -380,7 +366,7 @@ func (tlb *TLB) parseFromTop(now akita.VTimeInSec) bool {
 	return false
 }
 
-func (tlb *TLB) parseBottom(now akita.VTimeInSec) bool {
+func (tlb *SMSideL1TLB) parseBottom(now akita.VTimeInSec) bool {
 	if tlb.respondingMSHREntry != nil {
 		return false
 	}
@@ -443,7 +429,7 @@ func (tlb *TLB) parseBottom(now akita.VTimeInSec) bool {
 	return true
 }
 
-func (tlb *TLB) performCtrlReq(now akita.VTimeInSec) bool {
+func (tlb *SMSideL1TLB) performCtrlReq(now akita.VTimeInSec) bool {
 	item := tlb.ControlPort.Peek()
 	if item == nil {
 		return false
@@ -465,13 +451,13 @@ func (tlb *TLB) performCtrlReq(now akita.VTimeInSec) bool {
 	return true
 }
 
-func (tlb *TLB) visit(setID, wayID int) int {
+func (tlb *SMSideL1TLB) visit(setID, wayID int) int {
 	set := tlb.Sets[setID]
 	mruPosition := set.Visit(wayID)
 	return mruPosition
 }
 
-func (tlb *TLB) handleTLBFlush(now akita.VTimeInSec, req *TLBFlushReq) bool {
+func (tlb *SMSideL1TLB) handleTLBFlush(now akita.VTimeInSec, req *TLBFlushReq) bool {
 	rsp := TLBFlushRspBuilder{}.
 		WithSrc(tlb.ControlPort).
 		WithDst(req.Src).
@@ -500,7 +486,7 @@ func (tlb *TLB) handleTLBFlush(now akita.VTimeInSec, req *TLBFlushReq) bool {
 	return true
 }
 
-func (tlb *TLB) handleTLBRestart(now akita.VTimeInSec, req *TLBRestartReq) bool {
+func (tlb *SMSideL1TLB) handleTLBRestart(now akita.VTimeInSec, req *TLBRestartReq) bool {
 	rsp := TLBRestartRspBuilder{}.
 		WithSendTime(now).
 		WithSrc(tlb.ControlPort).
@@ -518,40 +504,18 @@ func (tlb *TLB) handleTLBRestart(now akita.VTimeInSec, req *TLBRestartReq) bool 
 		tlb.TopPort.Retrieve(now)
 	}
 
-	for tlb.BottomPort.Retrieve(now) != nil {
-		tlb.BottomPort.Retrieve(now)
+	for tlb.LocalPort.Retrieve(now) != nil {
+		tlb.LocalPort.Retrieve(now)
+	}
+
+	for tlb.RemotePort.Retrieve(now) != nil {
+		tlb.RemotePort.Retrieve(now)
 	}
 
 	return true
 }
 
-func (tlb *TLB) switchIndexing(now akita.VTimeInSec,
+func (tlb *SMSideL1TLB) switchIndexing(now akita.VTimeInSec,
 	req *akita.TLBIndexingSwitchMsg) bool {
-	lmf := tlb.LowModuleFinder.(*cache.CustomTwoLevelLowModuleFinder)
-
-	HashFunc4KXOR := func(address uint64) uint64 {
-		NumBitsPerTerm := 2
-		NumTerms := 4
-		index := uint64(0)
-		mask := (uint64(1) << NumBitsPerTerm) - 1
-		for i := 0; i < NumTerms; i++ {
-			index = index ^ (address & mask)
-			address = address >> NumBitsPerTerm
-		}
-		return index
-	}
-
-	// some parameters hardcoded
-	HashFuncHSL := func(address uint64) uint64 {
-		return (address / uint64(req.TLBInterleaving)) % 4
-	}
-
-	if req.TLBIndexingSwitch == akita.TLBIndexingSwitch4K {
-		lmf.Hashfunc = HashFunc4KXOR
-	} else {
-		lmf.Hashfunc = HashFuncHSL
-	}
-
-	fmt.Println(tlb.Name(), "L1 TLB ", tlb.Name(), "switching to ", req.TLBIndexingSwitch, " sir", now, req.TLBInterleaving)
-	return true
+	panic("not implemented")
 }

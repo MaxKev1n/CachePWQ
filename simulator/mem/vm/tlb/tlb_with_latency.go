@@ -35,7 +35,6 @@ type L2TLB interface {
 	GetControlPort() akita.Port
 	SetLowModuleFinder(cache.LowModuleFinder)
 	GetPipeline() pipelining.Pipeline
-	GetNocPipeline() pipelining.Pipeline
 	GetFrontQueueLength() int
 
 	SetCommandProcessor(akita.Port)
@@ -869,9 +868,4 @@ func (tlb *LatTLB) doStatsCollection(now akita.VTimeInSec) bool {
 // SetTLBFinder sets the TLBFinder of the LatTLB
 func (tlb *LatTLB) SetTLBFinder(lmf cache.LowModuleFinder) {
 	tlb.TLBFinder = lmf
-}
-
-// GetNocPipeline gets the noc pipeline in the LatTLB
-func (tlb *LatTLB) GetNocPipeline() pipelining.Pipeline {
-	return nil
 }

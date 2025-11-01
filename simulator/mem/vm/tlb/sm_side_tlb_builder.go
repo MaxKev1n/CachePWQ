@@ -146,12 +146,17 @@ func (b SMSideTLBBuilder) Build(name string) L2TLB {
 	if b.useCoalescingTLBPort {
 		// tlb.TopPort = NewCoalescingPort(tlb, 16*b.numReqPerCycle,
 		// 	name+".TopPort")
-		tlb.TopPort = NewCoalescingPort(tlb, 512,
-			name+".TopPort")
+		tlb.LocalTopPort = NewCoalescingPort(tlb, 32,
+			name+".LocalTopPort")
+		tlb.RemoteTopPort = NewCoalescingPort(tlb, 480,
+			name+".RemoteTopPort")
 	} else {
 		// tlb.TopPort = akita.NewLimitNumMsgPort(tlb, 16*b.numReqPerCycle,
 		// name+".TopPort")
-		tlb.TopPort = akita.NewLimitNumMsgPort(tlb, 32, name+".TopPort")
+		tlb.LocalTopPort = NewCoalescingPort(tlb, 2,
+			name+".LocalTopPort")
+		tlb.RemoteTopPort = NewCoalescingPort(tlb, 30,
+			name+".RemoteTopPort")
 	}
 	tlb.BottomPort = akita.NewLimitNumMsgPort(tlb, b.numReqPerCycle,
 		name+".BottomPort")
@@ -161,10 +166,6 @@ func (b SMSideTLBBuilder) Build(name string) L2TLB {
 	tlb.lookupBuffer = util.NewBuffer(2 * tlb.numReqPerCycle)
 	pipelineBuilder := pipelining.MakeBuilder().WithPipelineWidth(tlb.numReqPerCycle).WithNumStage(tlb.accessLatency).WithCyclePerStage(1).WithPostPipelineBuffer(tlb.lookupBuffer)
 	tlb.pipeline = pipelineBuilder.Build(tlb.Name() + "_access_pipeline")
-
-	tlb.nocLookupBuffer = util.NewBuffer(2 * tlb.numReqPerCycle)
-	pipelineBuilder = pipelining.MakeBuilder().WithPipelineWidth(tlb.numReqPerCycle).WithNumStage(tlb.nocLatency).WithCyclePerStage(1).WithPostPipelineBuffer(tlb.nocLookupBuffer)
-	tlb.nocPipeline = pipelineBuilder.Build(tlb.Name() + "_noc_pipeline")
 
 	tlb.reset()
 

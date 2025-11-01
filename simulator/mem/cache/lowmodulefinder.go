@@ -110,14 +110,19 @@ func NewXORLowModuleFinder(numModules int, numTerms int, numBitsPerTerm int,
 }
 
 type PartitionedXORLowModuleFinder struct {
-	numElemBits    int
-	NumTerms       int
-	NumBitsPerTerm int
-	OffsetBits     int
-	LowModules     []akita.Port
+	numElemBits      int
+	NumTerms         int
+	NumBitsPerTerm   int
+	OffsetBits       int
+	LocalLowModules  []akita.Port
+	RemoteLowModules []akita.Port
 }
 
 func (f *PartitionedXORLowModuleFinder) Find(address uint64) akita.Port {
+	panic("Use FindID instead")
+}
+
+func (f *PartitionedXORLowModuleFinder) FindID(id uint64, address uint64) (akita.Port, bool) {
 	index := uint64(0)
 	address = address >> f.OffsetBits
 	mask := (uint64(1) << f.NumBitsPerTerm) - 1
@@ -126,7 +131,12 @@ func (f *PartitionedXORLowModuleFinder) Find(address uint64) akita.Port {
 		address = address >> f.NumBitsPerTerm
 	}
 	index = index >> f.numElemBits
-	return f.LowModules[index]
+
+	if index == id {
+		return f.LocalLowModules[id], true
+	} else {
+		return f.RemoteLowModules[id], false
+	}
 }
 
 func NewPartitionedXORLowModuleFinder(

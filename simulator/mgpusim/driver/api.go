@@ -154,7 +154,7 @@ func (d *Driver) AllocateMemoryLASP(
 	return GPUPtr(ptr)
 }
 
-//AllocateUnifiedMemory allocates a unified memory. Allocation is done on CPU
+// AllocateUnifiedMemory allocates a unified memory. Allocation is done on CPU
 func (d *Driver) AllocateUnifiedMemory(
 	ctx *Context,
 	byteSize uint64,
@@ -328,7 +328,7 @@ func (d *Driver) SetHSL(pmdUnits int) {
 	// Yes. I am indeed hardcoding all these here.
 	// Setting on one TLB per chiplet suffices because they all share the same
 	for i := 0; i < 4; i++ {
-		d.GPUs[0].L1VTLBs[32*i].LowModuleFinder.(*cache.CustomTwoLevelLowModuleFinder).Hashfunc = twolvl
+		d.GPUs[0].L1VTLBs[32*i].GetLowModuleFinder().(*cache.CustomTwoLevelLowModuleFinder).Hashfunc = twolvl
 	}
 
 	// d.GPUs[0].L1VTLBs[32*i].LowModuleFinder.(*cache.CustomTwoLevelLowModuleFinder).PrivateMode = true

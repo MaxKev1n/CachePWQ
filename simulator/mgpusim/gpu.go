@@ -33,9 +33,9 @@ type GPU struct {
 	L2Caches           []*writeback.Cache
 	L2CacheFinder      cache.LowModuleFinder
 	L2TLBs             []tlb.L2TLB
-	L1VTLBs            []*tlb.TLB
-	L1STLBs            []*tlb.TLB
-	L1ITLBs            []*tlb.TLB
+	L1VTLBs            []tlb.L1TLB
+	L1STLBs            []tlb.L1TLB
+	L1ITLBs            []tlb.L1TLB
 	L1VROBs            []*rob.ReorderBuffer
 	L1IROBs            []*rob.ReorderBuffer
 	L1SROBs            []*rob.ReorderBuffer
