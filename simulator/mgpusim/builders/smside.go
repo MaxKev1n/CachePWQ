@@ -131,10 +131,9 @@ func (b *SMSideGPUBuilder) buildL2TLB(chiplet *Chiplet) {
 			WithNumWays(numWays).
 			WithNumSets(b.numL2TLBSets / b.numL2TLBSlices).
 			WithNumMSHREntry(numMSHREntry / b.numL2TLBSlices).
-			WithNumReqPerCycle(1).
+			WithNumReqPerCycle(2).
 			WithLog2PageSize(b.log2PageSize).
 			WithLowModule(b.MMUs[i].ToTopPort()).
-			WithNoCLatency(40).
 			WithAccessLatency(40)
 
 		if b.useCoalescingTLBPort {
@@ -289,7 +288,10 @@ func (b *SMSideGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 			xorLowModuleFinder.RemoteLowModules,
 			chiplet.L2TLBs[i].(*tlb.SMSideTLB).RemoteTopPort,
 		)
-		chiplet.BookSimNoC.PlugInMemSide(chiplet.L2TLBs[i].GetTopPort(), 64)
+		chiplet.BookSimNoC.PlugInMemSide(
+			chiplet.L2TLBs[i].(*tlb.SMSideTLB).RemoteTopPort,
+			64,
+		)
 
 		connections[i] = akita.NewDirectConnection(
 			fmt.Sprintf("%s.L1TLB-L2TLBConn[%d]", chiplet.name, i),

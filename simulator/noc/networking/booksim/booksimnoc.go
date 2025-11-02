@@ -17,6 +17,7 @@ import (
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
+	"gitlab.com/akita/mem/device"
 )
 
 // BookSimNoC is an Akita component that:
@@ -298,6 +299,8 @@ func (wrapper *NetworkWrapper) Send(
 	var msgType int
 
 	switch msg.(type) {
+	case *device.TranslationRsp:
+		msgType = 1
 	case *mem.DataReadyRsp:
 		msgType = 1
 	case *mem.WriteReq:

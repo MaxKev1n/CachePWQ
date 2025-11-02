@@ -18,7 +18,6 @@ type SMSideTLBBuilder struct {
 	pageSize             uint64
 	log2PageSize         uint64
 	lowModule            akita.Port
-	nocLatency           int
 	accessLatency        int
 	numMSHREntry         int
 	mask                 uint64
@@ -35,7 +34,6 @@ func MakeSMSideTLBBuilder() SMSideTLBBuilder {
 		pageSize:       4096,
 		numMSHREntry:   4,
 		accessLatency:  40,
-		nocLatency:     40,
 		mask:           uint64(127) << 12,
 	}
 }
@@ -98,12 +96,6 @@ func (b SMSideTLBBuilder) WithAccessLatency(latency int) SMSideTLBBuilder {
 	return b
 }
 
-// WithNoCLatency sets the noc latency
-func (b SMSideTLBBuilder) WithNoCLatency(latency int) SMSideTLBBuilder {
-	b.nocLatency = latency
-	return b
-}
-
 // WithIndexingMask sets the bits to use for indexing
 func (b SMSideTLBBuilder) WithIndexingMask(mask uint64) SMSideTLBBuilder {
 	b.mask = mask
@@ -136,7 +128,6 @@ func (b SMSideTLBBuilder) Build(name string) L2TLB {
 	tlb.numReqPerCycle = b.numReqPerCycle
 	tlb.pageSize = b.pageSize
 	tlb.accessLatency = b.accessLatency
-	tlb.nocLatency = b.nocLatency
 	tlb.LowModule = b.lowModule
 	tlb.indexingMask = b.mask
 	if b.log2PageSize == 0 {
@@ -144,18 +135,13 @@ func (b SMSideTLBBuilder) Build(name string) L2TLB {
 	}
 	tlb.log2PageSize = b.log2PageSize
 	if b.useCoalescingTLBPort {
-		// tlb.TopPort = NewCoalescingPort(tlb, 16*b.numReqPerCycle,
-		// 	name+".TopPort")
-		tlb.LocalTopPort = NewCoalescingPort(tlb, 32,
-			name+".LocalTopPort")
-		tlb.RemoteTopPort = NewCoalescingPort(tlb, 480,
-			name+".RemoteTopPort")
+		panic("Do not support coalescing tlb port in sm side tlb")
 	} else {
 		// tlb.TopPort = akita.NewLimitNumMsgPort(tlb, 16*b.numReqPerCycle,
 		// name+".TopPort")
-		tlb.LocalTopPort = NewCoalescingPort(tlb, 2,
+		tlb.LocalTopPort = akita.NewLimitNumMsgPort(tlb, 32,
 			name+".LocalTopPort")
-		tlb.RemoteTopPort = NewCoalescingPort(tlb, 30,
+		tlb.RemoteTopPort = akita.NewLimitNumMsgPort(tlb, 480,
 			name+".RemoteTopPort")
 	}
 	tlb.BottomPort = akita.NewLimitNumMsgPort(tlb, b.numReqPerCycle,

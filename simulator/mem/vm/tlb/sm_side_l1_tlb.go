@@ -18,7 +18,6 @@ type SMSideL1TLB struct {
 	*akita.TickingComponent
 
 	TopPort     akita.Port
-	BottomPort  akita.Port
 	RemotePort  akita.Port
 	LocalPort   akita.Port
 	ControlPort akita.Port
@@ -44,6 +43,8 @@ type SMSideL1TLB struct {
 
 	GlobalIndex   int
 	PartitionIdex uint64
+
+	RRPtr bool
 }
 
 // GetNumSets gets the number of sets in the TLB
@@ -102,13 +103,6 @@ func (tlb *SMSideL1TLB) Tick(now akita.VTimeInSec) bool {
 
 		for i := 0; i < tlb.numReqPerCycle; i++ {
 			madeProgress = tlb.parseBottom(now) || madeProgress
-
-			// Round-robin between local and remote port
-			if tlb.BottomPort == tlb.LocalPort {
-				tlb.BottomPort = tlb.RemotePort
-			} else {
-				tlb.BottomPort = tlb.LocalPort
-			}
 		}
 
 		madeProgress = tlb.pipeline.Tick(now) || madeProgress
@@ -371,7 +365,16 @@ func (tlb *SMSideL1TLB) parseBottom(now akita.VTimeInSec) bool {
 		return false
 	}
 
-	item := tlb.BottomPort.Peek()
+	var bottomPort akita.Port
+	if tlb.RRPtr {
+		bottomPort = tlb.RemotePort
+	} else {
+		bottomPort = tlb.LocalPort
+	}
+
+	tlb.RRPtr = !tlb.RRPtr
+
+	item := bottomPort.Peek()
 	if item == nil {
 		return false
 	}
@@ -383,7 +386,7 @@ func (tlb *SMSideL1TLB) parseBottom(now akita.VTimeInSec) bool {
 	mshrEntryPresent := tlb.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
 	if !mshrEntryPresent {
 		panic("oh no!")
-		tlb.BottomPort.Retrieve(now)
+		bottomPort.Retrieve(now)
 		tracing.TraceReqFinalize(rsp, now, tlb)
 		return true
 	}
@@ -402,7 +405,7 @@ func (tlb *SMSideL1TLB) parseBottom(now akita.VTimeInSec) bool {
 	mshrEntry.page = page
 
 	tlb.mshr.Remove(rsp.Page.PID, rsp.Page.VAddr)
-	tlb.BottomPort.Retrieve(now)
+	bottomPort.Retrieve(now)
 
 	tracing.StopTracingNetworkReq(rsp, now, tlb)
 	tracing.TraceReqFinalize(mshrEntry.reqToBottom, now, tlb)

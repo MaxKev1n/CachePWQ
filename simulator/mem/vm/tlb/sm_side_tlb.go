@@ -41,7 +41,6 @@ type SMSideTLB struct {
 	numWays        int
 	pageSize       uint64
 	numReqPerCycle int
-	nocLatency     int
 	accessLatency  int
 	indexingMask   uint64
 

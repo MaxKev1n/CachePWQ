@@ -133,9 +133,9 @@ func (f *PartitionedXORLowModuleFinder) FindID(id uint64, address uint64) (akita
 	index = index >> f.numElemBits
 
 	if index == id {
-		return f.LocalLowModules[id], true
+		return f.LocalLowModules[index], true
 	} else {
-		return f.RemoteLowModules[id], false
+		return f.RemoteLowModules[index], false
 	}
 }
 

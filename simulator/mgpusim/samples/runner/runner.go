@@ -1959,14 +1959,6 @@ func (r *Runner) addTLBHitRateTracer() {
 			tracing.CollectTrace(tlb, tracer)
 		}
 
-		for _, tlb := range gpu.L2TLBs {
-			tracer := tracing.NewStepCountTracer(
-				func(task tracing.Task) bool { return true })
-			r.TLBHitRateTracers = append(r.TLBHitRateTracers,
-				TLBHitRateTracer{tracer: tracer, tlb: tlb})
-			tracing.CollectTrace(tlb, tracer)
-		}
-
 	}
 }
 

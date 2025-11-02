@@ -113,8 +113,6 @@ func (b SMSideL1TLBBuilder) Build(name string) *SMSideL1TLB {
 		name+".ControlPort")
 	tlb.mshr = newMSHR(b.numMSHREntry)
 
-	tlb.BottomPort = tlb.LocalPort
-
 	tlb.lookupBuffer = util.NewBuffer(2 * tlb.numReqPerCycle)
 	pipelineBuilder := pipelining.MakeBuilder().WithPipelineWidth(tlb.numReqPerCycle).WithNumStage(tlb.latency).WithCyclePerStage(1).WithPostPipelineBuffer(tlb.lookupBuffer)
 	tlb.pipeline = pipelineBuilder.Build(tlb.Name() + "_pipeline")
