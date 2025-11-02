@@ -312,9 +312,9 @@ func (b *SMSideGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 		l1vTLB.(*tlb.SMSideL1TLB).SetPartitionedXORLowModuleFinder(xorLowModuleFinder)
 		chiplet.BookSimNoC.PlugInSMSide(l1vTLB.(*tlb.SMSideL1TLB).RemotePort, 16)
 
-		l1vTLB.(*tlb.SMSideL1TLB).PartitionIdex = uint64(i) / uint64(numL1VTLBPerPartition)
+		l1vTLB.(*tlb.SMSideL1TLB).PartitionIndex = uint64(i) / uint64(numL1VTLBPerPartition)
 
-		connections[l1vTLB.(*tlb.SMSideL1TLB).PartitionIdex].PlugIn(
+		connections[l1vTLB.(*tlb.SMSideL1TLB).PartitionIndex].PlugIn(
 			l1vTLB.(*tlb.SMSideL1TLB).LocalPort,
 			16,
 		)
@@ -324,9 +324,9 @@ func (b *SMSideGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 		l1iTLB.(*tlb.SMSideL1TLB).SetPartitionedXORLowModuleFinder(xorLowModuleFinder)
 		chiplet.BookSimNoC.PlugInSMSide(l1iTLB.(*tlb.SMSideL1TLB).RemotePort, 16)
 
-		l1iTLB.(*tlb.SMSideL1TLB).PartitionIdex = uint64(i) / uint64(numL1ITLBPerPartition)
+		l1iTLB.(*tlb.SMSideL1TLB).PartitionIndex = uint64(i) / uint64(numL1ITLBPerPartition)
 
-		connections[l1iTLB.(*tlb.SMSideL1TLB).PartitionIdex].PlugIn(
+		connections[l1iTLB.(*tlb.SMSideL1TLB).PartitionIndex].PlugIn(
 			l1iTLB.(*tlb.SMSideL1TLB).LocalPort,
 			16,
 		)
@@ -336,9 +336,9 @@ func (b *SMSideGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 		l1sTLB.(*tlb.SMSideL1TLB).SetPartitionedXORLowModuleFinder(xorLowModuleFinder)
 		chiplet.BookSimNoC.PlugInSMSide(l1sTLB.(*tlb.SMSideL1TLB).RemotePort, 16)
 
-		l1sTLB.(*tlb.SMSideL1TLB).PartitionIdex = uint64(i) / uint64(numL1STLBPerPartition)
+		l1sTLB.(*tlb.SMSideL1TLB).PartitionIndex = uint64(i) / uint64(numL1STLBPerPartition)
 
-		connections[l1sTLB.(*tlb.SMSideL1TLB).PartitionIdex].PlugIn(
+		connections[l1sTLB.(*tlb.SMSideL1TLB).PartitionIndex].PlugIn(
 			l1sTLB.(*tlb.SMSideL1TLB).LocalPort,
 			16,
 		)

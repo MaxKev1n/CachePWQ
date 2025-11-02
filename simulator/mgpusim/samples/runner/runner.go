@@ -285,6 +285,8 @@ type Runner struct {
 	CachePageLatencyTracers         []cacheLatencyTracer
 	TLBLatencyTracers               []TLBLatencyTracer
 	DownTLBLatencyTracers           []TLBLatencyTracer
+	LocalDownTLBLatencyTracers      []TLBLatencyTracer
+	RemoteDownTLBLatencyTracers     []TLBLatencyTracer
 	L2PipelineLatencyTracers        []L2PipelineLatencyTracer
 	TLBPipelineLatencyTracers       []TLBPipelineLatencyTracer
 	MMUMemoryLatencyTracers         []MMUMemoryLatencyTracer
@@ -1619,6 +1621,26 @@ func (r *Runner) addTLBLatencyTracer() {
 			tracing.CollectTrace(tlb, tracer)
 		}
 
+		for _, tlb := range allL1TLBs {
+			tracer := tracing.NewAverageTimeTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "local_req_out"
+				})
+			r.LocalDownTLBLatencyTracers = append(r.LocalDownTLBLatencyTracers,
+				TLBLatencyTracer{tracer: tracer, tlb: tlb})
+			tracing.CollectTrace(tlb, tracer)
+		}
+
+		for _, tlb := range allL1TLBs {
+			tracer := tracing.NewAverageTimeTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "remote_req_out"
+				})
+			r.RemoteDownTLBLatencyTracers = append(r.RemoteDownTLBLatencyTracers,
+				TLBLatencyTracer{tracer: tracer, tlb: tlb})
+			tracing.CollectTrace(tlb, tracer)
+		}
+
 		for _, tlb := range gpu.L2TLBs {
 			tracer := tracing.NewAverageTimeTracer(
 				func(task tracing.Task) bool {
@@ -2770,6 +2792,30 @@ func (r *Runner) reportTLBLatency() {
 		)
 	}
 
+	for _, tracer := range r.LocalDownTLBLatencyTracers {
+		if tracer.tracer.AverageTime() == 0 {
+			continue
+		}
+
+		r.metricsCollector.Collect(
+			tracer.tlb.Name(),
+			"down_local_req_average_latency",
+			float64(tracer.tracer.AverageTime()),
+		)
+	}
+
+	for _, tracer := range r.RemoteDownTLBLatencyTracers {
+		if tracer.tracer.AverageTime() == 0 {
+			continue
+		}
+
+		r.metricsCollector.Collect(
+			tracer.tlb.Name(),
+			"down_remote_req_average_latency",
+			float64(tracer.tracer.AverageTime()),
+		)
+	}
+
 	for i, tracer := range r.L2TLBBufLenTracers {
 		if tracer.AverageCount() == 0 {
 			continue
@@ -3407,13 +3453,47 @@ func (r *Runner) reportTLBReqStalls() {
 	for _, t := range r.TLBReqStallTracers {
 		tracer := t.tracer
 		tlb := t.tlb
-		for _, stepName := range tracer.GetStepNames() {
-			r.metricsCollector.Collect(
-				tlb.Name(),
-				stepName,
-				float64(tracer.GetStepCount(stepName)),
-			)
-		}
+
+		r.metricsCollector.Collect(
+			tlb.Name(),
+			"stalled-l2-tlb-req-count",
+			float64(tracer.GetStepCount("stalled-l2-tlb-req-count")),
+		)
+		r.metricsCollector.Collect(
+			tlb.Name(),
+			"l2-tlb-req-count",
+			float64(tracer.GetStepCount("l2-tlb-req-count")),
+		)
+		r.metricsCollector.Collect(
+			tlb.Name(),
+			"local-tlb-hit",
+			float64(tracer.GetStepCount("local-tlb-hit")),
+		)
+		r.metricsCollector.Collect(
+			tlb.Name(),
+			"local-tlb-miss",
+			float64(tracer.GetStepCount("local-tlb-miss")),
+		)
+		r.metricsCollector.Collect(
+			tlb.Name(),
+			"local-tlb-mshr-hit",
+			float64(tracer.GetStepCount("local-tlb-mshr-hit")),
+		)
+		r.metricsCollector.Collect(
+			tlb.Name(),
+			"remote-tlb-hit",
+			float64(tracer.GetStepCount("remote-tlb-hit")),
+		)
+		r.metricsCollector.Collect(
+			tlb.Name(),
+			"remote-tlb-miss",
+			float64(tracer.GetStepCount("remote-tlb-miss")),
+		)
+		r.metricsCollector.Collect(
+			tlb.Name(),
+			"remote-tlb-mshr-hit",
+			float64(tracer.GetStepCount("remote-tlb-mshr-hit")),
+		)
 	}
 }
 

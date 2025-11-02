@@ -41,8 +41,8 @@ type SMSideL1TLB struct {
 
 	isPaused bool
 
-	GlobalIndex   int
-	PartitionIdex uint64
+	GlobalIndex    int
+	PartitionIndex uint64
 
 	RRPtr bool
 }
@@ -286,7 +286,7 @@ func (tlb *SMSideL1TLB) processTLBMSHRHit(
 }
 
 func (tlb *SMSideL1TLB) fetchBottom(now akita.VTimeInSec, req *device.TranslationReq) bool {
-	dstPort, local := tlb.LowModuleFinder.FindID(tlb.PartitionIdex, req.VAddr)
+	dstPort, local := tlb.LowModuleFinder.FindID(tlb.PartitionIndex, req.VAddr)
 
 	bottomPort := tlb.RemotePort
 	if local {
@@ -301,6 +301,7 @@ func (tlb *SMSideL1TLB) fetchBottom(now akita.VTimeInSec, req *device.Translatio
 		WithVAddr(req.VAddr).
 		WithDeviceID(req.DeviceID).
 		WithTLBID(tlb.GlobalIndex).
+		WithPartitionID(int(tlb.PartitionIndex)).
 		Build()
 	err := bottomPort.Send(fetchBottom)
 	if err != nil {
@@ -324,6 +325,27 @@ func (tlb *SMSideL1TLB) fetchBottom(now akita.VTimeInSec, req *device.Translatio
 	// tracing.TraceReqReceive(req, now, tlb)
 	tracing.TraceReqInitiate(fetchBottom, now, tlb,
 		tracing.MsgIDAtReceiver(req, tlb))
+	if local {
+		tracing.StartTask(
+			fetchBottom.Meta().ID+"_req_out",
+			tracing.MsgIDAtReceiver(req, tlb),
+			now,
+			tlb,
+			"local_req_out",
+			reflect.TypeOf(fetchBottom).String(),
+			tlb,
+		)
+	} else {
+		tracing.StartTask(
+			fetchBottom.Meta().ID+"_req_out",
+			tracing.MsgIDAtReceiver(req, tlb),
+			now,
+			tlb,
+			"remote_req_out",
+			reflect.TypeOf(fetchBottom).String(),
+			tlb,
+		)
+	}
 
 	return true
 }
@@ -409,6 +431,24 @@ func (tlb *SMSideL1TLB) parseBottom(now akita.VTimeInSec) bool {
 
 	tracing.StopTracingNetworkReq(rsp, now, tlb)
 	tracing.TraceReqFinalize(mshrEntry.reqToBottom, now, tlb)
+
+	_, local := tlb.LowModuleFinder.FindID(
+		tlb.PartitionIndex, mshrEntry.reqToBottom.VAddr)
+
+	if local {
+		tracing.EndTask(
+			mshrEntry.reqToBottom.Meta().ID+"local_req_out",
+			now,
+			tlb,
+		)
+	} else {
+		tracing.EndTask(
+			mshrEntry.reqToBottom.Meta().ID+"remote_req_out",
+			now,
+			tlb,
+		)
+	}
+
 	//fmt.Println("here")
 	taskStepRemoteVLocal := getTaskStep(tlb.getRemoteVLocal(rsp.SrcL2TLB), rsp.HitOrMiss)
 	taskStepSrcL2TLB := getTaskStep(getChipletNum(rsp.SrcL2TLB), rsp.HitOrMiss)

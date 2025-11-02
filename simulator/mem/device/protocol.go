@@ -22,10 +22,11 @@ const (
 // A TranslationReq asks the receiver component to translate the request.
 type TranslationReq struct {
 	akita.MsgMeta
-	VAddr    uint64
-	PID      ca.PID
-	DeviceID uint64
-	TLBID    int
+	VAddr       uint64
+	PID         ca.PID
+	DeviceID    uint64
+	TLBID       int
+	PartitionID int
 }
 
 // Meta returns the meta data associated with the message.
@@ -35,12 +36,13 @@ func (r *TranslationReq) Meta() *akita.MsgMeta {
 
 // TranslationReqBuilder can build translation requests
 type TranslationReqBuilder struct {
-	sendTime akita.VTimeInSec
-	src, dst akita.Port
-	vAddr    uint64
-	pid      ca.PID
-	deviceID uint64
-	tlbID    int
+	sendTime    akita.VTimeInSec
+	src, dst    akita.Port
+	vAddr       uint64
+	pid         ca.PID
+	deviceID    uint64
+	tlbID       int
+	partitionID int
 }
 
 // WithSendTime sets the send time of the request to build.:w
@@ -87,6 +89,12 @@ func (b TranslationReqBuilder) WithTLBID(tlbID int) TranslationReqBuilder {
 	return b
 }
 
+// WithPartitionID sets the Partition ID of the request to build.
+func (b TranslationReqBuilder) WithPartitionID(partitionID int) TranslationReqBuilder {
+	b.partitionID = partitionID
+	return b
+}
+
 // Build creats a new TranslationReq
 func (b TranslationReqBuilder) Build() *TranslationReq {
 	r := &TranslationReq{}
@@ -99,6 +107,7 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 	r.PID = b.pid
 	r.DeviceID = b.deviceID
 	r.TLBID = b.tlbID
+	r.PartitionID = b.partitionID
 	return r
 }
 

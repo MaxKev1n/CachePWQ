@@ -346,10 +346,15 @@ func (tlb *SMSideTLB) lookup(now akita.VTimeInSec) bool {
 	if mshrEntry != nil {
 		ok := tlb.processTLBMSHRHit(now, mshrEntry, req)
 		if ok {
+			local := "remote"
+			if req.PartitionID == tlb.ID {
+				local = "local"
+			}
+
 			tracing.AddTaskStep(
 				tracing.MsgIDAtReceiver(req, tlb),
 				now, tlb,
-				"tlb-mshr-hit",
+				local+"-tlb-mshr-hit",
 			)
 			tlb.lookupBuffer.Pop()
 			// if tlb.stats.sendStateInfo {
@@ -397,11 +402,15 @@ func (tlb *SMSideTLB) handleTranslationHit(
 	tlb.stats.hitsInCurEpoch++
 	// }
 	// fmt.Println("hits:", tlb.stats.hitsInCurEpoch)
+	local := "remote"
+	if req.PartitionID == tlb.ID {
+		local = "local"
+	}
 
 	tracing.AddTaskStep(
 		tracing.MsgIDAtReceiver(req, tlb),
 		now, tlb,
-		"tlb-hit",
+		local+"-tlb-hit",
 	)
 	tracing.TraceReqComplete(req, now, tlb)
 
@@ -435,10 +444,15 @@ func (tlb *SMSideTLB) handleTranslationMiss(
 			tlb.stats.missesInCurEpoch++
 			// }
 			// tracing.TraceReqReceive(req, now, tlb)
+			local := "remote"
+			if req.PartitionID == tlb.ID {
+				local = "local"
+			}
+
 			tracing.AddTaskStep(
 				tracing.MsgIDAtReceiver(req, tlb),
 				now, tlb,
-				"tlb-miss",
+				local+"-tlb-miss",
 			)
 
 			// this is the missepoint
