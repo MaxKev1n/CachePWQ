@@ -19,6 +19,7 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/device"
+	"gitlab.com/akita/util/tracing"
 )
 
 // BookSimNoC is an Akita component that:
@@ -170,6 +171,13 @@ func (noc *BookSimNoC) Tick(now akita.VTimeInSec) bool {
 				break
 			}
 
+			tracing.TraceReqInitiate(
+				msg,
+				now,
+				noc,
+				tracing.MsgIDAtReceiver(msg, noc),
+			)
+
 			dstNode := noc.route(msg)
 			if dstNode < 0 {
 				panic("BookSimNoC: invalid routeFn result (<0)")
@@ -190,6 +198,13 @@ func (noc *BookSimNoC) Tick(now akita.VTimeInSec) bool {
 				panic("BookSimNoC: duplicate packet ID")
 			}
 			noc.inflightMsg[packetID] = msg
+
+			tracing.AddTaskStep(
+				tracing.MsgIDAtReceiver(msg, noc),
+				now,
+				noc,
+				fmt.Sprintf("%d:L1ToL2Noc:%d", srcNode, dstNode),
+			)
 
 			in.Retrieve(now)
 
@@ -219,6 +234,8 @@ func (noc *BookSimNoC) Tick(now akita.VTimeInSec) bool {
 			if err != nil {
 				break
 			}
+
+			tracing.TraceReqFinalize(msg, now, noc)
 
 			noc.wrapper.Pop(node)
 

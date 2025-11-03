@@ -134,6 +134,8 @@ var yamlConfigFile = flag.String("yaml-config-file", "",
 	"Specify the path to a yaml config file to override default config values.")
 var booksimConfigFile = flag.String("booksim-config-file", "",
 	"Specify the path to a booksim config file to configure the NoC.")
+var nocFileName = flag.String("noc-file-name", "",
+	"Specify the name of the output noc trace file.")
 
 type verificationPreEnablingBenchmark interface {
 	benchmarks.Benchmark
@@ -189,6 +191,16 @@ type TLBHitRateTracer struct {
 type CDMAAccessTracer struct {
 	tracer     *tracing.StepCountTracer
 	cdmaEngine akita.Component
+}
+
+type BookSimAccessTracer struct {
+	tracer *tracing.StepCountTracer
+	noc    tracing.NamedHookable
+}
+
+type BookSimLatencyTracer struct {
+	tracer *tracing.NocTracer
+	noc    tracing.NamedHookable
 }
 
 type PWCHitRateTracer struct {
@@ -308,6 +320,8 @@ type Runner struct {
 	RTUTransactionCounters          []rtuTransactionCountTracer
 	CDMAAccessTracers               []CDMAAccessTracer
 	PageAccessTracers               []CDMAAccessTracer
+	BookSimAccessTracers            []BookSimAccessTracer
+	BookSimLatencyTracers           []BookSimLatencyTracer
 	RTUAccessTracers                []RTUAccessTracer
 	DRAMTransactionCounters         []dramTransactionCountTracer
 	RemoteTLBLatencyTracers         []RemoteTLBLatencyTracer
@@ -350,6 +364,7 @@ type Runner struct {
 	ReportDRAMTransactionCount      bool
 	ReportRDMATransactionCount      bool
 	ReportCDMATransactionCount      bool
+	ReportBookSimNoc                bool
 	ReportRTUTransactionCount       bool
 	ReportActiveWalkerCount         bool
 	L2TLBSQLTracing                 bool
@@ -527,6 +542,7 @@ func (r *Runner) ParseFlag() *Runner {
 		r.ReportTLBSetMissTracing = true
 		r.ReportTLBMSHRStallTracing = true
 		r.ReportTLBReqStalls = true
+		r.ReportBookSimNoc = true
 	}
 
 	// who decides what is essential?
@@ -612,6 +628,7 @@ func (r *Runner) Init() *Runner {
 	r.addPWCHitRateTracer()
 	r.addRDMAEngineTracer()
 	r.addCDMAEngineTracer()
+	r.addBookSimTracer()
 	r.addRTUTracer()
 	r.addActiveWalkerTracer()
 	r.addL2TLBQueueingImbalanceTracer()
@@ -2032,6 +2049,42 @@ func (r *Runner) addRDMAEngineTracer() {
 	}
 }
 
+func (r *Runner) addBookSimTracer() {
+	if !r.ReportBookSimNoc {
+		return
+	}
+
+	for _, gpu := range r.GPUDriver.GPUs {
+		for _, noc := range gpu.NoCs {
+			t := BookSimAccessTracer{}
+			t.noc = noc
+
+			tracer := tracing.NewStepCountTracer(
+				func(task tracing.Task) bool { /*return true*/
+					return task.Kind == "req_in"
+				})
+			t.tracer = tracer
+			tracing.CollectTrace(t.noc, t.tracer)
+
+			r.BookSimAccessTracers = append(r.BookSimAccessTracers, t)
+		}
+
+		for _, noc := range gpu.NoCs {
+			t := BookSimLatencyTracer{}
+			t.noc = noc
+
+			tracer := tracing.NewNocTracer(
+				func(task tracing.Task) bool { /*return true*/
+					return task.Kind == "req_out"
+				})
+			t.tracer = tracer
+			tracing.CollectTrace(t.noc, t.tracer)
+
+			r.BookSimLatencyTracers = append(r.BookSimLatencyTracers, t)
+		}
+	}
+}
+
 func (r *Runner) addRTUTracer() {
 	if !r.ReportRTUTransactionCount {
 		return
@@ -2667,6 +2720,7 @@ func (r *Runner) reportStats() {
 	r.reportTLBSetMissTracing()
 	r.reportTLBMSHRStallTracing()
 	r.reportTLBReqStalls()
+	r.reportBookSimTracer()
 
 	if *platformType != "ideal" {
 		r.reportTranslationReqLatency()
@@ -3107,6 +3161,33 @@ func (r *Runner) reportRDMATransactionCount() {
 			t.rdmaEngine.Name(),
 			"incoming_trans_count",
 			float64(t.incomingTracer.TotalCount()),
+		)
+	}
+}
+
+func (r *Runner) reportBookSimTracer() {
+	for _, t := range r.BookSimAccessTracers {
+		noc := t.noc
+		booksimAccessTracer := t.tracer
+		for _, step := range booksimAccessTracer.GetStepNames() {
+			r.metricsCollector.Collect(
+				noc.Name(),
+				"BookSimNocTraffic: "+step,
+				float64(booksimAccessTracer.GetStepCount(step)),
+			)
+		}
+	}
+
+	for _, t := range r.BookSimLatencyTracers {
+		r.metricsCollector.Collect(
+			t.noc.Name(),
+			"trans_count",
+			float64(t.tracer.TotalCount()),
+		)
+		r.metricsCollector.Collect(
+			t.noc.Name(),
+			"trans_latency",
+			float64(t.tracer.AverageTime()),
 		)
 	}
 }

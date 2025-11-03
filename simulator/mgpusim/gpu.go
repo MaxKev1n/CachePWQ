@@ -5,6 +5,7 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/cache/writeback"
+	noc "gitlab.com/akita/noc/networking/booksim"
 
 	// "gitlab.com/akita/mem/dram"
 	"gitlab.com/akita/mem/idealmemcontroller"
@@ -47,6 +48,7 @@ type GPU struct {
 	Storage            *mem.Storage
 	InternalConnection akita.Connection
 	MMUs               []mmu.MMU
+	NoCs               []*noc.BookSimNoC
 
 	ChipRDMAEngines               []*rdma.Engine
 	PageRDMAEngines               []*rdma.Engine

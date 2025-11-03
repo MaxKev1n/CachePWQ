@@ -230,6 +230,22 @@ func (b *SMSideGPUBuilder) calculateTwoSideComponents(chiplet *Chiplet) {
 		chiplet.ChipletID, b.numSMsideComp, b.numMemsideComp)
 
 	chiplet.BookSimNoC.CreateNetwork(b.booksimConfig)
+
+	log.Printf("L1Cache from 0 to %v\n",
+		len(chiplet.L1VCaches)+len(chiplet.L1SCaches)+len(chiplet.L1IAddrTranslator)-1,
+	)
+	log.Printf("L1TLB from %v to %v\n",
+		len(chiplet.L1VCaches)+len(chiplet.L1SCaches)+len(chiplet.L1IAddrTranslator),
+		len(chiplet.L1VCaches)+len(chiplet.L1SCaches)+len(chiplet.L1IAddrTranslator)+
+			len(chiplet.L1VTLBs)+len(chiplet.L1ITLBs)+len(chiplet.L1STLBs)-1,
+	)
+	log.Printf("L2Cache from %v to %v\n",
+		b.numSMsideComp, b.numSMsideComp+len(chiplet.L2Caches)-1,
+	)
+	log.Printf("L2TLB from %v to %v\n",
+		b.numSMsideComp+len(chiplet.L2Caches),
+		b.numSMsideComp+len(chiplet.L2Caches)+len(chiplet.L2TLBs)-1,
+	)
 }
 
 func (b *SMSideGPUBuilder) createIntraChipletNoC(chiplet *Chiplet) {
@@ -237,6 +253,8 @@ func (b *SMSideGPUBuilder) createIntraChipletNoC(chiplet *Chiplet) {
 		fmt.Sprintf("L1ToL2NoC[%d]", chiplet.ChipletID),
 		b.engine,
 	)
+
+	b.gpu.NoCs = append(b.gpu.NoCs, chiplet.BookSimNoC)
 }
 
 func (b *SMSideGPUBuilder) connectL1ToL2NoC(chiplet *Chiplet) {

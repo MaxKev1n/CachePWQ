@@ -17,6 +17,59 @@ benchmarks = [
 ]
 
 
+def get_booksim_tlb_nodes(
+    config: str,
+) -> list:
+    if config == "monolithic":
+        nodes = []
+
+        for i in range(96, 192):
+            nodes.append(i)
+
+        nodes.append(209)
+
+        return nodes
+    elif config == "SMSide":
+        nodes = []
+
+        for i in range(96, 192):
+            nodes.append(i)
+
+        for i in range(224, 240):
+            nodes.append(i)
+
+        return nodes
+    else:
+        assert False, "Unsupported configuration"
+
+
+def get_booksim_mem_nodes(
+    config: str,
+) -> list:
+    if config == "monolithic":
+        nodes = []
+
+        for i in range(0, 96):
+            nodes.append(i)
+
+        for i in range(193, 209):
+            nodes.append(i)
+
+        return nodes
+    elif config == "SMSide":
+        nodes = []
+
+        for i in range(0, 96):
+            nodes.append(i)
+
+        for i in range(208, 224):
+            nodes.append(i)
+
+        return nodes
+    else:
+        assert False, "Unsupported configuration"
+
+
 def get_benchmarks() -> list:
     """
     Returns a list of benchmarks.
