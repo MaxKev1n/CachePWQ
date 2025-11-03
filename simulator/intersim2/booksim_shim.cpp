@@ -7,11 +7,11 @@ struct booksim_net_wrap {
     InterconnectInterface* iface;
 };
 
-booksim_net_t booksim_create(const char* cfg_path, int n_nodes) {
+booksim_net_t booksim_create(const char* cfg_path, int n_shaders, int n_mems) {
     auto wrap = new booksim_net_wrap;
     wrap->iface = InterconnectInterface::New(cfg_path);
 
-    wrap->iface->CreateInterconnect(400, 48);
+    wrap->iface->CreateInterconnect(n_shaders, n_mems);
     wrap->iface->Init();
 
     g_icnt_interface = wrap->iface; // for compatibility

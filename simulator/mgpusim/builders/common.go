@@ -117,6 +117,8 @@ type CommonBuilder struct {
 
 	numSMsideComp  int
 	numMemsideComp int
+
+	booksimConfig string
 }
 
 // MakeCommonBuilder provides a GPU builder that can builds the MCM GPU.
@@ -258,6 +260,11 @@ func (b *CommonBuilder) UseCoalescingTLBPort(u bool) {
 
 func (b *CommonBuilder) UseCoalescingRTU(u bool) {
 	b.useCoalescingRTU = u
+}
+
+// WithBooksimConfig sets the path to booksim config file
+func (b *CommonBuilder) WithBooksimConfig(config string) {
+	b.booksimConfig = config
 }
 
 // CalculateMemoryParameters calculates

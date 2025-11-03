@@ -132,6 +132,8 @@ var customHSL = flag.Uint64("custom-hsl", 1,
 	"Specify the value of custom HSL directly to the builder")
 var yamlConfigFile = flag.String("yaml-config-file", "",
 	"Specify the path to a yaml config file to override default config values.")
+var booksimConfigFile = flag.String("booksim-config-file", "",
+	"Specify the path to a booksim config file to configure the NoC.")
 
 type verificationPreEnablingBenchmark interface {
 	benchmarks.Benchmark
@@ -1015,6 +1017,7 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithSchedulingPartition(*schedulingPartition)
 		b.WithMemAllocatorType(*memAllocatorType)
 		b.WithLog2PageSize(*log2PageSize)
+		b.WithBookSimNocConfig(*booksimConfigFile)
 		r.Engine, r.GPUDriver = b.Build()
 	case "SMSide":
 		b := platform.MakeSMSideBuilder()
@@ -1045,6 +1048,7 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithSchedulingPartition(*schedulingPartition)
 		b.WithMemAllocatorType(*memAllocatorType)
 		b.WithLog2PageSize(*log2PageSize)
+		b.WithBookSimNocConfig(*booksimConfigFile)
 		r.Engine, r.GPUDriver = b.Build()
 	case "privateh2tlb":
 		b := platform.MakePrivateH2TLBPlatformBuilder()

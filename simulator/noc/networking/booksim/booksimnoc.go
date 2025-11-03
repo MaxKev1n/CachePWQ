@@ -10,6 +10,7 @@ import "C"
 
 import (
 	"fmt"
+	"log"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -50,22 +51,29 @@ type BookSimNoC struct {
 // numNodes: total number of nodes (should match n_shader + n_mem in config)
 func NewBookSimNoC(
 	name string,
-	config string,
 	engine akita.Engine,
-	numNodes int,
 ) *BookSimNoC {
 	noc := &BookSimNoC{
-		nocPorts:    make([]akita.Port, numNodes),
-		outPorts:    make([]akita.Port, numNodes),
 		inflightMsg: make(map[uint64]akita.Msg),
 		flitSize:    40,
 	}
 
 	noc.TickingComponent = akita.NewTickingComponent(name, engine, 1*akita.GHz, noc)
-	noc.wrapper = NewNetworkWrapper(config, numNodes)
 	noc.port2Node = make(map[akita.Port]int)
 
 	return noc
+}
+
+// CreateNetwork initializes the BookSim network
+func (noc *BookSimNoC) CreateNetwork(
+	config string,
+) {
+	noc.wrapper = NewNetworkWrapper(config, noc.MaxNumSMSidePort, noc.MaxNumMemSidePort)
+
+	noc.nocPorts = make([]akita.Port, noc.MaxNumSMSidePort+noc.MaxNumMemSidePort)
+	noc.outPorts = make([]akita.Port, noc.MaxNumSMSidePort+noc.MaxNumMemSidePort)
+	log.Printf("[BookSimNoC] Created BookSim network with %d SM side ports and %d Mem side ports\n",
+		noc.MaxNumSMSidePort, noc.MaxNumMemSidePort)
 }
 
 // Close releases the underlying BookSim network
@@ -264,12 +272,15 @@ func (g *BookSimIDGenerator) Generate() uint64 {
 
 func NewNetworkWrapper(
 	config string,
-	numNode int,
+	numCUs int,
+	numMems int,
 ) *NetworkWrapper {
 	var path *C.char
-	if config == "" {
-		path = C.CString("/Users/chenzihang/codes/CachePWQ/simulator/noc/networking/booksim/native/config_volta_islip.icnt")
+	if config != "" {
+		path = C.CString(config)
 		defer C.free(unsafe.Pointer(path))
+	} else {
+		panic("BookSimNoC: config is required")
 	}
 
 	wrapper := &NetworkWrapper{}
@@ -277,7 +288,7 @@ func NewNetworkWrapper(
 	wrapper.generator = BookSimIDGenerator{
 		nextID: 0,
 	}
-	wrapper.net = C.booksim_create(path, C.int(numNode))
+	wrapper.net = C.booksim_create(path, C.int(numCUs), C.int(numMems))
 
 	return wrapper
 }

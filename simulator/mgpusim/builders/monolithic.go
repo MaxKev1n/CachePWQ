@@ -169,18 +169,19 @@ func (b *MonolithicGPUBuilder) calculateTwoSideComponents(chiplet *Chiplet) {
 	b.numSMsideComp++
 
 	chiplet.BookSimNoC.MaxNumSMSidePort = b.numSMsideComp
-	chiplet.BookSimNoC.MaxNumMemSidePort = b.numSMsideComp + b.numMemsideComp
+	chiplet.BookSimNoC.MaxNumMemSidePort = b.numMemsideComp
 
 	log.Printf("Chiplet %d has %d SM side components and %d Mem side components\n",
 		chiplet.ChipletID, b.numSMsideComp, b.numMemsideComp)
+
+	chiplet.BookSimNoC.CreateNetwork(b.booksimConfig)
 }
 
 func (b *MonolithicGPUBuilder) createIntraChipletNoC(chiplet *Chiplet) {
 	chiplet.BookSimNoC = noc.NewBookSimNoC(
 		fmt.Sprintf("L1ToL2NoC[%d]", chiplet.ChipletID),
-		"",
 		b.engine,
-		418)
+	)
 }
 
 func (b *MonolithicGPUBuilder) connectL1ToL2NoC(chiplet *Chiplet) {

@@ -40,6 +40,8 @@ type CommonPlatformBuilder struct {
 	useCoalescingRTU         bool
 	memAllocatorType         string
 	customHSLpmdUnits        uint64
+
+	booksimNocConfig string
 }
 
 // Makebuilder creates a EmuBuilder with default parameters.
@@ -120,6 +122,10 @@ func (b *CommonPlatformBuilder) WithMemAllocatorType(allocatorType string) {
 
 func (b *CommonPlatformBuilder) WithCustomHSL(pmdUnits uint64) {
 	b.customHSLpmdUnits = pmdUnits
+}
+
+func (b *CommonPlatformBuilder) WithBookSimNocConfig(config string) {
+	b.booksimNocConfig = config
 }
 
 // // WithNumChiplets sets the number of chiplets in the mcm GPU.

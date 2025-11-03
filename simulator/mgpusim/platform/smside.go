@@ -66,6 +66,7 @@ func (b *SMSidePlatformBuilder) createGPUBuilder(
 	gpuBuilder.WithAlg(b.alg)
 	gpuBuilder.WithSchedulingPartition(b.partition)
 	gpuBuilder.WithNumL2TLBSlices(16)
+	gpuBuilder.WithBooksimConfig(b.booksimNocConfig)
 
 	b.setVisTracer(gpuDriver, gpuBuilder)
 	b.setTLBTracer(gpuBuilder)

@@ -14,7 +14,7 @@ extern "C" {
     static int recv_counter = 0;
     static int send_counter = 0;
 
-    booksim_net_t booksim_create(const char* cfg_path, int n_nodes);
+    booksim_net_t booksim_create(const char* cfg_path, int n_shaders, int n_mems);
     void booksim_destroy(booksim_net_t net);
     void booksim_cycle(booksim_net_t net);
 
