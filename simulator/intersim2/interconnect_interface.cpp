@@ -619,15 +619,18 @@ void* InterconnectInterface::_BoundaryBufferItem::TopPacket() const
 {
   assert (_packet_n);
   void* data = NULL;
-  void* temp_d = _buffer.front();
-  while (data==NULL) {
-    if (_tail_flag.front()) {
-      data = _buffer.front();
+
+  std::queue<void*> buffer_copy = _buffer;
+  std::queue<bool> tail_copy = _tail_flag;
+
+  while (data == NULL) {
+    if (tail_copy.front()) {
+      data = buffer_copy.front();
     }
-    assert(temp_d == _buffer.front()); //all flits must belong to the same packet
+    buffer_copy.pop();
+    tail_copy.pop();
   }
   return data;
-
 }
 
 void InterconnectInterface::_BoundaryBufferItem::PushFlitData(void* data,bool is_tail)
