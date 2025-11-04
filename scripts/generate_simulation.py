@@ -108,13 +108,17 @@ def generate_runners(yaml_path=None, eda_mode=False):
                 f.write("#!/bin/bash\n")
                 f.write("set -e\n")
 
+            f.write(
+                "export LD_LIBRARY_PATH=/hpc/home/connect.zchen097/CachePWQ/simulator/noc/networking/booksim/native:$LD_LIBRARY_PATH\n"
+            )
+
             cmd = [
                 f"./{benchmark}",
                 "-timing",
                 "-no-progress-bar",
                 "-report-all",
                 "-scheduling round-robin",
-                "-platform-type monolithic",
+                f"-platform-type {CONFIG}",
                 "-mem-allocator-type interleaved",
             ]
 
@@ -155,6 +159,15 @@ def generate_runners(yaml_path=None, eda_mode=False):
             # optional yaml config
             if yaml_path:
                 cmd.append(f"-yaml-config-file {yaml_path}")
+
+            if CONFIG == "monolithic":
+                cmd.append(
+                    "-booksim-config-file /hpc/home/connect.zchen097/CachePWQ/simulator/noc/networking/booksim/native/config_monolithic.icnt "
+                )
+            elif CONFIG == "SMSide":
+                cmd.append(
+                    "-booksim-config-file /hpc/home/connect.zchen097/CachePWQ/simulator/noc/networking/booksim/native/config_smside.icnt "
+                )
 
             f.write(" ".join(cmd) + "\n")
             f.write(f'echo "[Done] {benchmark} finished."\n')

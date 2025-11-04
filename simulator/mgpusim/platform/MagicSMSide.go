@@ -8,13 +8,13 @@ import (
 )
 
 // DistributedTLBGPUPlatformBuilder can build a platform that equips DisTLBGPU GPU.
-type MonolithicPlatformBuilder struct {
+type MagicSMSidePlatformBuilder struct {
 	CommonPlatformBuilder
 }
 
 // Makebuilder creates a EmuBuilder with default parameters.
-func MakeMonolithicPlatformBuilder() MonolithicPlatformBuilder {
-	b := MonolithicPlatformBuilder{
+func MakeMagicSMSideBuilder() MagicSMSidePlatformBuilder {
+	b := MagicSMSidePlatformBuilder{
 		CommonPlatformBuilder{
 			numGPU:                   1,
 			log2PageSize:             uint64(12),
@@ -29,7 +29,7 @@ func MakeMonolithicPlatformBuilder() MonolithicPlatformBuilder {
 	return b
 }
 
-func (b MonolithicPlatformBuilder) Build() (akita.Engine, *driver.Driver) {
+func (b MagicSMSidePlatformBuilder) Build() (akita.Engine, *driver.Driver) {
 	engine := b.createEngine()
 
 	gpuDriver := driver.NewDriver(engine, b.log2PageSize, b.memAllocatorType)
@@ -49,11 +49,11 @@ func (b MonolithicPlatformBuilder) Build() (akita.Engine, *driver.Driver) {
 	return engine, gpuDriver
 }
 
-func (b *MonolithicPlatformBuilder) createGPUBuilder(
+func (b *MagicSMSidePlatformBuilder) createGPUBuilder(
 	engine akita.Engine,
 	gpuDriver *driver.Driver,
 ) builders.Builder {
-	gpuBuilder := builders.MakeMonolithicGPUBuilder()
+	gpuBuilder := builders.MakeMagicSMSideGPUBuilder()
 	gpuBuilder.WithEngine(engine)
 	gpuBuilder.WithNumCUPerShaderArray(int(b.numCUPerShaderArray))
 	gpuBuilder.WithNumShaderArrayPerChiplet(int(b.numShaderArrayPerChiplet))
@@ -65,6 +65,7 @@ func (b *MonolithicPlatformBuilder) createGPUBuilder(
 	gpuBuilder.WithPageTable(gpuDriver.PageTable)
 	gpuBuilder.WithAlg(b.alg)
 	gpuBuilder.WithSchedulingPartition(b.partition)
+	gpuBuilder.WithNumL2TLBSlices(16)
 	gpuBuilder.WithBooksimConfig(b.booksimNocConfig)
 
 	b.setVisTracer(gpuDriver, gpuBuilder)

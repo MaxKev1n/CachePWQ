@@ -536,7 +536,7 @@ func (b *CommonBuilder) buildL2TLB(chiplet *Chiplet) {
 		WithLog2PageSize(b.log2PageSize).
 		WithLowModule(chiplet.MMU.ToTopPort()).
 		WithIndexingMask(mask).
-		WithLatency(80)
+		WithLatency(40)
 	fmt.Println("num TLB sets:", numSets)
 	fmt.Println("num TLB ways:", numWays)
 	if b.useCoalescingTLBPort {

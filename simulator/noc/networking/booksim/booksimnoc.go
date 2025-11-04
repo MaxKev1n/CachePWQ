@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -119,6 +120,45 @@ func (noc *BookSimNoC) PlugInSMSide(p akita.Port, size int) {
 	noc.port2Node[p] = nextID
 }
 
+// PlugInSMSide connects an external port to a specific BookSim node
+func (noc *BookSimNoC) PlugInMagicSMSide(p akita.Port, size int) {
+	noc.mutex.Lock()
+	defer noc.mutex.Unlock()
+
+	nextID := len(noc.SMSidePorts)
+
+	for _, port := range noc.nocPorts {
+		if port == p {
+			panic(fmt.Sprintf("[BookSimNoC] duplicate mapping for node %d", nextID))
+		}
+	}
+
+	if nextID >= noc.MaxNumSMSidePort {
+		panic(fmt.Sprintf("[BookSimNoC] SMSide node %d out of range", nextID))
+	}
+
+	nocPort := akita.NewLimitNumMsgPort(noc, size, fmt.Sprintf("%s.NocPort[%d]", noc.Name(), nextID))
+	noc.nocPorts[nextID] = nocPort
+	noc.outPorts[nextID] = p
+	noc.SMSidePorts = append(noc.SMSidePorts, p)
+
+	var conn akita.Connection
+
+	if strings.Contains(p.Name(), "TLB") {
+		conn = NewMagicConnection(fmt.Sprintf("BookSimMagicSMSideConn[%d]", nextID), noc.Engine, 1*akita.GHz)
+	} else {
+		conn = NewBookSimConnection(fmt.Sprintf("BookSimSMSideConn[%d]", nextID), noc.Engine, 1*akita.GHz)
+	}
+
+	conn.PlugIn(nocPort, size)
+	conn.PlugIn(p, size)
+
+	if _, exists := noc.port2Node[p]; exists {
+		panic("BookSimNoC: duplicate port mapping")
+	}
+	noc.port2Node[p] = nextID
+}
+
 // PlugInMemSide connects an external port to a specific BookSim node
 func (noc *BookSimNoC) PlugInMemSide(p akita.Port, size int) {
 	noc.mutex.Lock()
@@ -142,6 +182,44 @@ func (noc *BookSimNoC) PlugInMemSide(p akita.Port, size int) {
 	noc.MemSidePorts = append(noc.MemSidePorts, p)
 
 	conn := NewBookSimConnection(fmt.Sprintf("BookSimMemSideConn[%d]", nextID), noc.Engine, 1*akita.GHz)
+	conn.PlugIn(nocPort, size)
+	conn.PlugIn(p, size)
+
+	if _, exists := noc.port2Node[p]; exists {
+		panic("BookSimNoC: duplicate port mapping")
+	}
+	noc.port2Node[p] = nextID
+}
+
+// PlugInMemSide connects an external port to a specific BookSim node
+func (noc *BookSimNoC) PlugInMagicMemSide(p akita.Port, size int) {
+	noc.mutex.Lock()
+	defer noc.mutex.Unlock()
+
+	nextID := len(noc.MemSidePorts) + noc.MaxNumSMSidePort
+
+	for _, port := range noc.nocPorts {
+		if port == p {
+			panic(fmt.Sprintf("[BookSimNoC] duplicate mapping for node %d", nextID))
+		}
+	}
+
+	if nextID >= noc.MaxNumMemSidePort+noc.MaxNumSMSidePort {
+		panic(fmt.Sprintf("[BookSimNoC] MemSide node %d out of range", nextID))
+	}
+
+	nocPort := akita.NewLimitNumMsgPort(noc, size, fmt.Sprintf("%s.NocPort[%d]", noc.Name(), nextID))
+	noc.nocPorts[nextID] = nocPort
+	noc.outPorts[nextID] = p
+	noc.MemSidePorts = append(noc.MemSidePorts, p)
+
+	var conn akita.Connection
+
+	if strings.Contains(p.Name(), "TLB") {
+		conn = NewMagicConnection(fmt.Sprintf("BookSimMagicMemSideConn[%d]", nextID), noc.Engine, 1*akita.GHz)
+	} else {
+		conn = NewBookSimConnection(fmt.Sprintf("BookSimMemSideConn[%d]", nextID), noc.Engine, 1*akita.GHz)
+	}
 	conn.PlugIn(nocPort, size)
 	conn.PlugIn(p, size)
 
