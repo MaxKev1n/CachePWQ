@@ -11,7 +11,7 @@ import (
 	"gitlab.com/akita/noc/networking/chipnetwork"
 )
 
-type MonolithicGPUBuilder struct {
+type MonolithicCaPWQGPUBuilder struct {
 	*CommonBuilder
 
 	// specific componenets
@@ -19,16 +19,16 @@ type MonolithicGPUBuilder struct {
 
 // Distributed TLB specific function
 
-// MakeDistributedTLBGPUBuilder provides a GPU builder that can builds MCM GPU.
-func MakeMonolithicGPUBuilder() MonolithicGPUBuilder {
+// MakeMonolithicCaPWQGPUBuilder provides a GPU builder that can builds MCM GPU.
+func MakeMonolithicCaPWQGPUBuilder() MonolithicCaPWQGPUBuilder {
 	// TODO: should this be using new? is the object being allocated on the stack?
 	cbp := CommonBuilder{}
-	b := MonolithicGPUBuilder{CommonBuilder: &cbp}
+	b := MonolithicCaPWQGPUBuilder{CommonBuilder: &cbp}
 	b.SetDefaultCommonBuilderParams()
 	return b
 }
 
-func (b MonolithicGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
+func (b MonolithicCaPWQGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
 	b.createGPU(name, id)
 
 	b.buildCP()
@@ -70,7 +70,7 @@ func (b MonolithicGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
 	return b.gpu
 }
 
-func (b *MonolithicGPUBuilder) connectCP() {
+func (b *MonolithicCaPWQGPUBuilder) connectCP() {
 	b.internalConn = akita.NewDirectConnection(
 		b.gpuName+"InternalConn", b.engine, b.freq)
 	b.gpu.InternalConnection = b.internalConn
@@ -103,7 +103,7 @@ func (b *MonolithicGPUBuilder) connectCP() {
 	b.connectCPWithTLBs()
 }
 
-func (b *MonolithicGPUBuilder) connectL1TLBToL2TLB(chiplet *Chiplet) {
+func (b *MonolithicCaPWQGPUBuilder) connectL1TLBToL2TLB(chiplet *Chiplet) {
 	tlbConn := akita.NewDirectConnection(chiplet.name+"L1TLB-L2TLB",
 		b.engine, b.freq)
 	tlbConn.PlugIn(chiplet.L2TLBs[0].GetTopPort(), 64)
@@ -133,7 +133,7 @@ func (b *MonolithicGPUBuilder) connectL1TLBToL2TLB(chiplet *Chiplet) {
 	}
 }
 
-func (b *MonolithicGPUBuilder) calculateTwoSideComponents(chiplet *Chiplet) {
+func (b *MonolithicCaPWQGPUBuilder) calculateTwoSideComponents(chiplet *Chiplet) {
 	for range chiplet.L1VCaches {
 		b.numSMsideComp++
 	}
@@ -192,7 +192,7 @@ func (b *MonolithicGPUBuilder) calculateTwoSideComponents(chiplet *Chiplet) {
 	)
 }
 
-func (b *MonolithicGPUBuilder) createIntraChipletNoC(chiplet *Chiplet) {
+func (b *MonolithicCaPWQGPUBuilder) createIntraChipletNoC(chiplet *Chiplet) {
 	chiplet.BookSimNoC = noc.NewBookSimNoC(
 		fmt.Sprintf("L1ToL2NoC[%d]", chiplet.ChipletID),
 		b.engine,
@@ -201,7 +201,7 @@ func (b *MonolithicGPUBuilder) createIntraChipletNoC(chiplet *Chiplet) {
 	b.gpu.NoCs = append(b.gpu.NoCs, chiplet.BookSimNoC)
 }
 
-func (b *MonolithicGPUBuilder) connectL1ToL2NoC(chiplet *Chiplet) {
+func (b *MonolithicCaPWQGPUBuilder) connectL1ToL2NoC(chiplet *Chiplet) {
 	fmt.Println("memory address offset:", b.memAddrOffset)
 	lowModuleFinder := cache.NewStripedLocalVRemoteLowModuleFinder(b.memAddrOffset, uint64(b.numChiplet*b.numMemoryBankPerChiplet),
 		1<<b.log2MemoryBankInterleavingSize, uint64(b.numMemoryBankPerChiplet)*chiplet.ChipletID, uint64(b.numMemoryBankPerChiplet)*chiplet.ChipletID+uint64(b.numMemoryBankPerChiplet-1))
@@ -230,7 +230,7 @@ func (b *MonolithicGPUBuilder) connectL1ToL2NoC(chiplet *Chiplet) {
 	chiplet.lowModuleFinderForL1 = lowModuleFinder
 }
 
-func (b *MonolithicGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
+func (b *MonolithicCaPWQGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 	var lowModuleFinder cache.LowModuleFinder
 
 	singeLowModuleFinder := new(cache.SingleLowModuleFinder)
@@ -258,12 +258,12 @@ func (b *MonolithicGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 	chiplet.BookSimNoC.PlugInMemSide(chiplet.L2TLBs[0].GetTopPort(), 64)
 }
 
-func (b *MonolithicGPUBuilder) connectMMUToL2NoC(chiplet *Chiplet) {
+func (b *MonolithicCaPWQGPUBuilder) connectMMUToL2NoC(chiplet *Chiplet) {
 	chiplet.MMU.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
 	chiplet.BookSimNoC.PlugInSMSide(chiplet.MMU.TranslationPortPort(), 64)
 }
 
-func (b *MonolithicGPUBuilder) setupInterchipNetwork() {
+func (b *MonolithicCaPWQGPUBuilder) setupInterchipNetwork() {
 	chipConnector := chipnetwork.NewInterChipletConnector().
 		WithEngine(b.engine).
 		WithSwitchLatency(360).
@@ -278,7 +278,7 @@ func (b *MonolithicGPUBuilder) setupInterchipNetwork() {
 	chipConnector.MakeNetwork()
 }
 
-func (b *MonolithicGPUBuilder) InterChipletPorts(c *Chiplet) []akita.Port {
+func (b *MonolithicCaPWQGPUBuilder) InterChipletPorts(c *Chiplet) []akita.Port {
 	ports := []akita.Port{
 		c.chipRdmaEngine.RequestPort,
 		c.chipRdmaEngine.ResponsePort,

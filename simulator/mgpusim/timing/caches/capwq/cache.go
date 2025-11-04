@@ -1,4 +1,4 @@
-package l1v
+package capwq
 
 import (
 	"gitlab.com/akita/akita"
@@ -7,7 +7,7 @@ import (
 	"gitlab.com/akita/util"
 )
 
-// A Cache is a customized L1 cache the for R9nano GPUs.
+// A CaPWQCache is a customized L1 cache the for R9nano GPUs.
 type Cache struct {
 	*akita.TickingComponent
 

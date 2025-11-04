@@ -5,6 +5,7 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/cache/writeback"
+	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	noc "gitlab.com/akita/noc/networking/booksim"
 
 	// "gitlab.com/akita/mem/dram"
@@ -15,7 +16,6 @@ import (
 	"gitlab.com/akita/mgpusim/pagemigrationcontroller"
 	"gitlab.com/akita/mgpusim/rdma"
 	"gitlab.com/akita/mgpusim/remotetranslation"
-	"gitlab.com/akita/mgpusim/timing/caches/l1v"
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
 	"gitlab.com/akita/mgpusim/timing/cp"
 	"gitlab.com/akita/noc/networking/chipnetwork"
@@ -28,9 +28,9 @@ type GPU struct {
 	PMC                *pagemigrationcontroller.PageMigrationController
 	Dispatchers        []akita.Component
 	CUs                []akita.Component
-	L1VCaches          []*l1v.Cache
-	L1ICaches          []*l1v.Cache
-	L1SCaches          []*l1v.Cache
+	L1VCaches          []l1cache.Cache
+	L1ICaches          []l1cache.Cache
+	L1SCaches          []l1cache.Cache
 	L2Caches           []*writeback.Cache
 	L2CacheFinder      cache.LowModuleFinder
 	L2TLBs             []tlb.L2TLB

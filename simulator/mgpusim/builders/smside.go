@@ -95,7 +95,7 @@ func (b *SMSideGPUBuilder) BuildSAs(chiplet *Chiplet) {
 	saBuilder.withLog2PageSize(b.log2PageSize)
 	saBuilder.withNumCU(b.numCUPerShaderArray)
 	saBuilder.withPageTable(b.pageTable)
-	saBuilder.withSMSide()
+	saBuilder.withConfig("SMSide")
 
 	if b.enableVisTracing {
 		saBuilder.withVisTracer(b.visTracer)
@@ -265,12 +265,12 @@ func (b *SMSideGPUBuilder) connectL1ToL2NoC(chiplet *Chiplet) {
 
 	for _, l1v := range chiplet.L1VCaches {
 		l1v.SetLowModuleFinder(lowModuleFinder)
-		chiplet.BookSimNoC.PlugInSMSide(l1v.BottomPort, 16)
+		chiplet.BookSimNoC.PlugInSMSide(l1v.GetBottomPort(), 16)
 	}
 
 	for _, l1s := range chiplet.L1SCaches {
 		l1s.SetLowModuleFinder(lowModuleFinder)
-		chiplet.BookSimNoC.PlugInSMSide(l1s.BottomPort, 16)
+		chiplet.BookSimNoC.PlugInSMSide(l1s.GetBottomPort(), 16)
 	}
 
 	for _, l1iAT := range chiplet.L1IAddrTranslator {

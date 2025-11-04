@@ -10,7 +10,7 @@ import (
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim/rdma"
 	"gitlab.com/akita/mgpusim/remotetranslation"
-	"gitlab.com/akita/mgpusim/timing/caches/l1v"
+	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
 	"gitlab.com/akita/mgpusim/timing/cu"
 	noc "gitlab.com/akita/noc/networking/booksim"
@@ -19,9 +19,9 @@ import (
 type Chiplet struct {
 	Dispatchers       []akita.Component
 	CUs               []*cu.ComputeUnit
-	L1VCaches         []*l1v.Cache
-	L1ICaches         []*l1v.Cache
-	L1SCaches         []*l1v.Cache
+	L1VCaches         []l1cache.Cache
+	L1ICaches         []l1cache.Cache
+	L1SCaches         []l1cache.Cache
 	L2Caches          []*writeback.Cache
 	L2CacheFinder     cache.LowModuleFinder
 	L2TLBs            []tlb.L2TLB

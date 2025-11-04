@@ -9,6 +9,8 @@ import (
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mem/vm/addresstranslator"
 	"gitlab.com/akita/mem/vm/tlb"
+	"gitlab.com/akita/mgpusim/timing/caches/capwq"
+	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	"gitlab.com/akita/mgpusim/timing/caches/l1v"
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
 	"gitlab.com/akita/mgpusim/timing/cu"
@@ -26,9 +28,9 @@ type shaderArray struct {
 	l1sAT  addresstranslator.AddressTranslator
 	l1iAT  addresstranslator.AddressTranslator
 
-	l1vCaches []*l1v.Cache
-	l1sCache  *l1v.Cache
-	l1iCache  *l1v.Cache
+	l1vCaches []l1cache.Cache
+	l1sCache  l1cache.Cache
+	l1iCache  l1cache.Cache
 
 	l1vTLBs []tlb.L1TLB
 	l1sTLB  tlb.L1TLB
@@ -50,7 +52,7 @@ type shaderArrayBuilder struct {
 
 	pageTable device.PageTable
 
-	SMSide bool
+	config string
 }
 
 func makeShaderArrayBuilder() shaderArrayBuilder {
@@ -103,8 +105,8 @@ func (b *shaderArrayBuilder) withPageTable(pt device.PageTable) {
 	b.pageTable = pt
 }
 
-func (b *shaderArrayBuilder) withSMSide() {
-	b.SMSide = true
+func (b *shaderArrayBuilder) withConfig(config string) {
+	b.config = config
 }
 
 func (b *shaderArrayBuilder) Build(name string, i int) shaderArray {
@@ -119,31 +121,68 @@ func (b *shaderArrayBuilder) Build(name string, i int) shaderArray {
 }
 
 func (b *shaderArrayBuilder) buildComponents(sa *shaderArray) {
+	switch b.config {
+	case "SMSide":
+		b.buildSMSideComponents(sa)
+	case "CaPWQ":
+		b.buildCaPWQComponents(sa)
+	default:
+		b.buildDefaultComponents(sa)
+	}
+}
+
+func (b *shaderArrayBuilder) buildDefaultComponents(sa *shaderArray) {
 	b.buildCUs(sa)
 
-	if b.SMSide {
-		b.buildSMSideL1VTLBs(sa)
-	} else {
-		b.buildL1VTLBs(sa)
-	}
+	b.buildL1VTLBs(sa)
 	b.buildL1VAddressTranslators(sa)
 	b.buildL1VReorderBuffers(sa)
 	b.buildL1VCaches(sa)
 
-	if b.SMSide {
-		b.buildSMSideL1STLB(sa)
-	} else {
-		b.buildL1STLB(sa)
-	}
+	b.buildL1STLB(sa)
 	b.buildL1SAddressTranslator(sa)
 	b.buildL1SReorderBuffer(sa)
 	b.buildL1SCache(sa)
 
-	if b.SMSide {
-		b.buildSMSideL1ITLB(sa)
-	} else {
-		b.buildL1ITLB(sa)
-	}
+	b.buildL1ITLB(sa)
+	b.buildL1IAddressTranslator(sa)
+	b.buildL1IReorderBuffer(sa)
+	b.buildL1ICache(sa)
+}
+
+func (b *shaderArrayBuilder) buildSMSideComponents(sa *shaderArray) {
+	b.buildCUs(sa)
+
+	b.buildSMSideL1VTLBs(sa)
+	b.buildL1VAddressTranslators(sa)
+	b.buildL1VReorderBuffers(sa)
+	b.buildL1VCaches(sa)
+
+	b.buildSMSideL1STLB(sa)
+	b.buildL1SAddressTranslator(sa)
+	b.buildL1SReorderBuffer(sa)
+	b.buildL1SCache(sa)
+
+	b.buildSMSideL1ITLB(sa)
+	b.buildL1IAddressTranslator(sa)
+	b.buildL1IReorderBuffer(sa)
+	b.buildL1ICache(sa)
+}
+
+func (b *shaderArrayBuilder) buildCaPWQComponents(sa *shaderArray) {
+	b.buildCUs(sa)
+
+	b.buildL1VTLBs(sa)
+	b.buildL1VAddressTranslators(sa)
+	b.buildL1VReorderBuffers(sa)
+	b.buildL1VCaches(sa)
+
+	b.buildL1STLB(sa)
+	b.buildL1SAddressTranslator(sa)
+	b.buildL1SReorderBuffer(sa)
+	b.buildL1SCaPWQCache(sa)
+
+	b.buildL1ITLB(sa)
 	b.buildL1IAddressTranslator(sa)
 	b.buildL1IReorderBuffer(sa)
 	b.buildL1ICache(sa)
@@ -191,9 +230,9 @@ func (b *shaderArrayBuilder) connectVectorMem(sa *shaderArray) {
 		// b.connectWithDirectConnection(at.GetTranslationPort(), tlb.TopPort, 8)
 
 		at.SetLowModuleFinder(&cache.SingleLowModuleFinder{
-			LowModule: l1v.TopPort,
+			LowModule: l1v.GetTopPort(),
 		})
-		b.connectWithDirectConnection(l1v.TopPort, at.GetBottomPort(), 8)
+		b.connectWithDirectConnection(l1v.GetTopPort(), at.GetBottomPort(), 8)
 	}
 }
 
@@ -210,9 +249,9 @@ func (b *shaderArrayBuilder) connectScalarMem(sa *shaderArray) {
 	// b.connectWithDirectConnection(at.GetTranslationPort(), tlb.TopPort, 8)
 
 	at.SetLowModuleFinder(&cache.SingleLowModuleFinder{
-		LowModule: l1s.TopPort,
+		LowModule: l1s.GetTopPort(),
 	})
-	b.connectWithDirectConnection(l1s.TopPort, at.GetBottomPort(), 8)
+	b.connectWithDirectConnection(l1s.GetTopPort(), at.GetBottomPort(), 8)
 
 	conn := akita.NewDirectConnection(b.name, b.engine, b.freq)
 	conn.PlugIn(rob.TopPort, 8)
@@ -229,13 +268,13 @@ func (b *shaderArrayBuilder) connectInstMem(sa *shaderArray) {
 	// tlb := sa.l1iTLB
 	l1i := sa.l1iCache
 
-	rob.BottomUnit = l1i.TopPort
-	b.connectWithDirectConnection(rob.BottomPort, l1i.TopPort, 8)
+	rob.BottomUnit = l1i.GetTopPort()
+	b.connectWithDirectConnection(rob.BottomPort, l1i.GetTopPort(), 8)
 
 	l1i.SetLowModuleFinder(&cache.SingleLowModuleFinder{
 		LowModule: at.GetTopPort(),
 	})
-	b.connectWithDirectConnection(l1i.BottomPort, at.GetTopPort(), 8)
+	b.connectWithDirectConnection(l1i.GetBottomPort(), at.GetTopPort(), 8)
 
 	// at.SetTranslationProvider(tlb.TopPort)
 	// b.connectWithDirectConnection(at.GetTranslationPort(), tlb.TopPort, 8)
@@ -457,6 +496,28 @@ func (b *shaderArrayBuilder) buildSMSideL1STLB(sa *shaderArray) {
 
 	if b.visTracer != nil {
 		tracing.CollectTrace(tlb, b.visTracer)
+	}
+}
+
+func (b *shaderArrayBuilder) buildL1SCaPWQCache(sa *shaderArray) {
+	builder := capwq.NewBuilder().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithBankLatency(20).
+		WithNumBanks(1).
+		WithLog2BlockSize(b.log2CacheLineSize).
+		WithWayAssocitivity(16).
+		WithNumMSHREntry(32).
+		WithTotalByteSize(64 * mem.KB).
+		WithNumReqsPerCycle(4).
+		WithBankLatency(28)
+
+	name := fmt.Sprintf("%s.L1SCache", b.name)
+	cache := builder.Build(name)
+	sa.l1sCache = cache
+
+	if b.visTracer != nil {
+		tracing.CollectTrace(cache, b.visTracer)
 	}
 }
 

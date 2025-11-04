@@ -1036,6 +1036,37 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithLog2PageSize(*log2PageSize)
 		b.WithBookSimNocConfig(*booksimConfigFile)
 		r.Engine, r.GPUDriver = b.Build()
+	case "monolithicCaPWQ":
+		b := platform.MakeMonolithicCaPWQPlatformBuilder()
+		if r.Parallel {
+			b.WithParallelEngine()
+		}
+
+		if *isaDebug {
+			b.WithISADebugging()
+		}
+
+		if *visTracing {
+			b.WithVisTracing()
+		}
+
+		if *memTracing {
+			b.WithMemTracing()
+		}
+
+		if *tlbTracing {
+			b.WithTLBTracing()
+		}
+
+		if *disableProgressBar {
+			b.WithoutProgressBar()
+		}
+		b.WithAlg(*schedulingAlg)
+		b.WithSchedulingPartition(*schedulingPartition)
+		b.WithMemAllocatorType(*memAllocatorType)
+		b.WithLog2PageSize(*log2PageSize)
+		b.WithBookSimNocConfig(*booksimConfigFile)
+		r.Engine, r.GPUDriver = b.Build()
 	case "SMSide":
 		b := platform.MakeSMSideBuilder()
 		if r.Parallel {

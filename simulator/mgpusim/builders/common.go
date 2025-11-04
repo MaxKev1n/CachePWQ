@@ -19,7 +19,7 @@ import (
 	"gitlab.com/akita/mgpusim/pagemigrationcontroller"
 	"gitlab.com/akita/mgpusim/rdma"
 	"gitlab.com/akita/mgpusim/remotetranslation"
-	"gitlab.com/akita/mgpusim/timing/caches/l1v"
+	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
 	"gitlab.com/akita/mgpusim/timing/cp"
 	"gitlab.com/akita/mgpusim/timing/cu"
@@ -87,9 +87,9 @@ type CommonBuilder struct {
 	l1vReorderBuffers       []*rob.ReorderBuffer
 	l1iReorderBuffers       []*rob.ReorderBuffer
 	l1sReorderBuffers       []*rob.ReorderBuffer
-	l1vCaches               []*l1v.Cache
-	l1sCaches               []*l1v.Cache
-	l1iCaches               []*l1v.Cache
+	l1vCaches               []l1cache.Cache
+	l1sCaches               []l1cache.Cache
+	l1iCaches               []l1cache.Cache
 	l2Caches                []*writeback.Cache
 	l1vAddrTrans            []addresstranslator.AddressTranslator
 	l1sAddrTrans            []addresstranslator.AddressTranslator
@@ -832,18 +832,18 @@ func (b *CommonBuilder) connectCPWithTLBs() {
 func (b *CommonBuilder) connectCPWithCaches() {
 	for _, chiplet := range b.chiplets {
 		for _, c := range chiplet.L1ICaches {
-			b.cp.L1ICaches = append(b.cp.L1ICaches, c.ControlPort)
-			b.internalConn.PlugIn(c.ControlPort, 1)
+			b.cp.L1ICaches = append(b.cp.L1ICaches, c.GetControlPort())
+			b.internalConn.PlugIn(c.GetControlPort(), 1)
 		}
 
 		for _, c := range chiplet.L1VCaches {
-			b.cp.L1VCaches = append(b.cp.L1VCaches, c.ControlPort)
-			b.internalConn.PlugIn(c.ControlPort, 1)
+			b.cp.L1VCaches = append(b.cp.L1VCaches, c.GetControlPort())
+			b.internalConn.PlugIn(c.GetControlPort(), 1)
 		}
 
 		for _, c := range chiplet.L1SCaches {
-			b.cp.L1SCaches = append(b.cp.L1SCaches, c.ControlPort)
-			b.internalConn.PlugIn(c.ControlPort, 1)
+			b.cp.L1SCaches = append(b.cp.L1SCaches, c.GetControlPort())
+			b.internalConn.PlugIn(c.GetControlPort(), 1)
 		}
 
 		for _, c := range chiplet.L2Caches {
@@ -895,12 +895,12 @@ func (b *CommonBuilder) connectL1ToL2(chiplet *Chiplet) {
 
 	for _, l1v := range chiplet.L1VCaches {
 		l1v.SetLowModuleFinder(lowModuleFinder)
-		l1ToL2Conn.PlugIn(l1v.BottomPort, 16)
+		l1ToL2Conn.PlugIn(l1v.GetBottomPort(), 16)
 	}
 
 	for _, l1s := range chiplet.L1SCaches {
 		l1s.SetLowModuleFinder(lowModuleFinder)
-		l1ToL2Conn.PlugIn(l1s.BottomPort, 16)
+		l1ToL2Conn.PlugIn(l1s.GetBottomPort(), 16)
 	}
 
 	for _, l1iAT := range chiplet.L1IAddrTranslator {
