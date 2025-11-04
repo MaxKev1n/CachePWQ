@@ -3,9 +3,11 @@ package builders
 import (
 	"fmt"
 	"log"
+	"math"
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem/cache"
+	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/mgpusim"
 	noc "gitlab.com/akita/noc/networking/booksim"
 	"gitlab.com/akita/noc/networking/chipnetwork"
@@ -167,6 +169,7 @@ func (b *MonolithicCaPWQGPUBuilder) calculateTwoSideComponents(chiplet *Chiplet)
 
 	// Monolithic MMU
 	b.numSMsideComp++
+	b.numMemsideComp++
 
 	chiplet.BookSimNoC.MaxNumSMSidePort = b.numSMsideComp
 	chiplet.BookSimNoC.MaxNumMemSidePort = b.numMemsideComp
@@ -261,6 +264,21 @@ func (b *MonolithicCaPWQGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 func (b *MonolithicCaPWQGPUBuilder) connectMMUToL2NoC(chiplet *Chiplet) {
 	chiplet.MMU.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
 	chiplet.BookSimNoC.PlugInSMSide(chiplet.MMU.TranslationPortPort(), 64)
+	chiplet.BookSimNoC.PlugInMemSide(chiplet.MMU.(*mmu.CaPWQMMU).ToCache, 64)
+
+	lowModuleFinder := cache.NewXORLowModuleFinder(
+		len(chiplet.L1SCaches),
+		4,
+		int(math.Log2(float64(len(chiplet.L1SCaches)))),
+		int(b.log2PageSize),
+	)
+
+	for _, l1s := range chiplet.L1SCaches {
+		lowModuleFinder.LowModules = append(lowModuleFinder.LowModules,
+			l1s.GetBottomPort())
+	}
+
+	chiplet.MMU.(*mmu.CaPWQMMU).CacheLowModuleFinder = lowModuleFinder
 }
 
 func (b *MonolithicCaPWQGPUBuilder) setupInterchipNetwork() {

@@ -147,7 +147,7 @@ func (b MMUBuilder) Build(name string) MMU {
 		walker := new(PageWalker)
 
 		walker.mmu = mmu
-		walker.queue = make([]*transaction, 0)
+		walker.queue = make([]*Transaction, 0)
 		walker.outstandingReq = ""
 
 		mmu.pageWalkers = append(mmu.pageWalkers, walker)
@@ -156,9 +156,9 @@ func (b MMUBuilder) Build(name string) MMU {
 	mmu.nextPointer = 0
 	mmu.queueCapacity = 8
 
-	mmu.inflightPWCRequests = make(map[string]*transaction)
+	mmu.inflightPWCRequests = make(map[string]*Transaction)
 	mmu.inflightMemRequests = make([]*mem.ReadReq, 0)
-	mmu.mappingMemAccess = make(map[string]*transaction)
+	mmu.mappingMemAccess = make(map[string]*Transaction)
 	mmu.maxMemRequestsInFlight = 32
 
 	//mmu.latency = b.pageWalkingLatency

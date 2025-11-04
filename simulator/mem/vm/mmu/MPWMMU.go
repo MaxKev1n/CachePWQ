@@ -23,8 +23,8 @@ type MPWPageWalker struct {
 	status        int
 	requestVector []bool
 
-	queue           []*transaction
-	outstandingReqs map[string]*transaction
+	queue           []*Transaction
+	outstandingReqs map[string]*Transaction
 }
 
 // MPWMMU is the default mmu implementation. It is also an akita Component.
@@ -65,10 +65,10 @@ type MPWMMU struct {
 	// numWalksArrived          uint64
 	interleaving uint64
 
-	inflightPWCRequests map[string]*transaction
+	inflightPWCRequests map[string]*Transaction
 	inflightMemRequests []*mem.ReadReq
 
-	mappingMemAccess map[string]*transaction
+	mappingMemAccess map[string]*Transaction
 }
 
 // Tick defines how the MMU update state each cycle
@@ -214,7 +214,7 @@ func (walker *MPWPageWalker) sendToMem() {
 	}
 
 	if walker.queue[0].state != pageWalkCacheDone && walker.queue[0].state != memDone {
-		panic("first transaction is not ready to send to memory!")
+		panic("first Transaction is not ready to send to memory!")
 	}
 
 	pendingMemAccesses := make([]*mem.ReadReq, 0)
@@ -273,7 +273,7 @@ func (walker *MPWPageWalker) sendToMem() {
 }
 
 func (walker *MPWPageWalker) generateMemReq(
-	trans *transaction,
+	trans *Transaction,
 ) *mem.ReadReq {
 	PPN := trans.PPN
 	PPNWithOffset := walker.mmu.pageTable.AddOffset(PPN, trans.vAddr)
@@ -502,7 +502,7 @@ func (mmu *MPWMMU) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec
 
 func (mmu *MPWMMU) fillPageWalkCache(
 	now akita.VTimeInSec,
-	trans *transaction,
+	trans *Transaction,
 ) bool {
 	level := uint64(trans.level)
 	data := uint64ToBytes(trans.PPN | level)
@@ -527,7 +527,7 @@ func (mmu *MPWMMU) fillPageWalkCache(
 
 func (walker *MPWPageWalker) finalizeTransaction(
 	now akita.VTimeInSec,
-	trans *transaction,
+	trans *Transaction,
 ) bool {
 	req := trans.req
 	page, found := walker.mmu.pageTable.Find(req.PID, req.VAddr)
@@ -550,7 +550,7 @@ func (walker *MPWPageWalker) finalizeTransaction(
 
 func (mmu *MPWMMU) doPageWalkHit(
 	now akita.VTimeInSec,
-	trans *transaction,
+	trans *Transaction,
 ) bool {
 	if !mmu.topSender.CanSend(1) {
 		return false
@@ -597,7 +597,7 @@ func (mmu *MPWMMU) insertPageWalkQueue(
 		if walker.canAcceptNewReq(mmu.queueCapacity) {
 			rearrangedVAddr := mmu.pageTable.Rearrange(req.VAddr)
 			root := mmu.pageTable.GetRoot(req.PID)
-			translationInPipeline := transaction{
+			translationInPipeline := Transaction{
 				req:   req,
 				level: 0,
 				msgID: "invalid",

@@ -64,6 +64,11 @@ func (r *ReadReq) GetPID() ca.PID {
 	return r.PID
 }
 
+// TaskID returns the ID of the request.
+func (r *ReadReq) TaskID() string {
+	return r.ID
+}
+
 // GetAccessInfo returns the process ID that the request is working on.
 // func (r *ReadReq) GetAccessInfo() interface{} {
 // 	return r.Info
@@ -179,6 +184,11 @@ func (r *WriteReq) GetAddress() uint64 {
 // GetPID returns the PID of the read address
 func (r *WriteReq) GetPID() ca.PID {
 	return r.PID
+}
+
+// TaskID returns the ID of the request.
+func (r *WriteReq) TaskID() string {
+	return r.ID
 }
 
 // GetAccessInfo returns the process ID that the request is working on.

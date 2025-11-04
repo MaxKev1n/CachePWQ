@@ -330,6 +330,7 @@ func (b *CommonBuilder) BuildSAs(chiplet *Chiplet) {
 	saBuilder.withLog2PageSize(b.log2PageSize)
 	saBuilder.withNumCU(b.numCUPerShaderArray)
 	saBuilder.withPageTable(b.pageTable)
+	saBuilder.withConfig("CaPWQ")
 
 	if b.enableVisTracing {
 		saBuilder.withVisTracer(b.visTracer)
@@ -565,7 +566,7 @@ func (b *CommonBuilder) buildMMU(chiplet *Chiplet) {
 		switch mmuType {
 		case "IdealMMU":
 			b.buildIdealMMU(chiplet)
-		case "caPWQMMU":
+		case "CaPWQMMU":
 			b.buildCAPWQMMU(chiplet)
 		case "MPWMMU":
 			b.buildMPWMMU(chiplet)
@@ -607,7 +608,16 @@ func (b *CommonBuilder) buildCAPWQMMU(chiplet *Chiplet) {
 		WithNumChiplets(uint64(b.numChiplet)).
 		WithMaxNumReqInFlight(16)
 
-	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.caPWQMMU", chiplet.name))
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
+		}
+
+		mmuBuilder = mmuBuilder.WithMaxNumReqInFlight(numWalkersInt)
+	}
+
+	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.CaPWQMMU", chiplet.name))
 	chiplet.MMU.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
 	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
 }

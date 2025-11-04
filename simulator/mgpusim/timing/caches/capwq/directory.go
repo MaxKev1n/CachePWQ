@@ -18,12 +18,56 @@ func (d *directory) Tick(now akita.VTimeInSec) bool {
 		return false
 	}
 
-	trans := item.(*transaction)
-	if trans.read != nil {
-		return d.processRead(now, trans)
+	switch trans := item.(type) {
+	case *transaction:
+		if trans.read != nil {
+			return d.processRead(now, trans)
+		}
+
+		return d.processWrite(now, trans)
+	case *mem.ReadReq:
+		return d.processMMURead(now, trans)
+	case *mem.WriteReq:
+		return d.processMMUWrite(now, trans)
+	default:
+		panic("unexpected type")
+	}
+}
+
+func (d *directory) processMMURead(
+	now akita.VTimeInSec,
+	trans *mem.ReadReq,
+) bool {
+	if !d.cache.mmuPipeline.CanAccept() {
+		return false
 	}
 
-	return d.processWrite(now, trans)
+	d.cache.mmuPipeline.Accept(
+		now,
+		trans,
+	)
+
+	d.cache.dirBuf.Pop()
+
+	return true
+}
+
+func (d *directory) processMMUWrite(
+	now akita.VTimeInSec,
+	trans *mem.WriteReq,
+) bool {
+	if !d.cache.mmuPipeline.CanAccept() {
+		return false
+	}
+
+	d.cache.mmuPipeline.Accept(
+		now,
+		trans,
+	)
+
+	d.cache.dirBuf.Pop()
+
+	return true
 }
 
 func (d *directory) processRead(now akita.VTimeInSec, trans *transaction) bool {

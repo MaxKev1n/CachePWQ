@@ -512,7 +512,7 @@ func (b *shaderArrayBuilder) buildL1SCaPWQCache(sa *shaderArray) {
 		WithNumReqsPerCycle(4).
 		WithBankLatency(28)
 
-	name := fmt.Sprintf("%s.L1SCache", b.name)
+	name := fmt.Sprintf("%s.L1SCaPWQCache", b.name)
 	cache := builder.Build(name)
 	sa.l1sCache = cache
 

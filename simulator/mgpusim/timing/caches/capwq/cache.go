@@ -4,7 +4,10 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
+	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/util"
+	"gitlab.com/akita/util/pipelining"
+	"gitlab.com/akita/util/tracing"
 )
 
 // A CaPWQCache is a customized L1 cache the for R9nano GPUs.
@@ -26,6 +29,10 @@ type Cache struct {
 
 	dirBuf   util.Buffer
 	bankBufs []util.Buffer
+
+	mmuStorage  map[string]*mmu.Transaction
+	mmuPipeline pipelining.Pipeline
+	mmuBuf      util.Buffer
 
 	coalesceStage    *coalescer
 	directoryStage   *directory
@@ -66,6 +73,7 @@ func (c *Cache) runPipeline(now akita.VTimeInSec) bool {
 	madeProgress = c.tickBankStage(now) || madeProgress
 	madeProgress = c.tickDirectoryStage(now) || madeProgress
 	madeProgress = c.tickCoalesceState(now) || madeProgress
+	madeProgress = c.tickMMUStage(now) || madeProgress
 	return madeProgress
 }
 
@@ -109,6 +117,88 @@ func (c *Cache) tickCoalesceState(now akita.VTimeInSec) bool {
 		madeProgress = c.coalesceStage.Tick(now) || madeProgress
 	}
 	return madeProgress
+}
+
+func (c *Cache) tickMMUStage(now akita.VTimeInSec) bool {
+	madeProgress := false
+
+	for i := 0; i < c.numReqPerCycle; i++ {
+		madeProgress = c.mmuPipeline.Tick(now) || madeProgress
+		madeProgress = c.processMMUTransaction(now) || madeProgress
+	}
+
+	return madeProgress
+}
+
+func (c *Cache) processMMUTransaction(now akita.VTimeInSec) bool {
+	item := c.mmuBuf.Peek()
+	if item == nil {
+		return false
+	}
+
+	switch req := item.(type) {
+	case *mem.WriteReq:
+		return c.processMMUWrite(now, req)
+	case *mem.ReadReq:
+		return c.processMMURead(now, req)
+	default:
+		panic("unexpected type")
+	}
+}
+
+func (c *Cache) processMMUWrite(
+	now akita.VTimeInSec,
+	req *mem.WriteReq,
+) bool {
+	transID := req.Info.(*mmu.Transaction).TaskID()
+	if _, exists := c.mmuStorage[transID]; exists {
+		panic("duplicate transID")
+	}
+	c.mmuStorage[transID] = req.Info.(*mmu.Transaction)
+
+	c.mmuBuf.Pop()
+
+	tracing.TraceReqComplete(
+		req, now, c,
+	)
+
+	return true
+}
+
+func (c *Cache) processMMURead(
+	now akita.VTimeInSec,
+	req *mem.ReadReq,
+) bool {
+	transID := req.Info.(*mmu.Transaction).TaskID()
+	if trans, exists := c.mmuStorage[transID]; exists {
+		rsp := mem.DataReadyRspBuilder{}.
+			WithSendTime(now).
+			WithSrc(c.BottomPort).
+			WithDst(req.Src).
+			WithRspTo(req.ID).
+			WithInfo(req.Info).
+			Build()
+
+		trans.Meta().TrafficBytes = 40
+
+		err := c.BottomPort.Send(rsp)
+		if err != nil {
+			return false
+		}
+
+		tracing.TraceReqComplete(
+			req, now, c,
+		)
+		tracing.StartTracingNetwork(
+			rsp, now, c, "trace-mmu-cache-req")
+
+		delete(c.mmuStorage, transID)
+
+		c.mmuBuf.Pop()
+
+		return true
+	}
+	panic("cannot find transID")
 }
 
 func (c *Cache) GetTopPort() akita.Port {

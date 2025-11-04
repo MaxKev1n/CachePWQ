@@ -6,6 +6,7 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
+	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/pipelining"
 	"gitlab.com/akita/util/tracing"
@@ -146,12 +147,29 @@ func (b *Builder) Build(name string) *Cache {
 	c.lowModuleFinder = b.lowModuleFinder
 
 	b.buildStages(c)
+	b.buildMMUBuffer(c)
 
 	if b.visTracer != nil {
 		tracing.CollectTrace(c, b.visTracer)
 	}
 
 	return c
+}
+
+func (b *Builder) buildMMUBuffer(c *Cache) {
+	c.mmuStorage = make(map[string]*mmu.Transaction)
+
+	pipelineName := fmt.Sprintf("%s.MMUBank.Pipeline", c.Name())
+	postPipelineBuf := util.NewBuffer(b.numReqPerCycle)
+	pipeline := pipelining.MakeBuilder().
+		WithPipelineWidth(b.numReqPerCycle).
+		WithNumStage(b.bankLatency).
+		WithCyclePerStage(1).
+		WithPostPipelineBuffer(postPipelineBuf).
+		Build(pipelineName)
+
+	c.mmuBuf = postPipelineBuf
+	c.mmuPipeline = pipeline
 }
 
 func (b *Builder) buildStages(c *Cache) {

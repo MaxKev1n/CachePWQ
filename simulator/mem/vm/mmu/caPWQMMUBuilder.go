@@ -121,7 +121,7 @@ func (b caPWQMMUBuilder) WithNumMemoryBankPerChiplet(n uint64) caPWQMMUBuilder {
 */
 // Build returns a newly created MMU component
 func (b caPWQMMUBuilder) Build(name string) MMU {
-	mmu := new(caPWQMMU)
+	mmu := new(CaPWQMMU)
 	mmu.TickingComponent = *akita.NewTickingComponent(
 		name, b.engine, b.freq, mmu)
 	//mmu.migrationQueueSize = 4096
@@ -146,10 +146,10 @@ func (b caPWQMMUBuilder) Build(name string) MMU {
 	fmt.Println("num walkers:", mmu.maxRequestsInFlight)
 
 	for i := 0; i < mmu.maxRequestsInFlight; i++ {
-		walker := new(caPWQPageWalker)
+		walker := new(CaPWQPageWalker)
 
 		walker.mmu = mmu
-		walker.queue = make([]*transaction, 0)
+		walker.queue = make([]*Transaction, 0)
 		walker.capacity = mmu.queueCapacity
 
 		mmu.pageWalkers = append(mmu.pageWalkers, walker)
@@ -157,9 +157,14 @@ func (b caPWQMMUBuilder) Build(name string) MMU {
 
 	mmu.nextPointer = 0
 
-	mmu.inflightPWCRequests = make(map[string]*transaction)
-	mmu.pendingIssueToMem = make([]*mem.ReadReq, 0)
-	mmu.inflightTransactions = make(map[string]*transaction)
+	mmu.inflightPWCRequests = make(map[string]*Transaction)
+	mmu.inflightMemRequests = make(map[string]*Transaction)
+	mmu.inflightCacheRequests = make(map[string]*Transaction)
+
+	mmu.pendingIssueToMem = make([]*Transaction, 0)
+	mmu.pendingIssueToCache = make([]*Transaction, 0)
+
+	mmu.pendingRspFromMem = make(map[string]*mem.DataReadyRsp)
 
 	//mmu.latency = b.pageWalkingLatency
 	//mmu.PageAccesedByDeviceID = make(map[uint64][]uint64)
@@ -175,20 +180,7 @@ func (b caPWQMMUBuilder) Build(name string) MMU {
 	mmuToPageWalkCache.PlugIn(mmu.pageWalkCachePort, 4)
 	mmu.sendStateInfo = false
 
-	mmu.tickingBuffer = NewTickingBuffer(
-		b.engine,
-		b.freq,
-	)
-	mmu.tickingBuffer.mmu = mmu
-
-	mmu.ToBuffer = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToBuffer")
-	mmu.BufferPort = mmu.tickingBuffer.ToTop
-
-	mmuToBuffer := akita.NewDirectConnection("MMUToBuffer", b.engine, b.freq)
-	mmuToBuffer.PlugIn(mmu.tickingBuffer.ToTop, 8)
-	mmuToBuffer.PlugIn(mmu.ToBuffer, 8)
-
-	mmu.pendingRspFromBuffer = make(map[string]*mem.DataReadyRsp)
+	mmu.ToCache = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToCache")
 
 	return mmu
 }

@@ -34,7 +34,7 @@ const (
 	transactionFinished
 )
 
-type transaction struct {
+type Transaction struct {
 	akita.MsgMeta
 
 	req  *device.TranslationReq
@@ -49,7 +49,11 @@ type transaction struct {
 	remoteMemAccesses int
 }
 
-func (r *transaction) Meta() *akita.MsgMeta {
+func (r *Transaction) TaskID() string {
+	return r.msgID
+}
+
+func (r *Transaction) Meta() *akita.MsgMeta {
 	return &r.MsgMeta
 }
 

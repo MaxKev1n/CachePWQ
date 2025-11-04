@@ -20,7 +20,7 @@ import (
 type PageWalker struct {
 	mmu *MMUImpl
 
-	queue          []*transaction
+	queue          []*Transaction
 	outstandingReq string
 }
 
@@ -63,11 +63,11 @@ type MMUImpl struct {
 	// numWalksArrived          uint64
 	interleaving uint64
 
-	inflightPWCRequests map[string]*transaction
+	inflightPWCRequests map[string]*Transaction
 	inflightMemRequests []*mem.ReadReq
 
 	maxMemRequestsInFlight int
-	mappingMemAccess       map[string]*transaction
+	mappingMemAccess       map[string]*Transaction
 }
 
 // Tick defines how the MMU update state each cycle
@@ -230,7 +230,7 @@ func (walker *PageWalker) sendToMem() {
 }
 
 func (walker *PageWalker) generateMemReq(
-	trans *transaction,
+	trans *Transaction,
 ) *mem.ReadReq {
 	PPN := trans.PPN
 	PPNWithOffset := walker.mmu.pageTable.AddOffset(PPN, trans.vAddr)
@@ -353,7 +353,7 @@ func (mmu *MMUImpl) sendToPageWalkCache(
 
 	rearrangedVAddr := mmu.pageTable.Rearrange(req.VAddr)
 	root := mmu.pageTable.GetRoot(req.PID)
-	translationInPipeline := transaction{
+	translationInPipeline := Transaction{
 		req:   req,
 		level: 0,
 		msgID: readReq.ID,
@@ -521,7 +521,7 @@ func (mmu *MMUImpl) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSe
 
 func (mmu *MMUImpl) fillPageWalkCache(
 	now akita.VTimeInSec,
-	trans *transaction,
+	trans *Transaction,
 ) {
 	level := uint64(trans.level)
 	data := uint64ToBytes(trans.PPN | level)
@@ -540,7 +540,7 @@ func (mmu *MMUImpl) fillPageWalkCache(
 
 func (walker *PageWalker) finalizeTransaction(
 	now akita.VTimeInSec,
-	trans *transaction,
+	trans *Transaction,
 ) bool {
 	req := trans.req
 	page, found := walker.mmu.pageTable.Find(req.PID, req.VAddr)
@@ -563,7 +563,7 @@ func (walker *PageWalker) finalizeTransaction(
 
 func (mmu *MMUImpl) doPageWalkHit(
 	now akita.VTimeInSec,
-	trans *transaction,
+	trans *Transaction,
 ) bool {
 	if !mmu.topSender.CanSend(1) {
 		return false

@@ -60,7 +60,7 @@ var _ = Describe("MMU", func() {
 		})
 
 		It("should stall parse from top if MMU is servicing max requests", func() {
-			mmu.walkingTranslations = make([]transaction, 16)
+			mmu.walkingTranslations = make([]Transaction, 16)
 
 			madeProgress := mmu.parseFromTop(10)
 
@@ -77,7 +77,7 @@ var _ = Describe("MMU", func() {
 				WithVAddr(0x1020).
 				WithDeviceID(0).
 				Build()
-			walking := transaction{req: req, cycleLeft: 10}
+			walking := Transaction{req: req, cycleLeft: 10}
 			mmu.walkingTranslations = append(mmu.walkingTranslations, walking)
 
 			madeProgress := mmu.walkPageTable(11)
@@ -101,7 +101,7 @@ var _ = Describe("MMU", func() {
 				WithVAddr(0x1000).
 				WithDeviceID(0).
 				Build()
-			walking := transaction{req: req, cycleLeft: 0}
+			walking := Transaction{req: req, cycleLeft: 0}
 			mmu.walkingTranslations = append(mmu.walkingTranslations, walking)
 
 			// pageTable.EXPECT().
@@ -135,7 +135,7 @@ var _ = Describe("MMU", func() {
 				WithVAddr(0x1000).
 				WithDeviceID(0).
 				Build()
-			walking := transaction{req: req, cycleLeft: 0}
+			walking := Transaction{req: req, cycleLeft: 0}
 			mmu.walkingTranslations =
 				append(mmu.walkingTranslations, walking)
 
@@ -154,7 +154,7 @@ var _ = Describe("MMU", func() {
 		var (
 			page    device.Page
 			req     *device.TranslationReq
-			walking transaction
+			walking Transaction
 		)
 
 		BeforeEach(func() {
@@ -178,7 +178,7 @@ var _ = Describe("MMU", func() {
 				WithVAddr(0x1000).
 				WithDeviceID(0).
 				Build()
-			walking = transaction{
+			walking = Transaction{
 				req:       req,
 				page:      page,
 				cycleLeft: 0,
@@ -284,7 +284,7 @@ var _ = Describe("MMU", func() {
 	// 	var (
 	// 		// page          device.Page
 	// 		req           *device.TranslationReq
-	// 		migrating     transaction
+	// 		migrating     Transaction
 	// 		migrationDone *device.PageMigrationRspFromDriver
 	// 	)
 
@@ -310,7 +310,7 @@ var _ = Describe("MMU", func() {
 	// 			WithVAddr(0x1000).
 	// 			WithDeviceID(0).
 	// 			Build()
-	// 		migrating = transaction{req: req, cycleLeft: 0}
+	// 		migrating = Transaction{req: req, cycleLeft: 0}
 	// 		mmu.currentOnDemandMigration = migrating
 	// 		migrationDone = device.NewPageMigrationRspFromDriver(0, nil, nil)
 	// 	})

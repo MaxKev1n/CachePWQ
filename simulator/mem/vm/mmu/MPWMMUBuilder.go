@@ -162,14 +162,14 @@ func (b MPWMMUBuilder) Build(name string) MMU {
 		pageWalker.mmu = mmu
 		pageWalker.status = 0
 		pageWalker.requestVector = make([]bool, mmu.queueCapacity)
-		pageWalker.outstandingReqs = make(map[string]*transaction)
+		pageWalker.outstandingReqs = make(map[string]*Transaction)
 
 		mmu.pageWalkers = append(mmu.pageWalkers, pageWalker)
 	}
 	fmt.Println("num walkers:", b.maxNumReqInFlight)
 
-	mmu.inflightPWCRequests = make(map[string]*transaction)
-	mmu.mappingMemAccess = make(map[string]*transaction)
+	mmu.inflightPWCRequests = make(map[string]*Transaction)
+	mmu.mappingMemAccess = make(map[string]*Transaction)
 
 	return mmu
 }

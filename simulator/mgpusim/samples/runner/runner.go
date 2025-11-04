@@ -312,6 +312,7 @@ type Runner struct {
 	TLBHitRateTracers               []TLBHitRateTracer
 	PWCHitRateTracers               []PWCHitRateTracer
 	TranslationReqTracer            *tracing.TranslationReqTracer
+	MMUCacheReqTracer               *tracing.MMUCacheReqTracer
 	RDMATransactionCounters         []rdmaTransactionCountTracer
 	CDMATransactionCounters         []rdmaTransactionCountTracer
 	CDMATransactionDataCounters     []rdmaTransactionCountTracer
@@ -354,6 +355,7 @@ type Runner struct {
 	ReportPageWalkLatency           bool
 	ReportDRAMLatency               bool
 	ReportTranslationReqLatency     bool
+	ReportMMUCacheReqLatency        bool
 	ReportAddressTranslatorLatency  bool
 	ReportCacheHitRate              bool
 	ReportTLBCoalesce               bool
@@ -532,6 +534,7 @@ func (r *Runner) ParseFlag() *Runner {
 		r.ReportCDMATransactionCount = true
 		//temp
 		r.ReportTranslationReqLatency = true
+		r.ReportMMUCacheReqLatency = true
 		r.ReportAddressTranslatorLatency = true
 		r.ReportL2TLBMSHRLen = true
 		r.ReportL2TLBQueueImbalance = true
@@ -639,6 +642,7 @@ func (r *Runner) Init() *Runner {
 	r.addTLBReqStallTracer()
 	r.addPageWalkerImbalanceTracker()
 	r.addL2TLBSQLTracer()
+	r.addMMUCacheReqTracer()
 	if *platformType != "ideal" {
 		r.addTranslationReqTracer()
 	}
@@ -2511,6 +2515,28 @@ func (r *Runner) addTranslationReqTracer() {
 	}
 }
 
+func (r *Runner) addMMUCacheReqTracer() {
+	if !r.ReportMMUCacheReqLatency {
+		return
+	}
+	tracer := tracing.NewMMUCacheReqTracer(
+		func(task tracing.Task) bool {
+			if task.Kind == "trace-mmu-cache-req" {
+				return true
+			}
+			return false
+		})
+	r.MMUCacheReqTracer = tracer
+	for _, gpu := range r.GPUDriver.GPUs {
+		for _, mmu := range gpu.MMUs {
+			tracing.CollectTrace(mmu, tracer)
+		}
+		for _, cache := range gpu.L1SCaches {
+			tracing.CollectTrace(cache, tracer)
+		}
+	}
+}
+
 func (r *Runner) addL2TLBQueueingImbalanceTracer() {
 	if !r.ReportL2TLBQueueImbalance {
 		return
@@ -2783,6 +2809,7 @@ func (r *Runner) reportStats() {
 	r.reportTLBMSHRStallTracing()
 	r.reportTLBReqStalls()
 	r.reportBookSimTracer()
+	r.reportMMUCacheReqLatency()
 
 	if *platformType != "ideal" {
 		r.reportTranslationReqLatency()
@@ -3435,6 +3462,23 @@ func (r *Runner) reportTranslationReqLatency() {
 			float64(tracer.TotalCount(stepName)),
 		)
 	}
+}
+
+func (r *Runner) reportMMUCacheReqLatency() {
+	tracer := r.MMUCacheReqTracer
+	if tracer == nil {
+		return
+	}
+	r.metricsCollector.Collect(
+		"mmu-cache-req",
+		"latency",
+		float64(tracer.AverageTime()),
+	)
+	r.metricsCollector.Collect(
+		"mmu-cache-req",
+		"num",
+		float64(tracer.TotalCount()),
+	)
 }
 
 func (r *Runner) reportAddressTranslatorLatency() {

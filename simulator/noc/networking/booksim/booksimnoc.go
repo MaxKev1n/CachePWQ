@@ -345,7 +345,10 @@ func (noc *BookSimNoC) prepareFlits(msg akita.Msg) int {
 }
 
 func (noc *BookSimNoC) route(m akita.Msg) int {
-	return noc.port2Node[m.Meta().Dst]
+	if node, exists := noc.port2Node[m.Meta().Dst]; exists {
+		return node
+	}
+	panic("BookSimNoC: dst port not mapped to node")
 }
 
 // ---- Wrapper ----

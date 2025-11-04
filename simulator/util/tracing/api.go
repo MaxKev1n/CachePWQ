@@ -140,6 +140,27 @@ func StopTracingNetworkReq(
 	EndTask(req.Meta().ID+"-trace-trans-req", now, domain)
 }
 
+func StartTracingNetwork(
+	req akita.Msg,
+	now akita.VTimeInSec,
+	domain NamedHookable,
+	kind string,
+) {
+	StartTask(req.Meta().ID+"-"+kind,
+		"",
+		now, domain, kind,
+		reflect.TypeOf(req).String(), req)
+}
+
+func StopTracingNetwork(
+	req akita.Msg,
+	now akita.VTimeInSec,
+	domain NamedHookable,
+	kind string,
+) {
+	EndTask(req.Meta().ID+"-"+kind, now, domain)
+}
+
 // TraceReqReceive generates a new task for the message handling. The kind of
 // the task is always "req_in".
 func TraceReqReceive(

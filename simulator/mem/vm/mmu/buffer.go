@@ -21,9 +21,9 @@ type TickingBuffer struct {
 
 	ToTop akita.Port
 
-	storage map[string]*transaction
+	storage map[string]*Transaction
 
-	pendingIssues []*transaction
+	pendingIssues []*Transaction
 
 	inPipeline     pipelining.Pipeline
 	inLookupBuffer util.Buffer
@@ -63,7 +63,7 @@ func (buffer *TickingBuffer) parseFromTop(now akita.VTimeInSec) bool {
 	}
 
 	switch msg := item.(type) {
-	case *transaction:
+	case *Transaction:
 		return buffer.push(now, msg)
 	case *mem.DataReadyRsp:
 		return buffer.pop(now, msg)
@@ -123,7 +123,7 @@ func (buffer *TickingBuffer) checkInBuffer() bool {
 	pipelineItem := item.(*PipelineItem)
 
 	switch msg := pipelineItem.msg.(type) {
-	case *transaction:
+	case *Transaction:
 		return buffer.insert(msg)
 	default:
 		panic("unknown message type in TickingBuffer")
@@ -151,10 +151,10 @@ func (buffer *TickingBuffer) checkOutBuffer() bool {
 }
 
 func (buffer *TickingBuffer) insert(
-	trans *transaction,
+	trans *Transaction,
 ) bool {
 	if _, exists := buffer.storage[trans.msgID]; exists {
-		panic("duplicated transaction in buffer")
+		panic("duplicated Transaction in buffer")
 	}
 
 	buffer.storage[trans.msgID] = trans
@@ -237,7 +237,7 @@ func NewTickingBuffer(
 		WithPostPipelineBuffer(buffer.outLookupBuffer)
 	buffer.outPipeline = outPipelineBuilder.Build(buffer.Name() + "_out_pipeline")
 
-	buffer.storage = make(map[string]*transaction)
+	buffer.storage = make(map[string]*Transaction)
 
 	return buffer
 }

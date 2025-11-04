@@ -5,4 +5,4 @@
 MMU:
   type: "IdealMMU"
 
-  walkLatency: 300
+  walkLatency: 200
