@@ -16,6 +16,23 @@ benchmarks = [
     "syr2k",
 ]
 
+memory_overhead = {
+    "convolution2d": 3487,
+    "fastwalshtransform": 2537,
+    "gups": 1925,
+    "jacobi1d": 8728,
+    "jacobi2d": 3487,
+    "kmeans": 3843,
+    "matrixtranspose": 2289,
+    "mis": 2276,
+    "pagerank": 5386,
+    "shoc-reduction": 6704,
+    "simpleconvolution": 8696,
+    "stencil2d": 2121,
+    "syr2k": 2009,
+    "syrk": 2030,
+}
+
 
 def get_booksim_tlb_nodes(
     config: str,
