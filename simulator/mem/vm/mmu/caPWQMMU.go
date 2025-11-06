@@ -341,61 +341,6 @@ func (mmu *CaPWQMMU) fetchMetaDataFromCache(
 	now akita.VTimeInSec,
 	rsp *mem.DataReadyRsp,
 ) bool {
-	//for i, trans := range mmu.pendingIssueToCache {
-	//	if trans.msgID == rsp.RespondTo {
-	//		mmu.pendingIssueToCache = append(
-	//			mmu.pendingIssueToCache[:i],
-	//			mmu.pendingIssueToCache[i+1:]...,
-	//		)
-	//
-	//		rspInfo := rsp.Info.(*mem.DataReadyRspInfo)
-	//		accessResult := rspInfo.AccessResult
-	//		src := rspInfo.Src
-	//
-	//		taskStep := fmt.Sprintf(
-	//			"chiplet-%s-level-%d-%s",
-	//			getChipletNum(src),
-	//			trans.level,
-	//			getAccessResultString(accessResult),
-	//		)
-	//
-	//		tracing.AddTaskStep(
-	//			trans.msgID+"MMU-mem-latency",
-	//			now, mmu,
-	//			taskStep,
-	//		)
-	//		tracing.EndTask(
-	//			trans.msgID+"MMU-mem-latency",
-	//			now,
-	//			mmu,
-	//		)
-	//
-	//		trans.PPN = binary.LittleEndian.Uint64(rsp.Data)
-	//		trans.state = memDone
-	//		if trans.level+1 == 4 {
-	//			for _, walker := range mmu.pageWalkers {
-	//				if len(walker.queue) == 0 {
-	//					continue
-	//				}
-	//				if walker.queue[0] == trans {
-	//					walker.finalizeTransaction(now, trans)
-	//				}
-	//			}
-	//			panic("Transaction not found!")
-	//		} else {
-	//			mmu.fillPageWalkCache(now, trans)
-	//		}
-	//
-	//		trans.level++
-	//
-	//		delete(mmu.inflightTransactions, rsp.RespondTo)
-	//
-	//		mmu.TranslationPort.Retrieve(now)
-	//
-	//		return true
-	//	}
-	//}
-
 	trans, ok := mmu.inflightMemRequests[rsp.RespondTo]
 	if !ok {
 		log.Panic("could not find matching mem access ID!")
@@ -419,7 +364,7 @@ func (mmu *CaPWQMMU) fetchMetaDataFromCache(
 	delete(mmu.inflightMemRequests, rsp.RespondTo)
 
 	mmu.inflightCacheRequests[req.ID] = trans
-	mmu.pendingRspFromMem[trans.msgID] = rsp
+	mmu.pendingRspFromMem[req.ID] = rsp
 
 	mmu.TranslationPort.Retrieve(now)
 
@@ -527,6 +472,8 @@ func (mmu *CaPWQMMU) sendToMem(now akita.VTimeInSec) bool {
 			mmu.pendingIssueToCache,
 			trans,
 		)
+
+		trans.msgID = req.Meta().ID
 
 		mmu.inflightMemRequests[req.ID] = trans
 
@@ -646,7 +593,7 @@ func (mmu *CaPWQMMU) handleMemResponse(
 		walker.queue = append([]*Transaction{trans}, walker.queue...)
 
 		trans := mmu.inflightCacheRequests[rsp.RespondTo]
-		PTERsp := mmu.pendingRspFromMem[trans.msgID]
+		PTERsp := mmu.pendingRspFromMem[rsp.RespondTo]
 
 		rspInfo := PTERsp.Info.(*mem.DataReadyRspInfo)
 		accessResult := rspInfo.AccessResult
@@ -670,7 +617,7 @@ func (mmu *CaPWQMMU) handleMemResponse(
 			mmu,
 		)
 
-		delete(mmu.pendingRspFromMem, trans.msgID)
+		delete(mmu.pendingRspFromMem, rsp.RespondTo)
 		delete(mmu.inflightCacheRequests, rsp.RespondTo)
 
 		trans.PPN = binary.LittleEndian.Uint64(PTERsp.Data)

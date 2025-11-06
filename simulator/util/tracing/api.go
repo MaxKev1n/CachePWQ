@@ -146,10 +146,13 @@ func StartTracingNetwork(
 	domain NamedHookable,
 	kind string,
 ) {
-	StartTask(req.Meta().ID+"-"+kind,
+	StartTask(
+		"",
 		"",
 		now, domain, kind,
-		reflect.TypeOf(req).String(), req)
+		reflect.TypeOf(req).String(), 
+		req.Meta().ID+"-"+kind,
+	)
 }
 
 func StopTracingNetwork(

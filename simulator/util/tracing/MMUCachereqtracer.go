@@ -49,7 +49,7 @@ func (t *MMUCacheReqTracer) StartTask(task Task) {
 	}
 
 	t.lock.Lock()
-	t.inflightTasks[task.ID] = task
+	t.inflightTasks[task.Detail.(string)] = task
 	t.lock.Unlock()
 }
 
