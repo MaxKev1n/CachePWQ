@@ -1,10 +1,90 @@
 package noc
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/native
-#cgo LDFLAGS: -L${SRCDIR}/native -lintersim
+#cgo linux LDFLAGS: -ldl
+#cgo darwin LDFLAGS: -ldl
 #include <stdlib.h>
-#include "booksim_shim.hpp"
+#include <dlfcn.h>
+
+// ---- 函数指针类型 ----
+typedef void* (*create_fn_t)(const char* cfg_path, int n_sms, int n_mems);
+typedef int   (*can_inject_fn_t)(void* net, int node, int n_flits);
+typedef void  (*inject_fn_t)(void* net, int src, int dst, unsigned long long pkt_id, int msg_type, int size_bytes);
+typedef void  (*cycle_fn_t)(void* net);
+typedef int   (*peek_fn_t)(void* net, int node, unsigned long long* pkt_id_out);
+typedef void  (*pop_fn_t)(void* net, int node);
+typedef int   (*busy_fn_t)(void* net);
+typedef void  (*destroy_fn_t)(void* net);
+
+// ---- 动态 API 表 ----
+typedef struct {
+    void* handle;
+    create_fn_t     create;
+    can_inject_fn_t can_inject;
+    inject_fn_t     inject;
+    cycle_fn_t      cycle;
+    peek_fn_t       peek;
+    pop_fn_t        pop;
+    busy_fn_t       busy;
+    destroy_fn_t    destroy;
+} intersim_api_t;
+
+// ---- 动态加载 ----
+static intersim_api_t* load_intersim(const char* path) {
+    intersim_api_t* api = (intersim_api_t*)calloc(1, sizeof(intersim_api_t));
+    if (!api) return NULL;
+
+#if defined(__linux__)
+    int flags = RTLD_NOW | RTLD_LOCAL | 0x00008; // RTLD_DEEPBIND (Linux only)
+#else
+    int flags = RTLD_NOW | RTLD_LOCAL;
+#endif
+
+    api->handle = dlopen(path, flags);
+    if (!api->handle) return NULL;
+
+    api->create     = (create_fn_t)     dlsym(api->handle, "booksim_create");
+    api->can_inject = (can_inject_fn_t) dlsym(api->handle, "booksim_can_inject");
+    api->inject     = (inject_fn_t)     dlsym(api->handle, "booksim_inject");
+    api->cycle      = (cycle_fn_t)      dlsym(api->handle, "booksim_cycle");
+    api->peek       = (peek_fn_t)       dlsym(api->handle, "booksim_peek");
+    api->pop        = (pop_fn_t)        dlsym(api->handle, "booksim_pop");
+    api->busy       = (busy_fn_t)       dlsym(api->handle, "booksim_busy");
+    api->destroy    = (destroy_fn_t)    dlsym(api->handle, "booksim_destroy");
+    return api;
+}
+
+static void unload_intersim(intersim_api_t* api) {
+    if (!api) return;
+    if (api->handle) dlclose(api->handle);
+    free(api);
+}
+
+// ---- C 层包装 ----
+static inline void* call_create(intersim_api_t* api, const char* cfg, int sms, int mems) {
+    return api->create(cfg, sms, mems);
+}
+static inline int call_caninject(intersim_api_t* api, void* net, int node, int n_flits) {
+    return api->can_inject(net, node, n_flits);
+}
+static inline void call_inject(intersim_api_t* api, void* net, int src, int dst, unsigned long long pkt_id, int msg_type, int size_bytes) {
+    api->inject(net, src, dst, pkt_id, msg_type, size_bytes);
+}
+static inline void call_cycle(intersim_api_t* api, void* net) {
+    api->cycle(net);
+}
+static inline int call_peek(intersim_api_t* api, void* net, int node, unsigned long long* pkt_id_out) {
+    return api->peek(net, node, pkt_id_out);
+}
+static inline void call_pop(intersim_api_t* api, void* net, int node) {
+    api->pop(net, node);
+}
+static inline int call_busy(intersim_api_t* api, void* net) {
+    return api->busy(net);
+}
+static inline void call_destroy(intersim_api_t* api, void* net) {
+    api->destroy(net);
+}
 */
 import "C"
 
@@ -71,6 +151,19 @@ func (noc *BookSimNoC) CreateNetwork(
 	config string,
 ) {
 	noc.wrapper = NewNetworkWrapper(config, noc.MaxNumSMSidePort, noc.MaxNumMemSidePort)
+
+	noc.nocPorts = make([]akita.Port, noc.MaxNumSMSidePort+noc.MaxNumMemSidePort)
+	noc.outPorts = make([]akita.Port, noc.MaxNumSMSidePort+noc.MaxNumMemSidePort)
+	log.Printf("[BookSimNoC] Created BookSim network with %d SM side ports and %d Mem side ports\n",
+		noc.MaxNumSMSidePort, noc.MaxNumMemSidePort)
+}
+
+// CreateNetworkWithLib initializes the BookSim network
+func (noc *BookSimNoC) CreateNetworkWithLib(
+	lib string,
+	config string,
+) {
+	noc.wrapper = NewNetworkWrapperWithLib(lib, config, noc.MaxNumSMSidePort, noc.MaxNumMemSidePort)
 
 	noc.nocPorts = make([]akita.Port, noc.MaxNumSMSidePort+noc.MaxNumMemSidePort)
 	noc.outPorts = make([]akita.Port, noc.MaxNumSMSidePort+noc.MaxNumMemSidePort)
@@ -354,8 +447,8 @@ func (noc *BookSimNoC) route(m akita.Msg) int {
 // ---- Wrapper ----
 
 type NetworkWrapper struct {
-	net C.booksim_net_t
-
+	net       unsafe.Pointer
+	api       *C.intersim_api_t
 	generator BookSimIDGenerator
 }
 
@@ -373,29 +466,42 @@ func NewNetworkWrapper(
 	numCUs int,
 	numMems int,
 ) *NetworkWrapper {
-	var path *C.char
-	if config != "" {
-		path = C.CString(config)
-		defer C.free(unsafe.Pointer(path))
-	} else {
-		panic("BookSimNoC: config is required")
+	return NewNetworkWrapperWithLib("/Users/chenzihang/codes/CachePWQ/simulator/noc/networking/booksim/native/libintersim.dylib", config, numCUs, numMems)
+}
+
+func NewNetworkWrapperWithLib(
+	libPath string,
+	config string,
+	nSMS int,
+	nMems int,
+) *NetworkWrapper {
+	if libPath == "" || config == "" {
+		panic("BookSimNoC: libPath/config required")
 	}
 
-	wrapper := &NetworkWrapper{}
-
-	wrapper.generator = BookSimIDGenerator{
-		nextID: 0,
+	cLib := C.CString(libPath)
+	defer C.free(unsafe.Pointer(cLib))
+	api := C.load_intersim(cLib)
+	if api == nil {
+		panic(fmt.Sprintf("[BookSimNoC] dlopen failed for %s", libPath))
 	}
-	wrapper.net = C.booksim_create(path, C.int(numCUs), C.int(numMems))
 
-	return wrapper
+	cCfg := C.CString(config)
+	defer C.free(unsafe.Pointer(cCfg))
+	net := C.call_create(api, cCfg, C.int(nSMS), C.int(nMems))
+	if net == nil {
+		C.unload_intersim(api)
+		panic(fmt.Sprintf("[BookSimNoC] booksim_create failed for %s", libPath))
+	}
+
+	return &NetworkWrapper{net: net, api: api}
 }
 
 func (wrapper *NetworkWrapper) CanInject(
 	node int,
 	numFlits int,
 ) bool {
-	return C.booksim_can_inject(wrapper.net, C.int(node), C.int(numFlits)) != 0
+	return C.call_caninject(wrapper.api, wrapper.net, C.int(node), C.int(numFlits)) != 0
 }
 
 func (wrapper *NetworkWrapper) Send(
@@ -420,7 +526,8 @@ func (wrapper *NetworkWrapper) Send(
 		msgType = 0
 	}
 
-	C.booksim_inject(
+	C.call_inject(
+		wrapper.api,
 		wrapper.net,
 		C.int(srcNode),
 		C.int(dstNode),
@@ -433,20 +540,20 @@ func (wrapper *NetworkWrapper) Send(
 }
 
 func (wrapper *NetworkWrapper) Tick() {
-	C.booksim_cycle(wrapper.net)
+	C.call_cycle(wrapper.api, wrapper.net)
 }
 
 func (wrapper *NetworkWrapper) Pop(
 	node int,
 ) {
-	C.booksim_pop(wrapper.net, C.int(node))
+	C.call_pop(wrapper.api, wrapper.net, C.int(node))
 }
 
 func (wrapper *NetworkWrapper) Peek(
 	node int,
 ) (bool, uint64) {
 	var packetID C.ulonglong
-	ok := C.booksim_peek(wrapper.net, C.int(node), &packetID)
+	ok := C.call_peek(wrapper.api, wrapper.net, C.int(node), &packetID)
 	if ok == 0 {
 		return false, 0
 	}
@@ -454,7 +561,7 @@ func (wrapper *NetworkWrapper) Peek(
 }
 
 func (wrapper *NetworkWrapper) Busy() bool {
-	return C.booksim_busy(wrapper.net) != 0
+	return C.call_busy(wrapper.api, wrapper.net) != 0
 }
 
 func (wrapper *NetworkWrapper) Open() bool {
@@ -463,7 +570,7 @@ func (wrapper *NetworkWrapper) Open() bool {
 
 func (wrapper *NetworkWrapper) Close() {
 	if wrapper.net != nil {
-		C.booksim_destroy(wrapper.net)
+		C.call_destroy(wrapper.api, wrapper.net)
 		wrapper.net = nil
 	}
 }

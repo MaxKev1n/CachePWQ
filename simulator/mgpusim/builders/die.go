@@ -48,7 +48,8 @@ type Chiplet struct {
 	L1ToL2Connection       *akita.DirectConnection
 	L2ToDramConnection     *akita.DirectConnection
 
-	BookSimNoC *noc.BookSimNoC
+	L1ToL2NoC       *noc.BookSimNoC
+	L1TLBToL2TLBNoC *noc.BookSimNoC
 
 	name      string
 	ChipletID uint64

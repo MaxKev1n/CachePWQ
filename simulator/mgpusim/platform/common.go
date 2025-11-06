@@ -41,7 +41,9 @@ type CommonPlatformBuilder struct {
 	memAllocatorType         string
 	customHSLpmdUnits        uint64
 
-	booksimNocConfig string
+	booksimMemory string
+	booksimTLB    string
+	booksimDir    string
 }
 
 // Makebuilder creates a EmuBuilder with default parameters.
@@ -124,8 +126,16 @@ func (b *CommonPlatformBuilder) WithCustomHSL(pmdUnits uint64) {
 	b.customHSLpmdUnits = pmdUnits
 }
 
-func (b *CommonPlatformBuilder) WithBookSimNocConfig(config string) {
-	b.booksimNocConfig = config
+func (b *CommonPlatformBuilder) WithBookSimMemoryNoC(config string) {
+	b.booksimMemory = config
+}
+
+func (b *CommonPlatformBuilder) WithBookSimTLBNoC(config string) {
+	b.booksimTLB = config
+}
+
+func (b *CommonPlatformBuilder) WithBookSimDir(dir string) {
+	b.booksimDir = dir
 }
 
 // // WithNumChiplets sets the number of chiplets in the mcm GPU.

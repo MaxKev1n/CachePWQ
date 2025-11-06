@@ -132,8 +132,12 @@ var customHSL = flag.Uint64("custom-hsl", 1,
 	"Specify the value of custom HSL directly to the builder")
 var yamlConfigFile = flag.String("yaml-config-file", "",
 	"Specify the path to a yaml config file to override default config values.")
-var booksimConfigFile = flag.String("booksim-config-file", "",
-	"Specify the path to a booksim config file to configure the NoC.")
+var MemoryConfigFile = flag.String("memory-noc-config-file", "",
+	"Specify the path to a booksim config file to configure the Memory NoC.")
+var TLBConfigFile = flag.String("tlb-noc-config-file", "",
+	"Specify the path to a booksim config file to configure the TLB NoC.")
+var booksimDir = flag.String("booksim-dir", "",
+	"Specify the path to the booksim directory.")
 var nocFileName = flag.String("noc-file-name", "",
 	"Specify the name of the output noc trace file.")
 
@@ -1038,7 +1042,9 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithSchedulingPartition(*schedulingPartition)
 		b.WithMemAllocatorType(*memAllocatorType)
 		b.WithLog2PageSize(*log2PageSize)
-		b.WithBookSimNocConfig(*booksimConfigFile)
+		b.WithBookSimMemoryNoC(*MemoryConfigFile)
+		b.WithBookSimTLBNoC(*TLBConfigFile)
+		b.WithBookSimDir(*booksimDir)
 		r.Engine, r.GPUDriver = b.Build()
 	case "monolithicCaPWQ":
 		b := platform.MakeMonolithicCaPWQPlatformBuilder()
@@ -1069,7 +1075,9 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithSchedulingPartition(*schedulingPartition)
 		b.WithMemAllocatorType(*memAllocatorType)
 		b.WithLog2PageSize(*log2PageSize)
-		b.WithBookSimNocConfig(*booksimConfigFile)
+		b.WithBookSimMemoryNoC(*MemoryConfigFile)
+		b.WithBookSimTLBNoC(*TLBConfigFile)
+		b.WithBookSimDir(*booksimDir)
 		r.Engine, r.GPUDriver = b.Build()
 	case "SMSide":
 		b := platform.MakeSMSideBuilder()
@@ -1100,7 +1108,9 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithSchedulingPartition(*schedulingPartition)
 		b.WithMemAllocatorType(*memAllocatorType)
 		b.WithLog2PageSize(*log2PageSize)
-		b.WithBookSimNocConfig(*booksimConfigFile)
+		b.WithBookSimMemoryNoC(*MemoryConfigFile)
+		b.WithBookSimTLBNoC(*TLBConfigFile)
+		b.WithBookSimDir(*booksimDir)
 		r.Engine, r.GPUDriver = b.Build()
 	case "MagicSMSide":
 		b := platform.MakeMagicSMSideBuilder()
@@ -1131,7 +1141,9 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithSchedulingPartition(*schedulingPartition)
 		b.WithMemAllocatorType(*memAllocatorType)
 		b.WithLog2PageSize(*log2PageSize)
-		b.WithBookSimNocConfig(*booksimConfigFile)
+		b.WithBookSimMemoryNoC(*MemoryConfigFile)
+		b.WithBookSimTLBNoC(*TLBConfigFile)
+		b.WithBookSimDir(*booksimDir)
 		r.Engine, r.GPUDriver = b.Build()
 	case "privateh2tlb":
 		b := platform.MakePrivateH2TLBPlatformBuilder()

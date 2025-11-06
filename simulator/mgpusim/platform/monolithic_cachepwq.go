@@ -65,7 +65,9 @@ func (b *MonolithicCaPWQPlatformBuilder) createGPUBuilder(
 	gpuBuilder.WithPageTable(gpuDriver.PageTable)
 	gpuBuilder.WithAlg(b.alg)
 	gpuBuilder.WithSchedulingPartition(b.partition)
-	gpuBuilder.WithBooksimConfig(b.booksimNocConfig)
+	gpuBuilder.WithBookSimMemory(b.booksimMemory)
+	gpuBuilder.WithBookSimTLB(b.booksimTLB)
+	gpuBuilder.WithBookSimDir(b.booksimDir)
 
 	b.setVisTracer(gpuDriver, gpuBuilder)
 	b.setTLBTracer(gpuBuilder)
