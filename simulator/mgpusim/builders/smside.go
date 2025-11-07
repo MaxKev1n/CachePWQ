@@ -216,8 +216,9 @@ func (b *SMSideGPUBuilder) createL1ToL2NoC(chiplet *Chiplet) {
 		numMemorySidePorts++
 	}
 
-	// Monolithic MMU
-	numSMSidePorts++
+	for range b.MMUs {
+		numSMSidePorts++
+	}
 
 	chiplet.L1ToL2NoC.MaxNumSMSidePort = numSMSidePorts
 	chiplet.L1ToL2NoC.MaxNumMemSidePort = numMemorySidePorts

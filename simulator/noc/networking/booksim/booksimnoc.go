@@ -167,8 +167,8 @@ func (noc *BookSimNoC) CreateNetworkWithLib(
 
 	noc.nocPorts = make([]akita.Port, noc.MaxNumSMSidePort+noc.MaxNumMemSidePort)
 	noc.outPorts = make([]akita.Port, noc.MaxNumSMSidePort+noc.MaxNumMemSidePort)
-	log.Printf("[BookSimNoC] Created BookSim network with %d SM side ports and %d Mem side ports\n",
-		noc.MaxNumSMSidePort, noc.MaxNumMemSidePort)
+	log.Printf("[BookSimNoC] Created BookSim network %s with %d SM side ports and %d Mem side ports\n",
+		noc.Name(), noc.MaxNumSMSidePort, noc.MaxNumMemSidePort)
 }
 
 // Close releases the underlying BookSim network
@@ -374,7 +374,7 @@ func (noc *BookSimNoC) Tick(now akita.VTimeInSec) bool {
 				tracing.MsgIDAtReceiver(msg, noc),
 				now,
 				noc,
-				fmt.Sprintf("%d:L1ToL2Noc:%d", srcNode, dstNode),
+				fmt.Sprintf("%d:%s:%d", srcNode, noc.Name(), dstNode),
 			)
 
 			in.Retrieve(now)
