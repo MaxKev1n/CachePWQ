@@ -39,12 +39,12 @@ func (t *Test) RegisterAgent(agent *Agent) {
 // destination port.
 func (t *Test) GenerateMsgs(n uint64) {
 	for i := uint64(0); i < n; i++ {
-		srcAgentID := rand.Intn(385)
+		srcAgentID := rand.Intn(192)
 		srcAgent := t.agents[srcAgentID]
 		srcPortID := rand.Intn(len(srcAgent.Ports))
 		srcPort := srcAgent.Ports[srcPortID]
 
-		dstAgentID := rand.Intn(33) + 385
+		dstAgentID := rand.Intn(1) + 192
 		for dstAgentID == srcAgentID {
 			dstAgentID = rand.Intn(len(t.agents))
 		}
