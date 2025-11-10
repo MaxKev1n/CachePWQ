@@ -1,6 +1,8 @@
 package writeback
 
 import (
+	"strings"
+
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/util/tracing"
@@ -55,6 +57,22 @@ func (p *topParser) Tick(now akita.VTimeInSec) bool {
 	p.cache.inFlightTransactions = append(p.cache.inFlightTransactions, trans)
 
 	tracing.TraceReqReceive(req, now, p.cache)
+
+	if strings.Contains(req.Meta().Src.Name(), "TranslationPort") {
+		tracing.AddTaskStep(
+			"l2_transaction",
+			now,
+			p.cache,
+			"mmu",
+		)
+	} else {
+		tracing.AddTaskStep(
+			"l2_transaction",
+			now,
+			p.cache,
+			"core",
+		)
+	}
 
 	p.cache.TopPort.Retrieve(now)
 

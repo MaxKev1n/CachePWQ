@@ -207,6 +207,16 @@ type BookSimLatencyTracer struct {
 	noc    tracing.NamedHookable
 }
 
+type L2AccessSourceTracer struct {
+	tracer *tracing.StepCountTracer
+	cache  akita.Component
+}
+
+type DRAMAccessSourceTracer struct {
+	tracer *tracing.StepCountTracer
+	dram   akita.Component
+}
+
 type PWCHitRateTracer struct {
 	tracer *tracing.StepCountTracer
 	mmu    mmu.MMU
@@ -327,6 +337,8 @@ type Runner struct {
 	PageAccessTracers               []CDMAAccessTracer
 	BookSimAccessTracers            []BookSimAccessTracer
 	BookSimLatencyTracers           []BookSimLatencyTracer
+	L2AccessSourceTracers           []L2AccessSourceTracer
+	DRAMAccessSourceTracers         []DRAMAccessSourceTracer
 	RTUAccessTracers                []RTUAccessTracer
 	DRAMTransactionCounters         []dramTransactionCountTracer
 	RemoteTLBLatencyTracers         []RemoteTLBLatencyTracer
@@ -353,6 +365,7 @@ type Runner struct {
 	Parallel                        bool
 	ReportInstCount                 bool
 	ReportCacheLatency              bool
+	ReportMemoryAccessSource        bool
 	ReportTLBLatency                bool
 	ReportTLBConditionalStats       bool
 	ReportMMUConditionalStats       bool
@@ -521,6 +534,7 @@ func (r *Runner) ParseFlag() *Runner {
 	if *reportAll {
 		r.ReportInstCount = true
 		r.ReportCacheLatency = true
+		r.ReportMemoryAccessSource = true
 		r.ReportTLBLatency = true
 		r.ReportTLBConditionalStats = true
 		r.ReportMMUConditionalStats = true
@@ -621,6 +635,7 @@ func (r *Runner) Init() *Runner {
 	r.addKernelTimeTracer()
 	r.addInstCountTracer()
 	r.addCacheLatencyTracer()
+	r.addMemoryAccessSourceTracer()
 	r.addTLBLatencyTracer()
 	r.addTLBCoalesceTracer()
 	r.addL2TLBMSHRLenTracer()
@@ -1645,6 +1660,24 @@ func (r *Runner) addCacheLatencyTracer() {
 			tracing.CollectTrace(pipeline, tracer)
 		}
 
+	}
+}
+
+func (r *Runner) addMemoryAccessSourceTracer() {
+	if !r.ReportMemoryAccessSource {
+		return
+	}
+
+	for _, gpu := range r.GPUDriver.GPUs {
+		for _, l2cache := range gpu.L2Caches {
+			tracer := tracing.NewStepCountTracer(
+				func(t tracing.Task) bool {
+					return t.ID == "l2_transaction"
+				})
+			r.L2AccessSourceTracers = append(r.L2AccessSourceTracers,
+				L2AccessSourceTracer{tracer: tracer, cache: l2cache})
+			tracing.CollectTrace(l2cache, tracer)
+		}
 	}
 }
 
@@ -2801,6 +2834,7 @@ func (r *Runner) reportStats() {
 	r.reportInstCount()
 	r.reportCacheLatency()
 	r.reportCacheHitRate()
+	r.reportMemoryAccessSource()
 	r.reportTLBLatency()
 	r.reportPageWalkLatency()
 	r.reportMMUConditionalStats()
@@ -2923,6 +2957,23 @@ func (r *Runner) reportCacheLatency() {
 			tracer.pipeline.Name(),
 			"req_average_pipeline_latency",
 			float64(tracer.tracer.AverageTime()),
+		)
+	}
+}
+
+func (r *Runner) reportMemoryAccessSource() {
+	for _, tracer := range r.L2AccessSourceTracers {
+		tracer.tracer.GetStepCount("mmu")
+		tracer.tracer.GetStepCount("core")
+		r.metricsCollector.Collect(
+			tracer.cache.Name(),
+			"mmu_access_count",
+			float64(tracer.tracer.GetStepCount("mmu")),
+		)
+		r.metricsCollector.Collect(
+			tracer.cache.Name(),
+			"core_access_count",
+			float64(tracer.tracer.GetStepCount("core")),
 		)
 	}
 }
