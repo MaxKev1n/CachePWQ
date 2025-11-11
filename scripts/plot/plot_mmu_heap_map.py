@@ -82,7 +82,6 @@ def collect_performance_data(
 
 
 def plot_heat_map(
-    benchmark: str,
     config: str,
     what: str,
     data: np.ndarray,
@@ -108,41 +107,63 @@ def plot_heat_map(
     plt.rcParams["mathtext.it"] = "Arial:italic"
     plt.rcParams["mathtext.bf"] = "Arial:bold"
 
-    # 创建热力图
-    if config == "MemorySide":
-        # 创建图形
-        plt.figure(figsize=(20, 6), dpi=300)
+    # 创建图形
+    plt.figure(figsize=(16, 10), dpi=300)
 
-        heatmap = sns.heatmap(
-            data,
-            annot=False,  # 在格子中显示数值
-            cmap="viridis",  # 颜色方案
-            cbar=True,  # 显示颜色条
-            cbar_kws={"orientation": "horizontal", "pad": 0.04, "shrink": 0.8},
-            square=True,  # 保持格子为正方形
-            linewidths=0.5,  # 格子间线宽
-            linecolor="white",  # 格子间线颜色
-            annot_kws={"size": 10},
-        )  # 注解文字大小
-    else:
-        # 创建图形
-        plt.figure(figsize=(20, 16), dpi=300)
+    # normalize
+    for i in range(data.shape[0]):
+        row_sum = np.sum(data[i, :])
+        if row_sum > 0:
+            data[i, :] = data[i, :] / row_sum
 
-        heatmap = sns.heatmap(
-            data,
-            annot=False,  # 在格子中显示数值
-            cmap="viridis",  # 颜色方案
-            cbar=True,  # 显示颜色条
-            square=True,  # 保持格子为正方形
-            linewidths=0.5,  # 格子间线宽
-            linecolor="white",  # 格子间线颜色
-            annot_kws={"size": 10},
-        )  # 注解文字大小
+    heatmap = sns.heatmap(
+        data,
+        annot=False,  # 不显示格子内数字
+        cmap="OrRd",  # 明显的颜色方案
+        cbar=True,  # 显示颜色条
+        cbar_kws={
+            "orientation": "horizontal",  # 水平放置
+            "pad": 0.05,  # 与图的间距
+            "shrink": 0.95,  # 缩放比例（整体长度）
+            "aspect": 60,  # ✅ 控制颜色条厚度（宽度）——值越大越细
+        },
+        square=True,
+        linewidths=0.6,
+        linecolor="black",
+        annot_kws={"size": 16},
+        # norm=plt.matplotlib.colors.PowerNorm(gamma=0.4),
+    )
+
+    # ✅ 获取 colorbar 对象
+    cbar = heatmap.collections[0].colorbar
+
+    # ✅ 修改颜色条刻度文字样式
+    cbar.ax.tick_params(labelsize=16, width=1.2, length=6)  # 刻度字号、线宽、刻度线长度
+    cbar.ax.xaxis.label.set_size(14)  # 颜色条标题大小
+    cbar.ax.xaxis.label.set_weight("bold")
+
+    # ✅ 修改字体和颜色
+    for label in cbar.ax.get_xticklabels():  # 如果是水平颜色条
+        label.set_fontname("Arial")  # 字体
+        label.set_color("black")  # 文字颜色
 
     # 设置标题和标签
-    plt.title("Node-to-Node Accesses", fontsize=14, fontweight="bold", pad=20)
-    plt.xlabel("Destination Node ID", fontsize=12)
-    plt.ylabel("Source Node ID", fontsize=12)
+    # plt.xlabel(
+    #     "L2 Cache Partition Index",
+    #     fontsize=20,
+    #     fontweight="bold",
+    # )
+    heatmap.set_xticklabels(
+        [f"{i}" for i in range(data.shape[1])],
+        fontsize=18,
+        fontweight="bold",
+    )
+    heatmap.set_yticklabels(
+        [get_short_name(b) for b in get_benchmarks()],
+        rotation=0,
+        fontsize=16,
+        fontweight="bold",
+    )
 
     plt.tight_layout()
 
@@ -152,7 +173,7 @@ def plot_heat_map(
     for spine in ax.spines.values():
         spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
 
-    output_file = os.path.join(out_dir, f"{benchmark}_{config}_{what}_heap_map")
+    output_file = os.path.join(out_dir, f"{config}_{what}_heap_map")
     plt.savefig(output_file + ".png")
     plt.savefig(output_file + ".pdf")
     print(f"Plot saved to {output_file}")
@@ -171,6 +192,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    nodes = get_booksim_mem_nodes("MemorySide")
+
+    total_perf_data = np.zeros((len(get_benchmarks()), 32))
+
+    i = 0
     for benchmark in get_benchmarks():
         perf_data = collect_performance_data(
             config="MemorySide",
@@ -183,33 +209,13 @@ if __name__ == "__main__":
             print(f"No data for benchmark {benchmark}, skipping plot.")
             continue
 
-        perf_data = perf_data[192:193, 193:]
+        total_perf_data[i, :] = perf_data[192:193, 193:]
 
-        plot_heat_map(
-            benchmark=benchmark,
-            config="MemorySide",
-            what="memory",
-            data=perf_data,
-            out_dir=args.outDir,
-        )
+        i += 1
 
-        perf_data = collect_performance_data(
-            config="SMSide",
-            type="memory",
-            benchmark_name=benchmark,
-            input_dir="../../data/SMSide-2NoC-Booksim",
-        )
-
-        if perf_data.sum() == 0:
-            print(f"No data for benchmark {benchmark}, skipping plot.")
-            continue
-
-        perf_data = perf_data[192:208, 208:]
-
-        plot_heat_map(
-            benchmark=benchmark,
-            config="SMSide",
-            what="memory",
-            data=perf_data,
-            out_dir=args.outDir,
-        )
+    plot_heat_map(
+        config="MemorySide",
+        what="mmu",
+        data=total_perf_data,
+        out_dir=args.outDir,
+    )

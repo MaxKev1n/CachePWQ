@@ -31,28 +31,24 @@ memory_overhead = {
     "stencil2d": 2121,
     "syr2k": 2009,
     "syrk": 2030,
+    "spmv": 7130,
 }
 
 
 def get_booksim_tlb_nodes(
     config: str,
 ) -> list:
-    if config == "monolithic":
+    if config == "MemorySide":
         nodes = []
 
-        for i in range(96, 192):
+        for i in range(0, 193):
             nodes.append(i)
-
-        nodes.append(209)
 
         return nodes
     elif config == "SMSide":
         nodes = []
 
-        for i in range(96, 192):
-            nodes.append(i)
-
-        for i in range(224, 240):
+        for i in range(0, 208):
             nodes.append(i)
 
         return nodes
@@ -63,23 +59,17 @@ def get_booksim_tlb_nodes(
 def get_booksim_mem_nodes(
     config: str,
 ) -> list:
-    if config == "monolithic":
+    if config == "MemorySide":
         nodes = []
 
-        for i in range(0, 96):
-            nodes.append(i)
-
-        for i in range(193, 209):
+        for i in range(0, 225):
             nodes.append(i)
 
         return nodes
     elif config == "SMSide":
         nodes = []
 
-        for i in range(0, 96):
-            nodes.append(i)
-
-        for i in range(208, 224):
+        for i in range(0, 240):
             nodes.append(i)
 
         return nodes

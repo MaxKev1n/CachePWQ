@@ -52,12 +52,12 @@ def collect_performance_csv(
         what = row.iloc[2]
         value = row.iloc[3]
 
-        if "TLB" in where and "L2" in where:
-            if " tlb-hit" == what:
+        if "L2TLB" in where:
+            if "-tlb-hit" in what:
                 performance_data[0] += value
-            elif " tlb-miss" == what:
+            elif "-tlb-miss" in what:
                 performance_data[1] += value
-            elif " tlb-mshr-hit" == what:
+            elif "-tlb-mshr-hit" in what:
                 performance_data[2] += value
 
     return performance_data
@@ -65,6 +65,7 @@ def collect_performance_csv(
 
 def collect_performance_data(
     benchmark_name: str,
+    demand_where: str,
     input_dir: str,
 ) -> float:
     """
@@ -77,7 +78,7 @@ def collect_performance_data(
     Returns:
         list: A list of dictionaries containing performance data.
     """
-    performance_data = 0
+    performance_data = [0, 0, 0]
 
     file_path = os.path.join(input_dir, f"{benchmark_name}.csv")
 
@@ -90,36 +91,26 @@ def collect_performance_data(
     df = pd.read_csv(file_path)
 
     for _, row in df.iterrows():
-        if row.iloc[1] == " driver" and row.iloc[2] == " kernel_time":
-            performance_data = row.iloc[3]
+        where = row.iloc[1]
+        what = row.iloc[2]
+        value = row.iloc[3]
 
-            if performance_data == 0:
-                print(f"Warning: kernel time for {benchmark_name} is zero.")
-
-                continue
-
-            else:
-                break
-
-        if (
-            row.iloc[1] == " GPU1.CommandProcessor"
-            and row.iloc[2] == " kernel_time (force stop) 0"
-        ):
-            performance_data = row.iloc[3]
-            print(
-                f"Warning: kernel time (force stop) for {benchmark_name} is {performance_data}."
-            )
-
-            break
+        if demand_where in where:
+            if "-mshr-hit" in what:
+                performance_data[2] += value
+            elif "-miss" in what:
+                performance_data[1] += value
+            elif "-hit" in what:
+                performance_data[0] += value
 
     return performance_data
 
 
-def plot_normalized_time(
-    baseline: pd.DataFrame,
-    Opt1: pd.DataFrame,
-    Opt2: pd.DataFrame,
-    Opt3: pd.DataFrame,
+def plot_miss_rate(
+    l1tlb: pd.DataFrame,
+    l2tlb: pd.DataFrame,
+    l1cache: pd.DataFrame,
+    l2cache: pd.DataFrame,
     out_dir: str,
 ) -> None:
     """
@@ -146,162 +137,74 @@ def plot_normalized_time(
 
     benchmarks = get_benchmarks()
 
-    bar_width = 0.4
-    r1 = np.arange(len(benchmarks) + 1) * (4 * bar_width + 0.2)
+    bar_width = 0.2
+    r1 = np.arange(len(benchmarks)) * (4 * bar_width + 0.2)
     r2 = [x + bar_width for x in r1]
     r3 = [x + bar_width for x in r2]
     r4 = [x + bar_width for x in r3]
 
-    # Geometric mean
-    baseline = pd.concat(
-        [
-            baseline,
-            pd.DataFrame(
-                {
-                    "Benchmark": ["Geometric Mean"],
-                    "Data": [geometric_mean(baseline["Data"])],
-                }
-            ),
-        ],
-        ignore_index=True,
+    L1VTLB_miss_rate = l1tlb["Miss"] / (
+        l1tlb["Hit"] + l1tlb["Miss"] + l1tlb["MSHR-Hit"]
     )
-    Opt1 = pd.concat(
-        [
-            Opt1,
-            pd.DataFrame(
-                {
-                    "Benchmark": ["Geometric Mean"],
-                    "Data": [geometric_mean(Opt1["Data"])],
-                }
-            ),
-        ],
-        ignore_index=True,
+    L2TLB_miss_rate = l2tlb["Miss"] / (l2tlb["Hit"] + l2tlb["Miss"] + l2tlb["MSHR-Hit"])
+    L1VCache_miss_rate = l1cache["Miss"] / (
+        l1cache["Hit"] + l1cache["Miss"] + l1cache["MSHR-Hit"]
     )
-    Opt2 = pd.concat(
-        [
-            Opt2,
-            pd.DataFrame(
-                {
-                    "Benchmark": ["Geometric Mean"],
-                    "Data": [geometric_mean(Opt2["Data"])],
-                }
-            ),
-        ],
-        ignore_index=True,
+    L2Cache_miss_rate = l2cache["Miss"] / (
+        l2cache["Hit"] + l2cache["Miss"] + l2cache["MSHR-Hit"]
     )
-    Opt3 = pd.concat(
-        [
-            Opt3,
-            pd.DataFrame(
-                {
-                    "Benchmark": ["Geometric Mean"],
-                    "Data": [geometric_mean(Opt3["Data"])],
-                }
-            ),
-        ],
-        ignore_index=True,
-    )
-
-    # Normalize the time
-    Opt1["Data"] = [
-        (
-            baseline["Data"][i] / Opt1["Data"][i]
-            if Opt1["Data"][i] != 0 and baseline["Data"][i] != 0
-            else 0
-        )
-        for i in range(len(benchmarks) + 1)
-    ]
-    Opt2["Data"] = [
-        (
-            baseline["Data"][i] / Opt2["Data"][i]
-            if Opt2["Data"][i] != 0 and baseline["Data"][i] != 0
-            else 0
-        )
-        for i in range(len(benchmarks) + 1)
-    ]
-    Opt3["Data"] = [
-        (
-            baseline["Data"][i] / Opt3["Data"][i]
-            if Opt3["Data"][i] != 0 and baseline["Data"][i] != 0
-            else 0
-        )
-        for i in range(len(benchmarks) + 1)
-    ]
-
-    baseline["Data"] = [1.0 for _ in range(len(benchmarks) + 1)]
 
     bar1 = plt.bar(
         r1,
-        baseline["Data"],
+        L1VTLB_miss_rate,
         width=bar_width,
-        label="Baseline",
+        label="L1VTLB",
         color="#fcfdf7",
         edgecolor="black",
         linewidth=1.5,
     )
     bar2 = plt.bar(
         r2,
-        Opt1["Data"],
+        L2TLB_miss_rate,
         width=bar_width,
-        label="SMSide-Baseline MMU",
+        label="L2TLB",
         color="#cce5d8",
         edgecolor="black",
         linewidth=1.5,
     )
     bar3 = plt.bar(
         r3,
-        Opt2["Data"],
+        L1VCache_miss_rate,
         width=bar_width,
-        label="SMSide-Baseline MMU-64",
+        label="L1VCache",
         color="#6ba78b",
         edgecolor="black",
         linewidth=1.5,
     )
     bar4 = plt.bar(
         r4,
-        Opt3["Data"],
+        L2Cache_miss_rate,
         width=bar_width,
-        label="Memory-Side Ideal MMU",
+        label="L2Cache",
         color="#3f6b5c",
         edgecolor="black",
         linewidth=1.5,
     )
 
-    # for bar in bar1 + bar2 + bar3 + bar4:
-    #     height = bar.get_height()
-    #     x = bar.get_x() + bar.get_width() / 2
-
-    #     plt.annotate(
-    #         f"{height:.2f}",
-    #         xy=(x, height),
-    #         xytext=(0, 20),  # 相对偏移 (0,15) 表示向上15pt
-    #         textcoords="offset points",
-    #         ha="center",
-    #         va="bottom",
-    #         fontsize=26,
-    #         fontweight="bold",
-    #         bbox=dict(
-    #             facecolor="white",
-    #             edgecolor="black",
-    #             boxstyle="round,pad=0.1",
-    #         ),
-    #         # arrowprops=dict(arrowstyle="-", color="red", lw=2),
-    #     )
-
     plt.xlim(min(r1) - bar_width, max(r4) + bar_width)
     plt.xticks(
         [r + 1.5 * bar_width for r in r1],
-        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["GMean"],
+        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))],
         fontsize=22,
         fontweight="bold",
     )
-    plt.ylabel("Speedup", fontsize=22, fontweight="bold")
+    plt.ylabel("Miss Rate", fontsize=22, fontweight="bold")
     plt.yticks(
-        np.arange(0, 3.1, 0.5),
+        np.arange(0, 1.1, 0.25),
         fontsize=22,
         fontweight="bold",
     )
-    plt.ylim(0, 3)
+    plt.ylim(0, 1)
     plt.legend(
         loc="upper center",
         ncol=5,
@@ -322,7 +225,7 @@ def plot_normalized_time(
     for spine in ax.spines.values():
         spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
 
-    output_file = os.path.join(out_dir, "SMSideMMU_Performance_Comparison")
+    output_file = os.path.join(out_dir, "MemorySide_Miss_Rate")
     plt.savefig(output_file + ".png")
     plt.savefig(output_file + ".pdf")
     print(f"Plot saved to {output_file}")
@@ -332,6 +235,7 @@ def single_benchmark(args):
     perf_data = collect_performance_csv(
         file_path=args.csv,
     )
+    print(perf_data)
     print(
         perf_data,
         (perf_data[0] + perf_data[2]) / (perf_data[0] + perf_data[1] + perf_data[2]),
@@ -340,32 +244,34 @@ def single_benchmark(args):
 
 
 def multi_benchmark(args):
-    baseline = pd.DataFrame(
-        columns=["Benchmark", "Data"],
+    L1VTLB = pd.DataFrame(
+        columns=["Benchmark", "Hit", "Miss", "MSHR-Hit"],
     )
-    Opt1 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
+    L2TLB = pd.DataFrame(
+        columns=["Benchmark", "Hit", "Miss", "MSHR-Hit"],
     )
-    Opt2 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
+    L1VCache = pd.DataFrame(
+        columns=["Benchmark", "Hit", "Miss", "MSHR-Hit"],
     )
-    Opt3 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
+    L2Cache = pd.DataFrame(
+        columns=["Benchmark", "Hit", "Miss", "MSHR-Hit"],
     )
 
     for benchmark in get_benchmarks():
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
+            demand_where="L1VTLB",
             input_dir="../../data/baseline",
         )
-
-        baseline = pd.concat(
+        L1VTLB = pd.concat(
             [
-                baseline,
+                L1VTLB,
                 pd.DataFrame(
                     {
                         "Benchmark": [benchmark],
-                        "Data": [perf_data],
+                        "Hit": [perf_data[0]],
+                        "Miss": [perf_data[1]],
+                        "MSHR-Hit": [perf_data[2]],
                     }
                 ),
             ],
@@ -374,16 +280,18 @@ def multi_benchmark(args):
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/SMSide-baselineMMU",
+            demand_where="L2TLB",
+            input_dir="../../data/baseline",
         )
-
-        Opt1 = pd.concat(
+        L2TLB = pd.concat(
             [
-                Opt1,
+                L2TLB,
                 pd.DataFrame(
                     {
                         "Benchmark": [benchmark],
-                        "Data": [perf_data],
+                        "Hit": [perf_data[0]],
+                        "Miss": [perf_data[1]],
+                        "MSHR-Hit": [perf_data[2]],
                     }
                 ),
             ],
@@ -392,16 +300,18 @@ def multi_benchmark(args):
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/SMSide-baselineMMU-64",
+            demand_where="L1VCache",
+            input_dir="../../data/baseline",
         )
-
-        Opt2 = pd.concat(
+        L1VCache = pd.concat(
             [
-                Opt2,
+                L1VCache,
                 pd.DataFrame(
                     {
                         "Benchmark": [benchmark],
-                        "Data": [perf_data],
+                        "Hit": [perf_data[0]],
+                        "Miss": [perf_data[1]],
+                        "MSHR-Hit": [perf_data[2]],
                     }
                 ),
             ],
@@ -410,28 +320,30 @@ def multi_benchmark(args):
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/MemorySideIdealMMU",
+            demand_where="L2_",
+            input_dir="../../data/baseline",
         )
-
-        Opt3 = pd.concat(
+        L2Cache = pd.concat(
             [
-                Opt3,
+                L2Cache,
                 pd.DataFrame(
                     {
                         "Benchmark": [benchmark],
-                        "Data": [perf_data],
+                        "Hit": [perf_data[0]],
+                        "Miss": [perf_data[1]],
+                        "MSHR-Hit": [perf_data[2]],
                     }
                 ),
             ],
             ignore_index=True,
         )
 
-    plot_normalized_time(
-        baseline=baseline.copy(),
-        Opt1=Opt1.copy(),
-        Opt2=Opt2.copy(),
-        Opt3=Opt3.copy(),
-        out_dir=args.outDir,
+    plot_miss_rate(
+        L1VTLB,
+        L2TLB,
+        L1VCache,
+        L2Cache,
+        args.outDir,
     )
 
 

@@ -38,7 +38,7 @@ def collect_performance_data(
     Returns:
         list: A list of dictionaries containing performance data.
     """
-    performance_data = 0
+    performance_data = [0, 0]
 
     file_path = os.path.join(input_dir, f"{benchmark_name}.csv")
 
@@ -51,36 +51,18 @@ def collect_performance_data(
     df = pd.read_csv(file_path)
 
     for _, row in df.iterrows():
-        if row.iloc[1] == " driver" and row.iloc[2] == " kernel_time":
-            performance_data = row.iloc[3]
+        if "L1ToL2NoC" in row.iloc[1] and row.iloc[2] == " trans_latency":
+            performance_data[0] = row.iloc[3]
 
-            if performance_data == 0:
-                print(f"Warning: kernel time for {benchmark_name} is zero.")
-
-                continue
-
-            else:
-                break
-
-        if (
-            row.iloc[1] == " GPU1.CommandProcessor"
-            and row.iloc[2] == " kernel_time (force stop) 0"
-        ):
-            performance_data = row.iloc[3]
-            print(
-                f"Warning: kernel time (force stop) for {benchmark_name} is {performance_data}."
-            )
-
-            break
+        elif "L1ToL2NoC" in row.iloc[1] and row.iloc[2] == " trans_count":
+            performance_data[1] = row.iloc[3]
 
     return performance_data
 
 
-def plot_normalized_time(
+def plot_normalized_latency(
     baseline: pd.DataFrame,
     Opt1: pd.DataFrame,
-    Opt2: pd.DataFrame,
-    Opt3: pd.DataFrame,
     out_dir: str,
 ) -> None:
     """
@@ -103,15 +85,15 @@ def plot_normalized_time(
     plt.rcParams["mathtext.it"] = "Arial:italic"
     plt.rcParams["mathtext.bf"] = "Arial:bold"
 
+    Normal_latency = 0.000000007
+
     plt.figure(figsize=(20, 5), dpi=300)
 
     benchmarks = get_benchmarks()
 
-    bar_width = 0.2
-    r1 = np.arange(len(benchmarks) + 1) * (4 * bar_width + 0.1)
+    bar_width = 0.4
+    r1 = np.arange(len(benchmarks) + 1) * (2 * bar_width + 0.2)
     r2 = [x + bar_width for x in r1]
-    r3 = [x + bar_width for x in r2]
-    r4 = [x + bar_width for x in r3]
 
     # Geometric mean
     baseline = pd.concat(
@@ -120,7 +102,7 @@ def plot_normalized_time(
             pd.DataFrame(
                 {
                     "Benchmark": ["Geometric Mean"],
-                    "Data": [geometric_mean(baseline["Data"])],
+                    "Latency": [geometric_mean(baseline["Latency"])],
                 }
             ),
         ],
@@ -132,31 +114,7 @@ def plot_normalized_time(
             pd.DataFrame(
                 {
                     "Benchmark": ["Geometric Mean"],
-                    "Data": [geometric_mean(Opt1["Data"])],
-                }
-            ),
-        ],
-        ignore_index=True,
-    )
-    Opt2 = pd.concat(
-        [
-            Opt2,
-            pd.DataFrame(
-                {
-                    "Benchmark": ["Geometric Mean"],
-                    "Data": [geometric_mean(Opt2["Data"])],
-                }
-            ),
-        ],
-        ignore_index=True,
-    )
-    Opt3 = pd.concat(
-        [
-            Opt3,
-            pd.DataFrame(
-                {
-                    "Benchmark": ["Geometric Mean"],
-                    "Data": [geometric_mean(Opt3["Data"])],
+                    "Latency": [geometric_mean(Opt1["Latency"])],
                 }
             ),
         ],
@@ -164,79 +122,40 @@ def plot_normalized_time(
     )
 
     # Normalize the time
-    Opt1["Data"] = [
-        (
-            baseline["Data"][i] / Opt1["Data"][i]
-            if Opt1["Data"][i] != 0 and baseline["Data"][i] != 0
-            else 0
-        )
+    baseline["Latency"] = [1.0 for _ in range(len(baseline))]
+    Opt1["Latency"] = [
+        (Opt1["Latency"][i] / Normal_latency if Opt1["Latency"][i] != 0 else 0)
         for i in range(len(benchmarks) + 1)
     ]
-    Opt2["Data"] = [
-        (
-            baseline["Data"][i] / Opt2["Data"][i]
-            if Opt2["Data"][i] != 0 and baseline["Data"][i] != 0
-            else 0
-        )
-        for i in range(len(benchmarks) + 1)
-    ]
-    Opt3["Data"] = [
-        (
-            baseline["Data"][i] / Opt3["Data"][i]
-            if Opt3["Data"][i] != 0 and baseline["Data"][i] != 0
-            else 0
-        )
-        for i in range(len(benchmarks) + 1)
-    ]
-
-    baseline["Data"] = [1.0 for _ in range(len(benchmarks) + 1)]
 
     bar1 = plt.bar(
         r1,
-        baseline["Data"],
+        baseline["Latency"],
         width=bar_width,
-        label="4 GB/s NoC",
+        label="Ideal NoC (Normalized)",
         color="#fcfdf7",
         edgecolor="black",
         linewidth=1.5,
     )
     bar2 = plt.bar(
         r2,
-        Opt1["Data"],
+        Opt1["Latency"],
         width=bar_width,
-        label="8 GB/s NoC",
+        label="MemorySide (Baseline)",
         color="#cce5d8",
         edgecolor="black",
         linewidth=1.5,
     )
-    bar3 = plt.bar(
-        r3,
-        Opt2["Data"],
-        width=bar_width,
-        label="16 GB/s NoC",
-        color="#6ba78b",
-        edgecolor="black",
-        linewidth=1.5,
-    )
-    bar4 = plt.bar(
-        r4,
-        Opt3["Data"],
-        width=bar_width,
-        label="32 GB/s NoC",
-        color="#3f6b5c",
-        edgecolor="black",
-        linewidth=1.5,
-    )
 
-    for bar in bar1 + bar2 + bar3 + bar4:
+    for bar in bar1 + bar2:
         height = bar.get_height()
         x = bar.get_x() + bar.get_width() / 2
 
-        if height >= 4.5:
+        if height >= 10:
             plt.annotate(
                 f"{height:.1f}",
-                xy=(x, 4.2),
-                xytext=(0, 20),  # 相对偏移 (0,15) 表示向上15pt
+                xy=(x, 8.5),
+                xytext=(0, 10),  # 相对偏移 (0,15) 表示向上15pt
                 textcoords="offset points",
                 ha="center",
                 va="bottom",
@@ -250,20 +169,20 @@ def plot_normalized_time(
                 # arrowprops=dict(arrowstyle="-", color="red", lw=2),
             )
 
-    plt.xlim(min(r1) - bar_width, max(r4) + bar_width)
+    plt.xlim(min(r1) - bar_width, max(r2) + bar_width)
     plt.xticks(
-        [r + 1.5 * bar_width for r in r1],
+        [r + 0.5 * bar_width for r in r1],
         [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["GMean"],
-        fontsize=24,
+        fontsize=22,
         fontweight="bold",
     )
-    plt.ylabel("Speedup", fontsize=24, fontweight="bold")
+    plt.ylabel("Normalized NoC Latency", fontsize=22, fontweight="bold")
     plt.yticks(
-        np.arange(0, 5.1, 1),
-        fontsize=26,
+        np.arange(0, 10.1, 2),
+        fontsize=22,
         fontweight="bold",
     )
-    plt.ylim(0, 5)
+    plt.ylim(0, 10)
     plt.legend(
         loc="upper center",
         ncol=5,
@@ -272,7 +191,7 @@ def plot_normalized_time(
         frameon=True,
         fancybox=True,
         framealpha=0.7,
-        prop={"weight": "bold", "size": 26},
+        prop={"weight": "bold", "size": 22},
     )
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.grid(axis="y", alpha=0.3)
@@ -284,9 +203,7 @@ def plot_normalized_time(
     for spine in ax.spines.values():
         spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
 
-    output_file = os.path.join(
-        out_dir, "IndependentNoC_bandwidth_Performance_Comparison"
-    )
+    output_file = os.path.join(out_dir, "NoC_Latency_Comparison")
     plt.savefig(output_file + ".png")
     plt.savefig(output_file + ".pdf")
     print(f"Plot saved to {output_file}")
@@ -306,22 +223,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     baseline = pd.DataFrame(
-        columns=["Benchmark", "Data"],
+        columns=["Benchmark", "Latency", "Count"],
     )
     Opt1 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
-    )
-    Opt2 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
-    )
-    Opt3 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
+        columns=["Benchmark", "Latency", "Count"],
     )
 
     for benchmark in get_benchmarks():
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/MemorySide-4GB-BookSim",
+            input_dir="../../data/MemorySide-BookSim",
         )
 
         baseline = pd.concat(
@@ -330,7 +241,8 @@ if __name__ == "__main__":
                 pd.DataFrame(
                     {
                         "Benchmark": [benchmark],
-                        "Data": [perf_data],
+                        "Latency": [perf_data[0]],
+                        "Count": [perf_data[1]],
                     }
                 ),
             ],
@@ -339,7 +251,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/MemorySide-8GB-BookSim",
+            input_dir="../../data/MemorySideCaPWQ-BookSim",
         )
 
         Opt1 = pd.concat(
@@ -348,53 +260,16 @@ if __name__ == "__main__":
                 pd.DataFrame(
                     {
                         "Benchmark": [benchmark],
-                        "Data": [perf_data],
+                        "Latency": [perf_data[0]],
+                        "Count": [perf_data[1]],
                     }
                 ),
             ],
             ignore_index=True,
         )
 
-        perf_data = collect_performance_data(
-            benchmark_name=benchmark,
-            input_dir="../../data/MemorySide-16GB-BookSim",
-        )
-
-        Opt2 = pd.concat(
-            [
-                Opt2,
-                pd.DataFrame(
-                    {
-                        "Benchmark": [benchmark],
-                        "Data": [perf_data],
-                    }
-                ),
-            ],
-            ignore_index=True,
-        )
-
-        perf_data = collect_performance_data(
-            benchmark_name=benchmark,
-            input_dir="../../data/MemorySide-2NoC-BookSim",
-        )
-
-        Opt3 = pd.concat(
-            [
-                Opt3,
-                pd.DataFrame(
-                    {
-                        "Benchmark": [benchmark],
-                        "Data": [perf_data],
-                    }
-                ),
-            ],
-            ignore_index=True,
-        )
-
-    plot_normalized_time(
+    plot_normalized_latency(
         baseline=baseline.copy(),
-        Opt1=Opt1.copy(),
-        Opt2=Opt2.copy(),
-        Opt3=Opt3.copy(),
+        Opt1=baseline.copy(),
         out_dir=args.outDir,
     )
