@@ -186,7 +186,7 @@ func (mmu *MMUImpl) walkPageTable(now akita.VTimeInSec) bool {
 		}
 	}
 
-	return numTranslations > 0
+	return numTranslations > 0 || len(mmu.queue) > 0
 }
 
 func (walker *PageWalker) walkPageTable() {

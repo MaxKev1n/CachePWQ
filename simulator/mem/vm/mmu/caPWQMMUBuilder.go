@@ -126,7 +126,7 @@ func (b caPWQMMUBuilder) Build(name string) MMU {
 		name, b.engine, b.freq, mmu)
 	//mmu.migrationQueueSize = 4096
 
-	mmu.queueCapacity = 8
+	mmu.queueCapacity = 8 * b.maxNumReqInFlight
 
 	mmu.ToTop = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToTop")
 	mmu.ControlPort = akita.NewLimitNumMsgPort(mmu, 1, name+".ControlPort")
@@ -149,15 +149,10 @@ func (b caPWQMMUBuilder) Build(name string) MMU {
 		walker := new(CaPWQPageWalker)
 
 		walker.mmu = mmu
-		walker.queue = make([]*Transaction, 0)
-		walker.capacity = mmu.queueCapacity
 
 		mmu.pageWalkers = append(mmu.pageWalkers, walker)
 	}
 
-	mmu.nextPointer = 0
-
-	mmu.inflightPWCRequests = make(map[string]*Transaction)
 	mmu.inflightMemRequests = make(map[string]*Transaction)
 	mmu.inflightCacheRequests = make(map[string]*Transaction)
 
