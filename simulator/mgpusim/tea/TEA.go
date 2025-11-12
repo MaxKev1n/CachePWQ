@@ -17,6 +17,16 @@ type GPUCore struct {
 	Oracle map[uint64]uint64
 }
 
+func (core *GPUCore) Profile(
+	pc uint64,
+	cycles uint64,
+) {
+	if _, ok := core.Oracle[pc]; !ok {
+		core.Oracle[pc] = 0
+	}
+	core.Oracle[pc] += cycles
+}
+
 type TimeEventAnalysisEngine struct {
 	*akita.TickingComponent
 
@@ -32,7 +42,7 @@ func NewTimeEventAnalysisEngine(
 	teaEngine.TickingComponent = akita.NewTickingComponent(
 		"TimeEventAnalysisEngine",
 		engine,
-		1*akita.MHz,
+		100*akita.KHz,
 		teaEngine,
 	)
 	teaEngine.GPUCore = make(map[string]*GPUCore)
@@ -82,10 +92,44 @@ func (tea *TimeEventAnalysisEngine) EvaluateWfs() {
 
 		for _, wf := range cu.wavefronts {
 			if wf.State == wavefront.WfRunning || wf.State == wavefront.WfAtBarrier {
-				if _, ok := cu.Oracle[wf.PC]; !ok {
-					cu.Oracle[wf.PC] = 0
+				if wf.Inst().Opcode == 12 {
+					// S_WAITCNT instruction
+					count := 0
+					if wf.OutstandingScalarMemAccess > wf.Inst().LKGMCNT {
+						count += len(wf.OutstandingScalarInst)
+					}
+
+					if wf.OutstandingVectorMemAccess > wf.Inst().VMCNT {
+						count += len(wf.OutstandingVectorInst)
+					}
+
+					if wf.OutstandingScalarMemAccess > wf.Inst().LKGMCNT {
+						for pc := range wf.OutstandingScalarInst {
+							cu.Profile(pc, uint64(attributeCycle)/uint64(count))
+						}
+					}
+
+					if wf.OutstandingVectorMemAccess > wf.Inst().VMCNT {
+						for pc := range wf.OutstandingVectorInst {
+							cu.Profile(pc, uint64(attributeCycle)/uint64(count))
+						}
+					}
+				} else if wf.Inst().Opcode == 1 {
+					// S_ENDPGM instruction
+					if wf.OutstandingScalarMemAccess > 0 || wf.OutstandingVectorMemAccess > 0 {
+						count := len(wf.OutstandingScalarInst) + len(wf.OutstandingVectorInst)
+
+						for pc := range wf.OutstandingScalarInst {
+							cu.Profile(pc, uint64(attributeCycle)/uint64(count))
+						}
+
+						for pc := range wf.OutstandingVectorInst {
+							cu.Profile(pc, uint64(attributeCycle)/uint64(count))
+						}
+					}
+				} else {
+					cu.Profile(wf.PC, uint64(attributeCycle))
 				}
-				cu.Oracle[wf.PC] += uint64(attributeCycle)
 			}
 		}
 	}

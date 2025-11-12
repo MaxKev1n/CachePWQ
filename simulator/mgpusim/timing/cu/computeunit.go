@@ -574,6 +574,7 @@ func (cu *ComputeUnit) handleScalarDataLoadReturn(
 
 	if cu.isLastRead(req) {
 		wf.OutstandingScalarMemAccess--
+		wf.OutstandingScalarInst[info.PC]--
 	}
 }
 
@@ -644,8 +645,10 @@ func (cu *ComputeUnit) handleVectorDataLoadReturn(
 
 	if !info.Read.CanWaitForCoalesce {
 		wf.OutstandingVectorMemAccess--
+		wf.OutstandingVectorInst[info.PC]--
 		if info.Inst.FormatType == insts.FLAT {
 			wf.OutstandingScalarMemAccess--
+			wf.OutstandingScalarInst[info.PC]--
 		}
 
 		cu.logInstTask(now, wf, info.Inst, true)
@@ -676,8 +679,10 @@ func (cu *ComputeUnit) handleVectorDataStoreRsp(
 	wf := info.Wavefront
 	if !info.Write.CanWaitForCoalesce {
 		wf.OutstandingVectorMemAccess--
+		wf.OutstandingVectorInst[info.PC]--
 		if info.Inst.FormatType == insts.FLAT {
 			wf.OutstandingScalarMemAccess--
+			wf.OutstandingScalarInst[info.PC]--
 		}
 		cu.logInstTask(now, wf, info.Inst, true)
 	}

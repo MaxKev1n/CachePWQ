@@ -21,6 +21,7 @@ type VectorMemAccessInfo struct {
 	Wavefront *wavefront.Wavefront
 	Inst      *wavefront.Inst
 	laneInfo  []vectorMemAccessLaneInfo
+	PC        uint64
 }
 
 // TaskID returns the ID of the VectorMemAccess transaction
@@ -41,4 +42,5 @@ type ScalarMemAccessInfo struct {
 	Wavefront *wavefront.Wavefront
 	DstSGPR   *insts.Reg
 	Inst      *wavefront.Inst
+	PC        uint64
 }

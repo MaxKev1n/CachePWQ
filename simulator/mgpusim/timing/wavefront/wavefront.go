@@ -72,6 +72,9 @@ type Wavefront struct {
 	OutstandingScalarMemAccess int
 	OutstandingVectorMemAccess int
 
+	OutstandingScalarInst map[uint64]int
+	OutstandingVectorInst map[uint64]int
+
 	PSV *PerfSignatureVec
 }
 
@@ -83,6 +86,9 @@ func NewWavefront(raw *kernels.Wavefront) *Wavefront {
 
 	wf.scratchpad = make([]byte, 4096)
 	wf.InstBuffer = make([]byte, 0, 256)
+
+	wf.OutstandingScalarInst = make(map[uint64]int)
+	wf.OutstandingVectorInst = make(map[uint64]int)
 
 	return wf
 }

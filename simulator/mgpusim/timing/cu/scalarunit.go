@@ -161,6 +161,7 @@ func (u *ScalarUnit) executeSMEMLoad(byteSize int, now akita.VTimeInSec) bool {
 			Wavefront: u.toExec,
 			DstSGPR:   insts.SReg(regIndex + int((curr-start)/4)),
 			Inst:      inst,
+			PC:        u.toExec.PC,
 		}
 		u.cu.InFlightScalarMemAccess = append(
 			u.cu.InFlightScalarMemAccess, info)
@@ -171,6 +172,9 @@ func (u *ScalarUnit) executeSMEMLoad(byteSize int, now akita.VTimeInSec) bool {
 	}
 
 	u.toExec.OutstandingScalarMemAccess++
+
+	u.toExec.OutstandingScalarInst[u.toExec.PC]++
+
 	u.cu.UpdatePCAndSetReady(u.toExec)
 	u.toExec = nil
 

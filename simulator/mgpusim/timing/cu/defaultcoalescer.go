@@ -106,6 +106,7 @@ func (c defaultCoalescer) generateReadTransactions(
 			Read:      req,
 			Wavefront: wf,
 			Inst:      wf.DynamicInst(),
+			PC:        wf.PC,
 		}
 
 		c.addLaneInfo(&transaction, wf)
@@ -125,6 +126,7 @@ func (c defaultCoalescer) generateWriteTransactions(
 			Write:     req,
 			Wavefront: wf,
 			Inst:      wf.DynamicInst(),
+			PC:        wf.PC,
 		}
 
 		transactions = append(transactions, transaction)

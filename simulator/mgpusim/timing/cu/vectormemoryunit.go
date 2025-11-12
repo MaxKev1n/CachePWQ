@@ -173,7 +173,9 @@ func (u *VectorMemoryUnit) executeFlatLoad(
 	}
 
 	wave.OutstandingVectorMemAccess++
+	wave.OutstandingVectorInst[wave.PC]++
 	wave.OutstandingScalarMemAccess++
+	wave.OutstandingScalarInst[wave.PC]++
 
 	for i, t := range transactions {
 		u.cu.InFlightVectorMemAccess = append(u.cu.InFlightVectorMemAccess, t)
@@ -213,7 +215,9 @@ func (u *VectorMemoryUnit) executeFlatStore(
 	}
 
 	wave.OutstandingVectorMemAccess++
+	wave.OutstandingVectorInst[wave.PC]++
 	wave.OutstandingScalarMemAccess++
+	wave.OutstandingScalarInst[wave.PC]++
 
 	for i, t := range transactions {
 		u.cu.InFlightVectorMemAccess = append(u.cu.InFlightVectorMemAccess, t)
