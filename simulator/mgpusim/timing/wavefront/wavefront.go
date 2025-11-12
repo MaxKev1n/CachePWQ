@@ -22,6 +22,22 @@ const (
 	WfAtBarrier                  // Wavefront at barrier
 )
 
+type PerfSignatureVec struct {
+	InstAddress uint64
+	EventBits   []bool
+}
+
+func NewPerfSignatureVector(
+	address uint64,
+) *PerfSignatureVec {
+	PSV := &PerfSignatureVec{
+		InstAddress: address,
+		EventBits:   make([]bool, 16),
+	}
+
+	return PSV
+}
+
 // A Wavefront in the timing package contains the information of the progress
 // of a wavefront
 type Wavefront struct {
@@ -55,6 +71,8 @@ type Wavefront struct {
 
 	OutstandingScalarMemAccess int
 	OutstandingVectorMemAccess int
+
+	PSV *PerfSignatureVec
 }
 
 // NewWavefront creates a new Wavefront of the timing package, wrapping the

@@ -12,6 +12,7 @@ import (
 	"gitlab.com/akita/mgpusim/insts"
 	"gitlab.com/akita/mgpusim/kernels"
 	"gitlab.com/akita/mgpusim/protocol"
+	"gitlab.com/akita/mgpusim/tea"
 	"gitlab.com/akita/mgpusim/timing/wavefront"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/akitaext"
@@ -74,6 +75,8 @@ type ComputeUnit struct {
 
 	currentFlushReq   *protocol.CUPipelineFlushReq
 	currentRestartReq *protocol.CUPipelineRestartReq
+
+	teaEngine *tea.TimeEventAnalysisEngine
 }
 
 // Handle processes that events that are scheduled on the ComputeUnit
@@ -352,6 +355,11 @@ func (cu *ComputeUnit) handleMapWGReq(
 	for i, wf := range wg.Wfs {
 		location := req.Wavefronts[i]
 		cu.WfPools[location.SIMDID].AddWf(wf)
+
+		if cu.teaEngine != nil {
+			cu.teaEngine.RegisterWavefront(cu.Name(), wf)
+		}
+
 		cu.WfDispatcher.DispatchWf(now, wf, req.Wavefronts[i])
 		wf.State = wavefront.WfReady
 
@@ -402,6 +410,10 @@ func (cu *ComputeUnit) clearWGResource(wg *wavefront.WorkGroup) {
 	for _, wf := range wg.Wfs {
 		wfPool := cu.WfPools[wf.SIMDID]
 		wfPool.RemoveWf(wf)
+
+		if cu.teaEngine != nil {
+			cu.teaEngine.RemoveWavefront(cu.Name(), wf)
+		}
 	}
 }
 

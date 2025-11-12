@@ -44,6 +44,8 @@ type CommonPlatformBuilder struct {
 	booksimMemory string
 	booksimTLB    string
 	booksimDir    string
+
+	useTimeEventAnalysis bool
 }
 
 // Makebuilder creates a EmuBuilder with default parameters.
@@ -136,6 +138,10 @@ func (b *CommonPlatformBuilder) WithBookSimTLBNoC(config string) {
 
 func (b *CommonPlatformBuilder) WithBookSimDir(dir string) {
 	b.booksimDir = dir
+}
+
+func (b *CommonPlatformBuilder) UseTimeEventAnalysis() {
+	b.useTimeEventAnalysis = true
 }
 
 // // WithNumChiplets sets the number of chiplets in the mcm GPU.

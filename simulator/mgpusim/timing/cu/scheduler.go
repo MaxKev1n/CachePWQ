@@ -78,7 +78,7 @@ func (s *SchedulerImpl) Run(now akita.VTimeInSec) bool {
 	return true
 }
 
-//DecodeNextInst checks
+// DecodeNextInst checks
 func (s *SchedulerImpl) DecodeNextInst(now akita.VTimeInSec) bool {
 	madeProgress := false
 	for _, wfPool := range s.cu.WfPools {

@@ -140,6 +140,8 @@ var booksimDir = flag.String("booksim-dir", "",
 	"Specify the path to the booksim directory.")
 var nocFileName = flag.String("noc-file-name", "",
 	"Specify the name of the output noc trace file.")
+var teaFlag = flag.Bool("tea", false,
+	"Enable Time-Proportional Event Analysis (TEA) tracing.")
 
 type verificationPreEnablingBenchmark interface {
 	benchmarks.Benchmark
@@ -1053,6 +1055,11 @@ func (r *Runner) buildTimingPlatform() {
 		if *disableProgressBar {
 			b.WithoutProgressBar()
 		}
+
+		if *teaFlag {
+			b.UseTimeEventAnalysis()
+		}
+
 		b.WithAlg(*schedulingAlg)
 		b.WithSchedulingPartition(*schedulingPartition)
 		b.WithMemAllocatorType(*memAllocatorType)

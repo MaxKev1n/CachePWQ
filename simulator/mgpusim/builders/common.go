@@ -19,6 +19,7 @@ import (
 	"gitlab.com/akita/mgpusim/pagemigrationcontroller"
 	"gitlab.com/akita/mgpusim/rdma"
 	"gitlab.com/akita/mgpusim/remotetranslation"
+	"gitlab.com/akita/mgpusim/tea"
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
 	"gitlab.com/akita/mgpusim/timing/cp"
@@ -118,6 +119,10 @@ type CommonBuilder struct {
 	booksimMemory string
 	booksimTLB    string
 	booksimDir    string
+
+	useTimeEventAnalysis bool
+
+	teaEngine *tea.TimeEventAnalysisEngine
 }
 
 // MakeCommonBuilder provides a GPU builder that can builds the MCM GPU.
@@ -274,6 +279,10 @@ func (b *CommonBuilder) WithBookSimDir(dir string) {
 	b.booksimDir = dir
 }
 
+func (b *CommonBuilder) UseTimeEventAnalysis() {
+	b.useTimeEventAnalysis = true
+}
+
 // CalculateMemoryParameters calculates
 // -> memoryPerChiplet
 // -> memoryPerBank
@@ -341,6 +350,10 @@ func (b *CommonBuilder) BuildSAs(chiplet *Chiplet) {
 
 	if b.enableVisTracing {
 		saBuilder.withVisTracer(b.visTracer)
+	}
+
+	if b.useTimeEventAnalysis {
+		saBuilder.withTEAEngine(b.teaEngine)
 	}
 
 	for i := 0; i < b.numShaderArrayPerChiplet; i++ {

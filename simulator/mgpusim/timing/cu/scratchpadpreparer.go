@@ -6,6 +6,7 @@ import (
 
 	"gitlab.com/akita/mgpusim/emu"
 	"gitlab.com/akita/mgpusim/insts"
+	"gitlab.com/akita/mgpusim/tea"
 	"gitlab.com/akita/mgpusim/timing/wavefront"
 )
 
@@ -18,6 +19,8 @@ type ScratchpadPreparer interface {
 // ScratchpadPreparerImpl reads and write registers for the emulator
 type ScratchpadPreparerImpl struct {
 	cu *ComputeUnit
+
+	teaEngine *tea.TimeEventAnalysisEngine
 }
 
 // NewScratchpadPreparerImpl returns a newly created ScratchpadPreparerImpl,
@@ -26,6 +29,13 @@ func NewScratchpadPreparerImpl(cu *ComputeUnit) *ScratchpadPreparerImpl {
 	p := new(ScratchpadPreparerImpl)
 	p.cu = cu
 	return p
+}
+
+// EquipTEAEngine equips the TEA engine into the scratchpad preparer
+func (p *ScratchpadPreparerImpl) EquipTEAEngine(
+	teaEngine *tea.TimeEventAnalysisEngine,
+) {
+	p.teaEngine = teaEngine
 }
 
 // Prepare read from the register file and sets the scratchpad layout
@@ -37,6 +47,14 @@ func (p *ScratchpadPreparerImpl) Prepare(
 ) {
 	p.clear(instEmuState.Scratchpad())
 	inst := instEmuState.Inst()
+
+	if p.teaEngine != nil {
+		p.teaEngine.GenerateNewPSV(
+			p.cu.Name(),
+			wf,
+		)
+	}
+
 	switch inst.FormatType {
 	case insts.SOP1:
 		p.prepareSOP1(instEmuState, wf)

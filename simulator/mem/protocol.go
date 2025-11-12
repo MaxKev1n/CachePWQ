@@ -42,6 +42,7 @@ type ReadReq struct {
 	PID                ca.PID
 	CanWaitForCoalesce bool
 	Info               interface{}
+	PSV                interface{}
 }
 
 // Meta returns the message meta.
@@ -164,6 +165,7 @@ type WriteReq struct {
 	PID                ca.PID
 	CanWaitForCoalesce bool
 	Info               interface{}
+	PSV                interface{}
 }
 
 // Meta returns the meta data attached to a request.

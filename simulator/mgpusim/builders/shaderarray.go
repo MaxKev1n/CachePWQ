@@ -9,6 +9,7 @@ import (
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mem/vm/addresstranslator"
 	"gitlab.com/akita/mem/vm/tlb"
+	"gitlab.com/akita/mgpusim/tea"
 	"gitlab.com/akita/mgpusim/timing/caches/capwq"
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	"gitlab.com/akita/mgpusim/timing/caches/l1v"
@@ -53,6 +54,8 @@ type shaderArrayBuilder struct {
 	pageTable device.PageTable
 
 	config string
+
+	teaEngine *tea.TimeEventAnalysisEngine
 }
 
 func makeShaderArrayBuilder() shaderArrayBuilder {
@@ -107,6 +110,12 @@ func (b *shaderArrayBuilder) withPageTable(pt device.PageTable) {
 
 func (b *shaderArrayBuilder) withConfig(config string) {
 	b.config = config
+}
+
+func (b *shaderArrayBuilder) withTEAEngine(
+	teaEngine *tea.TimeEventAnalysisEngine,
+) {
+	b.teaEngine = teaEngine
 }
 
 func (b *shaderArrayBuilder) Build(name string, i int) shaderArray {
@@ -306,6 +315,10 @@ func (b *shaderArrayBuilder) buildCUs(sa *shaderArray) {
 		WithEngine(b.engine).
 		WithFreq(b.freq).
 		WithLog2CachelineSize(b.log2CacheLineSize)
+
+	if b.teaEngine != nil {
+		cuBuilder = cuBuilder.WithTEAEngine(b.teaEngine)
+	}
 
 	for i := 0; i < b.numCU; i++ {
 		cuName := fmt.Sprintf("%s.CU_%02d", b.name, i)

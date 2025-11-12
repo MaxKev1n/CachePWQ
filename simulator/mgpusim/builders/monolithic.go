@@ -7,6 +7,7 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mgpusim"
+	"gitlab.com/akita/mgpusim/tea"
 	noc "gitlab.com/akita/noc/networking/booksim"
 	"gitlab.com/akita/noc/networking/chipnetwork"
 )
@@ -30,6 +31,8 @@ func MakeMonolithicGPUBuilder() MonolithicGPUBuilder {
 
 func (b MonolithicGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
 	b.createGPU(name, id)
+
+	b.buildTEA()
 
 	b.buildCP()
 
@@ -68,6 +71,12 @@ func (b MonolithicGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
 	b.setupInterchipNetwork()
 
 	return b.gpu
+}
+
+func (b *MonolithicGPUBuilder) buildTEA() {
+	b.teaEngine = tea.NewTimeEventAnalysisEngine(
+		b.engine,
+	)
 }
 
 func (b *MonolithicGPUBuilder) connectCP() {
