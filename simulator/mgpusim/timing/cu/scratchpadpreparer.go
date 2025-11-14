@@ -6,8 +6,8 @@ import (
 
 	"gitlab.com/akita/mgpusim/emu"
 	"gitlab.com/akita/mgpusim/insts"
-	"gitlab.com/akita/mgpusim/tea"
 	"gitlab.com/akita/mgpusim/timing/wavefront"
+	"gitlab.com/akita/mgpusim/tip"
 )
 
 // ScratchpadPreparer does its jobs
@@ -20,7 +20,7 @@ type ScratchpadPreparer interface {
 type ScratchpadPreparerImpl struct {
 	cu *ComputeUnit
 
-	teaEngine *tea.TimeEventAnalysisEngine
+	teaEngine *tip.TimeEventAnalysisEngine
 }
 
 // NewScratchpadPreparerImpl returns a newly created ScratchpadPreparerImpl,
@@ -33,7 +33,7 @@ func NewScratchpadPreparerImpl(cu *ComputeUnit) *ScratchpadPreparerImpl {
 
 // EquipTEAEngine equips the TEA engine into the scratchpad preparer
 func (p *ScratchpadPreparerImpl) EquipTEAEngine(
-	teaEngine *tea.TimeEventAnalysisEngine,
+	teaEngine *tip.TimeEventAnalysisEngine,
 ) {
 	p.teaEngine = teaEngine
 }

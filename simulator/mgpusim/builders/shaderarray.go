@@ -9,12 +9,12 @@ import (
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mem/vm/addresstranslator"
 	"gitlab.com/akita/mem/vm/tlb"
-	"gitlab.com/akita/mgpusim/tea"
 	"gitlab.com/akita/mgpusim/timing/caches/capwq"
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	"gitlab.com/akita/mgpusim/timing/caches/l1v"
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
 	"gitlab.com/akita/mgpusim/timing/cu"
+	"gitlab.com/akita/mgpusim/tip"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -55,7 +55,7 @@ type shaderArrayBuilder struct {
 
 	config string
 
-	teaEngine *tea.TimeEventAnalysisEngine
+	teaEngine *tip.TimeEventAnalysisEngine
 }
 
 func makeShaderArrayBuilder() shaderArrayBuilder {
@@ -113,7 +113,7 @@ func (b *shaderArrayBuilder) withConfig(config string) {
 }
 
 func (b *shaderArrayBuilder) withTEAEngine(
-	teaEngine *tea.TimeEventAnalysisEngine,
+	teaEngine *tip.TimeEventAnalysisEngine,
 ) {
 	b.teaEngine = teaEngine
 }

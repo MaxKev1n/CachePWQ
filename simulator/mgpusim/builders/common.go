@@ -19,11 +19,11 @@ import (
 	"gitlab.com/akita/mgpusim/pagemigrationcontroller"
 	"gitlab.com/akita/mgpusim/rdma"
 	"gitlab.com/akita/mgpusim/remotetranslation"
-	"gitlab.com/akita/mgpusim/tea"
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
 	"gitlab.com/akita/mgpusim/timing/cp"
 	"gitlab.com/akita/mgpusim/timing/cu"
+	"gitlab.com/akita/mgpusim/tip"
 	"gitlab.com/akita/mgpusim/yamlconfig"
 	"gitlab.com/akita/noc/networking/chipnetwork"
 	"gitlab.com/akita/util/tracing"
@@ -122,7 +122,7 @@ type CommonBuilder struct {
 
 	useTimeEventAnalysis bool
 
-	teaEngine *tea.TimeEventAnalysisEngine
+	teaEngine *tip.TimeEventAnalysisEngine
 }
 
 // MakeCommonBuilder provides a GPU builder that can builds the MCM GPU.

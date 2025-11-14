@@ -6,7 +6,7 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mgpusim/emu"
 	"gitlab.com/akita/mgpusim/insts"
-	"gitlab.com/akita/mgpusim/tea"
+	"gitlab.com/akita/mgpusim/tip"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/pipelining"
 	"gitlab.com/akita/util/tracing"
@@ -29,7 +29,7 @@ type Builder struct {
 	visTracer        tracing.Tracer
 	enableVisTracing bool
 
-	teaEngine *tea.TimeEventAnalysisEngine
+	teaEngine *tip.TimeEventAnalysisEngine
 }
 
 // MakeBuilder returns a default builder object
@@ -93,7 +93,7 @@ func (b Builder) WithVisTracer(t tracing.Tracer) Builder {
 
 // WithTEAEngine enables the time-event analysis feature in the CU.
 func (b Builder) WithTEAEngine(
-	teaEngine *tea.TimeEventAnalysisEngine,
+	teaEngine *tip.TimeEventAnalysisEngine,
 ) Builder {
 	b.teaEngine = teaEngine
 	return b

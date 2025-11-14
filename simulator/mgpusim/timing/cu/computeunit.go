@@ -12,8 +12,8 @@ import (
 	"gitlab.com/akita/mgpusim/insts"
 	"gitlab.com/akita/mgpusim/kernels"
 	"gitlab.com/akita/mgpusim/protocol"
-	"gitlab.com/akita/mgpusim/tea"
 	"gitlab.com/akita/mgpusim/timing/wavefront"
+	"gitlab.com/akita/mgpusim/tip"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/akitaext"
 	"gitlab.com/akita/util/tracing"
@@ -76,7 +76,7 @@ type ComputeUnit struct {
 	currentFlushReq   *protocol.CUPipelineFlushReq
 	currentRestartReq *protocol.CUPipelineRestartReq
 
-	teaEngine *tea.TimeEventAnalysisEngine
+	teaEngine *tip.TimeEventAnalysisEngine
 }
 
 // Handle processes that events that are scheduled on the ComputeUnit

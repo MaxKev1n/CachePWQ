@@ -1,4 +1,4 @@
-package tea
+package tip
 
 import (
 	"fmt"
@@ -37,18 +37,18 @@ type TimeEventAnalysisEngine struct {
 func NewTimeEventAnalysisEngine(
 	engine akita.Engine,
 ) *TimeEventAnalysisEngine {
-	teaEngine := &TimeEventAnalysisEngine{}
+	tipEngine := &TimeEventAnalysisEngine{}
 
-	teaEngine.TickingComponent = akita.NewTickingComponent(
-		"TimeEventAnalysisEngine",
+	tipEngine.TickingComponent = akita.NewTickingComponent(
+		"TimeProportionalEngine",
 		engine,
 		100*akita.KHz,
-		teaEngine,
+		tipEngine,
 	)
-	teaEngine.GPUCore = make(map[string]*GPUCore)
+	tipEngine.GPUCore = make(map[string]*GPUCore)
 
 	atexit.Register(func() {
-		for _, cu := range teaEngine.CompletedGPUCore {
+		for _, cu := range tipEngine.CompletedGPUCore {
 			log.Printf("GPU core: %s", cu.name)
 			for pc, cycles := range cu.Oracle {
 				log.Printf("  PC: 0x%X, Cycles: %v", pc, cycles)
@@ -56,17 +56,17 @@ func NewTimeEventAnalysisEngine(
 		}
 	})
 
-	return teaEngine
+	return tipEngine
 }
 
-func (tea *TimeEventAnalysisEngine) Tick(now akita.VTimeInSec) bool {
-	tea.EvaluateWfs()
+func (tip *TimeEventAnalysisEngine) Tick(now akita.VTimeInSec) bool {
+	tip.EvaluateWfs()
 
-	return len(tea.GPUCore) > 0
+	return len(tip.GPUCore) > 0
 }
 
-func (tea *TimeEventAnalysisEngine) EvaluateWfs() {
-	for _, cu := range tea.GPUCore {
+func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
+	for _, cu := range tip.GPUCore {
 		numReadyWfs := 0
 		numRunningWfs := 0
 		numStalledWfs := 0
@@ -86,7 +86,7 @@ func (tea *TimeEventAnalysisEngine) EvaluateWfs() {
 		}
 
 		// Number of cycles between two calls to EvaluateWfs
-		cycleInterval := 1 * akita.GHz / tea.Freq
+		cycleInterval := 1 * akita.GHz / tip.Freq
 
 		attributeCycle := float64(cycleInterval) / float64(numRunningWfs+numStalledWfs)
 
@@ -135,21 +135,21 @@ func (tea *TimeEventAnalysisEngine) EvaluateWfs() {
 	}
 }
 
-func (tea *TimeEventAnalysisEngine) RegisterWavefront(
+func (tip *TimeEventAnalysisEngine) RegisterWavefront(
 	cuName string,
 	wf *wavefront.Wavefront,
 ) {
-	if len(tea.GPUCore) == 0 {
-		tea.TickNow(tea.Engine.CurrentTime())
+	if len(tip.GPUCore) == 0 {
+		tip.TickNow(tip.Engine.CurrentTime())
 	}
 
-	cu, ok := tea.GPUCore[cuName]
+	cu, ok := tip.GPUCore[cuName]
 	if !ok {
 		cu = &GPUCore{
 			name:   cuName,
 			Oracle: make(map[uint64]uint64),
 		}
-		tea.GPUCore[cuName] = cu
+		tip.GPUCore[cuName] = cu
 	}
 
 	for _, existingWf := range cu.wavefronts {
@@ -164,11 +164,11 @@ func (tea *TimeEventAnalysisEngine) RegisterWavefront(
 	wf.PSV = wavefront.NewPerfSignatureVector(0)
 }
 
-func (tea *TimeEventAnalysisEngine) RemoveWavefront(
+func (tip *TimeEventAnalysisEngine) RemoveWavefront(
 	cuName string,
 	wf *wavefront.Wavefront,
 ) {
-	core, ok := tea.GPUCore[cuName]
+	core, ok := tip.GPUCore[cuName]
 	if !ok {
 		panic("CU not found")
 	}
@@ -181,9 +181,9 @@ func (tea *TimeEventAnalysisEngine) RemoveWavefront(
 			)
 
 			if len(core.wavefronts) == 0 {
-				tea.CompletedGPUCore = append(tea.CompletedGPUCore, core)
+				tip.CompletedGPUCore = append(tip.CompletedGPUCore, core)
 
-				delete(tea.GPUCore, cuName)
+				delete(tip.GPUCore, cuName)
 			}
 
 			return
@@ -191,11 +191,11 @@ func (tea *TimeEventAnalysisEngine) RemoveWavefront(
 	}
 }
 
-func (tea *TimeEventAnalysisEngine) GenerateNewPSV(
+func (tip *TimeEventAnalysisEngine) GenerateNewPSV(
 	cuName string,
 	wf *wavefront.Wavefront,
 ) {
-	core, ok := tea.GPUCore[cuName]
+	core, ok := tip.GPUCore[cuName]
 	if !ok {
 		panic("CU not found")
 	}
