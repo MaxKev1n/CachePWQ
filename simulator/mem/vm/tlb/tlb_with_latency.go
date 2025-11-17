@@ -937,31 +937,11 @@ func (tlb *LatTLB) Attribute(
 		return psv.SUCCESS, nil
 	}
 
-	item := tlb.lookupBuffer.Peek()
-	if item == nil {
-		panic("no item in lookup buffer")
-	}
-
-	pipelineItem := item.(tlbPipelineItem)
-	req := pipelineItem.translationReq
-
-	mshrEntry := tlb.mshr.Query(req.PID, req.VAddr)
-	if mshrEntry != nil {
-		panic("message in MSHR")
-	}
-
-	setID := tlb.vAddrToSetID(req.VAddr)
-	set := tlb.Sets[setID]
-	_, page, found := set.Lookup(req.PID, req.VAddr)
-	if found && page.Valid {
-		return psv.SUCCESS, nil
-	}
-
 	if tlb.mshr.IsFull() {
 		oldestEntry := tlb.mshr.AllEntries()[0]
 
 		return psv.FAIL, oldestEntry.reqToBottom
 	}
 
-	return psv.FAIL, nil
+	return psv.SUCCESS, nil
 }

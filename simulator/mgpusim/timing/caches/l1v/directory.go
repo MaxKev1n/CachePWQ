@@ -5,7 +5,6 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/util"
-	"gitlab.com/akita/util/ca"
 	"gitlab.com/akita/util/psv"
 	"gitlab.com/akita/util/tracing"
 )
@@ -376,36 +375,6 @@ func (d *directory) tryToAttribute(
 				return psv.FAIL, item.Msg
 			}
 		}
-	}
-
-	item := d.cache.dirBuf.Peek()
-	if item == nil {
-		return psv.SUCCESS, nil
-	}
-
-	trans := item.(*transaction)
-
-	var addr uint64
-	var pid ca.PID
-
-	if trans.read != nil {
-		addr = trans.read.Address
-		pid = trans.read.PID
-	} else {
-		addr = trans.write.Address
-		pid = trans.write.PID
-	}
-
-	blockSize := uint64(1 << d.cache.log2BlockSize)
-	cacheLineID := addr / blockSize * blockSize
-	mshrEntry := d.cache.mshr.Query(pid, cacheLineID)
-	if mshrEntry != nil {
-		return psv.FAIL, mshrEntry.ReadReq
-	}
-
-	block := d.cache.directory.Lookup(pid, cacheLineID)
-	if block != nil && block.IsValid {
-		return psv.SUCCESS, nil
 	}
 
 	if d.cache.mshr.IsFull() {

@@ -6,10 +6,14 @@ import (
 
 	"github.com/tebeka/atexit"
 	"gitlab.com/akita/akita"
-	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mgpusim/timing/wavefront"
 	"gitlab.com/akita/util/psv"
 )
+
+type TEAItems struct {
+	InstAddress uint64
+	Event       psv.Event
+}
 
 type GPUCore struct {
 	name string
@@ -24,6 +28,8 @@ type GPUCore struct {
 	VTranslator TEAComponent
 	VTLB        TEAComponent
 	VCache      TEAComponent
+
+	PICS map[TEAItems]uint64
 }
 
 func (core *GPUCore) Profile(
@@ -65,6 +71,10 @@ func NewTimeEventAnalysisEngine(
 			for pc, cycles := range cu.Oracle {
 				log.Printf("  PC: 0x%X, Cycles: %v", pc, cycles)
 			}
+			for item, cycles := range cu.PICS {
+				log.Printf("  InstAddr: 0x%X, Event: %v, Cycles: %v",
+					item.InstAddress, item.Event, cycles)
+			}
 		}
 	})
 
@@ -102,13 +112,14 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 
 		attributeCycle := float64(cycleInterval) / float64(numRunningWfs+numStalledWfs)
 
+		attributedEvents := make([]TEAItems, 0)
+
 		for _, wf := range cu.wavefronts {
 			if wf.State == wavefront.WfRunning || wf.State == wavefront.WfAtBarrier {
-				perfVector := wf.PSV
-				log.Printf("PSV for WF %s %p at PC 0x%X:", wf.UID, perfVector, wf.PC)
-
 				if wf.Inst().Opcode == 12 {
 					// S_WAITCNT instruction
+					attributedPSVs := make(map[*psv.PerfSignatureVec]struct{})
+
 					count := 0
 					if wf.OutstandingScalarMemAccess > wf.Inst().LKGMCNT {
 						count += len(wf.OutstandingScalarInst)
@@ -122,8 +133,11 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 						for pc := range wf.OutstandingScalarInst {
 							cu.Profile(pc, uint64(attributeCycle)/uint64(count))
 						}
+
 						for scalarPSV := range wf.OutstandingScalarPSV {
-							log.Printf("	scalarPSV for %p at PC 0x%X:", scalarPSV, scalarPSV.InstAddress)
+							if _, ok := attributedPSVs[scalarPSV]; !ok {
+								attributedPSVs[scalarPSV] = struct{}{}
+							}
 						}
 					}
 
@@ -131,84 +145,42 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 						for pc := range wf.OutstandingVectorInst {
 							cu.Profile(pc, uint64(attributeCycle)/uint64(count))
 						}
+
 						for vectorPSV := range wf.OutstandingVectorPSV {
-							log.Printf("	vectorPSV for %p at PC 0x%X:", vectorPSV, vectorPSV.InstAddress)
-
-							log.Printf("Attribute to VROB for vector PSV at PC 0x%X", vectorPSV.InstAddress)
-							result, msg := cu.VROB.Attribute(nil)
-							if result == psv.SUCCESS {
-								log.Printf("Final: Attribute to VROB\n")
-								continue
-							}
-
-							log.Printf("ROB Head PSV Item: %p\n", msg.(mem.AccessReq).GetPSV())
-							msg.(mem.AccessReq).GetPSV().Print()
-
-							log.Printf("Attribute to VTranslator for vector PSV at PC 0x%X", vectorPSV.InstAddress)
-							result, msg = cu.VTranslator.Attribute(msg)
-							switch result {
-							case psv.SUCCESS:
-								log.Printf("Final: Attribute to VAT\n")
-								continue
-							case psv.FAIL:
-								log.Printf("Attribute to VTLB for vector PSV at PC 0x%X", vectorPSV.InstAddress)
-								result, msg = cu.VTLB.Attribute(msg)
-
-								if result == psv.SUCCESS {
-									log.Printf("Final: Attribute to L1VTLB\n")
-									continue
-								}
-
-								log.Printf("Attribute to L2TLB for vector PSV at PC 0x%X", vectorPSV.InstAddress)
-								result, msg = tip.L2TLB.Attribute(msg)
-								if result == psv.SUCCESS {
-									log.Printf("Final: Attribute to L1VTLB Miss\n")
-								} else {
-									log.Printf("Final: Attribute to L2 TLB Miss\n")
-								}
-							case psv.FAILSECONDARY:
-								log.Printf("Attribute to VCache for vector PSV at PC 0x%X", vectorPSV.InstAddress)
-								result, msg = cu.VCache.Attribute(msg)
-
-								if result == psv.SUCCESS {
-									log.Printf("Final: Attribute to L1VCache\n")
-									continue
-								}
-
-								log.Printf("Attribute to L2 Cache for vector PSV at PC 0x%X", vectorPSV.InstAddress)
-								for _, l2cache := range tip.L2Caches {
-									if msg == nil {
-										panic("msg is nil")
-									}
-
-									if l2cache.CheckTopPort(msg.Meta().Dst) {
-										result, msg = l2cache.Attribute(msg)
-
-										if result == psv.SUCCESS {
-											log.Printf("Final: Attribute to L1VCache Miss\n")
-										} else {
-											log.Printf("Final: Attribute to L2 Cache Miss\n")
-										}
-
-										break
-									}
-								}
-							default:
-								panic("Unknown PSV result")
+							if _, ok := attributedPSVs[vectorPSV]; !ok {
+								attributedPSVs[vectorPSV] = struct{}{}
 							}
 						}
 					}
+
+					for attributedPSV := range attributedPSVs {
+						event := tip.Attribute(cu)
+
+						attributedEvents = append(attributedEvents,
+							TEAItems{
+								InstAddress: attributedPSV.InstAddress,
+								Event:       event,
+							},
+						)
+
+						delete(attributedPSVs, attributedPSV)
+					}
+					attributedPSVs = nil
 				} else if wf.Inst().Opcode == 1 {
 					// S_ENDPGM instruction
 					if wf.OutstandingScalarMemAccess > 0 || wf.OutstandingVectorMemAccess > 0 {
 						count := len(wf.OutstandingScalarInst) + len(wf.OutstandingVectorInst)
+
+						attributedPSVs := make(map[*psv.PerfSignatureVec]struct{})
 
 						for pc := range wf.OutstandingScalarInst {
 							cu.Profile(pc, uint64(attributeCycle)/uint64(count))
 						}
 
 						for scalarPSV := range wf.OutstandingScalarPSV {
-							log.Printf("	scalarPSV for %p at PC 0x%X:", scalarPSV, scalarPSV.InstAddress)
+							if _, ok := attributedPSVs[scalarPSV]; !ok {
+								attributedPSVs[scalarPSV] = struct{}{}
+							}
 						}
 
 						for pc := range wf.OutstandingVectorInst {
@@ -216,76 +188,47 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 						}
 
 						for vectorPSV := range wf.OutstandingVectorPSV {
-							log.Printf("	vectorPSV for %p at PC 0x%X:", vectorPSV, vectorPSV.InstAddress)
-
-							log.Printf("Attribute to VROB for vector PSV at PC 0x%X", vectorPSV.InstAddress)
-							result, msg := cu.VROB.Attribute(nil)
-							if result == psv.SUCCESS {
-								log.Printf("Final: Attribute to VROB\n")
-								continue
-							}
-
-							log.Printf("ROB Head PSV Item: %p\n", msg.(mem.AccessReq).GetPSV())
-							msg.(mem.AccessReq).GetPSV().Print()
-
-							log.Printf("Attribute to VTranslator for vector PSV at PC 0x%X", vectorPSV.InstAddress)
-							result, msg = cu.VTranslator.Attribute(msg)
-							switch result {
-							case psv.SUCCESS:
-								log.Printf("Final: Attribute to VAT\n")
-								continue
-							case psv.FAIL:
-								log.Printf("Attribute to VTLB for vector PSV at PC 0x%X", vectorPSV.InstAddress)
-								result, msg = cu.VTLB.Attribute(msg)
-
-								if result == psv.SUCCESS {
-									log.Printf("Final: Attribute to L1VTLB\n")
-									continue
-								}
-
-								log.Printf("Attribute to L2TLB for vector PSV at PC 0x%X", vectorPSV.InstAddress)
-								result, msg = tip.L2TLB.Attribute(msg)
-								if result == psv.SUCCESS {
-									log.Printf("Final: Attribute to L1VTLB Miss\n")
-								} else {
-									log.Printf("Final: Attribute to L2 TLB Miss\n")
-								}
-							case psv.FAILSECONDARY:
-								log.Printf("Attribute to VCache for vector PSV at PC 0x%X", vectorPSV.InstAddress)
-								result, msg = cu.VCache.Attribute(msg)
-
-								if result == psv.SUCCESS {
-									log.Printf("Final: Attribute to L1VCache\n")
-									continue
-								}
-
-								log.Printf("Attribute to L2 Cache for vector PSV at PC 0x%X", vectorPSV.InstAddress)
-								for _, l2cache := range tip.L2Caches {
-									if msg == nil {
-										panic("msg is nil")
-									}
-
-									if l2cache.CheckTopPort(msg.Meta().Dst) {
-										result, msg = l2cache.Attribute(msg)
-
-										if result == psv.SUCCESS {
-											log.Printf("Final: Attribute to L1VCache Miss\n")
-										} else {
-											log.Printf("Final: Attribute to L2 Cache Miss\n")
-										}
-
-										break
-									}
-								}
-							default:
-								panic("Unknown PSV result")
+							if _, ok := attributedPSVs[vectorPSV]; !ok {
+								attributedPSVs[vectorPSV] = struct{}{}
 							}
 						}
+
+						for attributedPSV := range attributedPSVs {
+							event := tip.Attribute(cu)
+
+							attributedEvents = append(attributedEvents,
+								TEAItems{
+									InstAddress: attributedPSV.InstAddress,
+									Event:       event,
+								},
+							)
+
+							delete(attributedPSVs, attributedPSV)
+						}
+						attributedPSVs = nil
 					}
 				} else {
 					cu.Profile(wf.PC, uint64(attributeCycle))
+
+					event := tip.Attribute(cu)
+
+					attributedEvents = append(attributedEvents,
+						TEAItems{
+							InstAddress: wf.PSV.InstAddress,
+							Event:       event,
+						},
+					)
 				}
 			}
+		}
+
+		attributeCycle = float64(cycleInterval) / float64(len(attributedEvents))
+
+		for _, item := range attributedEvents {
+			if _, ok := cu.PICS[item]; !ok {
+				cu.PICS[item] = 0
+			}
+			cu.PICS[item] += uint64(attributeCycle)
 		}
 	}
 }
@@ -336,6 +279,7 @@ func (tip *TimeEventAnalysisEngine) RegisterCU(
 		VTranslator: vtranslator,
 		VTLB:        vtlb,
 		VCache:      vcache,
+		PICS:        make(map[TEAItems]uint64),
 	}
 	tip.GPUCore[cuName] = cu
 }
@@ -381,9 +325,65 @@ func (tip *TimeEventAnalysisEngine) GenerateNewPSV(
 			psv := psv.NewPerfSignatureVector()
 
 			wf.PSV = psv
+			wf.PSV.InstAddress = wf.PC
 
 			return
 		}
 	}
 	panic("Wavefront not found")
+}
+
+func (tip *TimeEventAnalysisEngine) Attribute(
+	cu *GPUCore,
+) psv.Event {
+	result, msg := cu.VROB.Attribute(nil)
+	if result == psv.SUCCESS {
+		return psv.BASE
+	}
+
+	result, msg = cu.VTranslator.Attribute(msg)
+	switch result {
+	case psv.SUCCESS:
+		return psv.BASE
+	case psv.FAIL:
+		result, msg = cu.VTLB.Attribute(msg)
+
+		if result == psv.SUCCESS {
+			return psv.BASE
+		}
+
+		result, msg = tip.L2TLB.Attribute(msg)
+		if result == psv.SUCCESS {
+			return psv.L1TLBMISS
+		} else {
+			return psv.L2TLBMISS
+		}
+		panic("Unreachable")
+	case psv.FAILSECONDARY:
+		result, msg = cu.VCache.Attribute(msg)
+
+		if result == psv.SUCCESS {
+			return psv.BASE
+		}
+
+		for _, l2cache := range tip.L2Caches {
+			if msg == nil {
+				panic("msg is nil")
+			}
+
+			if l2cache.CheckTopPort(msg.Meta().Dst) {
+				result, msg = l2cache.Attribute(msg)
+
+				if result == psv.SUCCESS {
+					return psv.L1CACHEMISS
+				} else {
+					return psv.L2CACHEMISS
+				}
+				panic("Unreachable")
+			}
+		}
+	default:
+		panic("Unknown PSV result")
+	}
+	panic("Don't find the component to attribute")
 }

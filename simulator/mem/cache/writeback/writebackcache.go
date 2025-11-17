@@ -6,7 +6,6 @@ import (
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/akitaext"
-	"gitlab.com/akita/util/ca"
 	"gitlab.com/akita/util/pipelining"
 	"gitlab.com/akita/util/psv"
 )
@@ -175,56 +174,10 @@ func (c *Cache) Attribute(
 		return psv.SUCCESS, nil
 	}
 
-	pipelineitem := c.lookupBuffer.Peek()
-	if pipelineitem == nil {
-		panic("Pipeline buffer is empty")
-	}
-	pitem := pipelineitem.(cachePipelineItem)
-	item := pitem.trans
-	trans := item
+	if c.mshr.IsFull() {
+		oldestMSHR := c.mshr.AllEntries()[0]
 
-	var pid ca.PID
-	var address uint64
-
-	if trans.read != nil {
-		address = trans.read.Address
-		pid = trans.read.PID
-	} else {
-		address = trans.write.Address
-		pid = trans.write.PID
-	}
-
-	cachelineID, _ := getCacheLineID(
-		address, c.log2BlockSize)
-
-	var block *cache.Block
-
-	mshrEntry := c.mshr.Query(pid, cachelineID)
-	if mshrEntry != nil {
-		block = mshrEntry.Block
-	}
-
-	block = c.directory.Lookup(
-		pid, cachelineID)
-
-	if block == nil {
-		block = c.directory.FindVictim(cachelineID)
-	}
-
-	numBanks := len(c.dirToBankBuffers)
-	bank := bankID(block, c.directory.WayAssociativity(), numBanks)
-
-	bankStage := c.bankStages[bank]
-	if bankStage.currentTrans == nil {
-		return psv.SUCCESS, nil
-	} else {
-		action := bankStage.currentTrans.action
-
-		if action == bankReadHit || action == bankWriteHit {
-			return psv.SUCCESS, nil
-		}
-
-		return psv.FAIL, nil
+		return psv.FAIL, oldestMSHR.ReadReq
 	}
 
 	return psv.SUCCESS, nil

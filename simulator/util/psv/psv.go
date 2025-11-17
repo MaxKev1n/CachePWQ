@@ -14,6 +14,16 @@ const (
 	FAILSECONDARY
 )
 
+type Event int
+
+const (
+	BASE Event = iota
+	L1TLBMISS
+	L2TLBMISS
+	L1CACHEMISS
+	L2CACHEMISS
+)
+
 type PSVItem struct {
 	Msg    akita.Msg
 	SrcMsg akita.Msg
