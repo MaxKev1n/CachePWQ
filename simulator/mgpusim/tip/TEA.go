@@ -3,6 +3,7 @@ package tip
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/tebeka/atexit"
 	"gitlab.com/akita/akita"
@@ -50,6 +51,21 @@ type TimeEventAnalysisEngine struct {
 
 	L2TLB    TEAComponent
 	L2Caches []TEAComponent
+
+	useTEA bool
+
+	tipLogger *log.Logger
+	teaLogger *log.Logger
+}
+
+func (tip *TimeEventAnalysisEngine) UseTimeEventAnalysis() {
+	tip.useTEA = true
+
+	file, err := os.Create("tea.trace")
+	if err != nil {
+		panic(err)
+	}
+	tip.teaLogger = log.New(file, "", 0)
 }
 
 func NewTimeEventAnalysisEngine(
@@ -65,17 +81,14 @@ func NewTimeEventAnalysisEngine(
 	)
 	tipEngine.GPUCore = make(map[string]*GPUCore)
 
+	file, err := os.Create("tip.trace")
+	if err != nil {
+		panic(err)
+	}
+	tipEngine.tipLogger = log.New(file, "", 0)
+
 	atexit.Register(func() {
-		for _, cu := range tipEngine.CompletedGPUCore {
-			log.Printf("GPU core: %s", cu.name)
-			for pc, cycles := range cu.Oracle {
-				log.Printf("  PC: 0x%X, Cycles: %v", pc, cycles)
-			}
-			for item, cycles := range cu.PICS {
-				log.Printf("  InstAddr: 0x%X, Event: %v, Cycles: %v",
-					item.InstAddress, item.Event, cycles)
-			}
-		}
+		tipEngine.DumpLog()
 	})
 
 	return tipEngine
@@ -118,8 +131,6 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 			if wf.State == wavefront.WfRunning || wf.State == wavefront.WfAtBarrier {
 				if wf.Inst().Opcode == 12 {
 					// S_WAITCNT instruction
-					attributedPSVs := make(map[*psv.PerfSignatureVec]struct{})
-
 					count := 0
 					if wf.OutstandingScalarMemAccess > wf.Inst().LKGMCNT {
 						count += len(wf.OutstandingScalarInst)
@@ -133,63 +144,30 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 						for pc := range wf.OutstandingScalarInst {
 							cu.Profile(pc, uint64(attributeCycle)/uint64(count))
 						}
-
-						for scalarPSV := range wf.OutstandingScalarPSV {
-							if _, ok := attributedPSVs[scalarPSV]; !ok {
-								attributedPSVs[scalarPSV] = struct{}{}
-							}
-						}
 					}
 
 					if wf.OutstandingVectorMemAccess > wf.Inst().VMCNT {
 						for pc := range wf.OutstandingVectorInst {
 							cu.Profile(pc, uint64(attributeCycle)/uint64(count))
 						}
-
-						for vectorPSV := range wf.OutstandingVectorPSV {
-							if _, ok := attributedPSVs[vectorPSV]; !ok {
-								attributedPSVs[vectorPSV] = struct{}{}
-							}
-						}
 					}
 
-					for attributedPSV := range attributedPSVs {
-						event := tip.Attribute(cu)
-
-						attributedEvents = append(attributedEvents,
-							TEAItems{
-								InstAddress: attributedPSV.InstAddress,
-								Event:       event,
-							},
-						)
-
-						delete(attributedPSVs, attributedPSV)
-					}
-					attributedPSVs = nil
-				} else if wf.Inst().Opcode == 1 {
-					// S_ENDPGM instruction
-					if wf.OutstandingScalarMemAccess > 0 || wf.OutstandingVectorMemAccess > 0 {
-						count := len(wf.OutstandingScalarInst) + len(wf.OutstandingVectorInst)
-
+					if tip.useTEA {
 						attributedPSVs := make(map[*psv.PerfSignatureVec]struct{})
 
-						for pc := range wf.OutstandingScalarInst {
-							cu.Profile(pc, uint64(attributeCycle)/uint64(count))
-						}
-
-						for scalarPSV := range wf.OutstandingScalarPSV {
-							if _, ok := attributedPSVs[scalarPSV]; !ok {
-								attributedPSVs[scalarPSV] = struct{}{}
+						if wf.OutstandingScalarMemAccess > wf.Inst().LKGMCNT {
+							for scalarPSV := range wf.OutstandingScalarPSV {
+								if _, ok := attributedPSVs[scalarPSV]; !ok {
+									attributedPSVs[scalarPSV] = struct{}{}
+								}
 							}
 						}
 
-						for pc := range wf.OutstandingVectorInst {
-							cu.Profile(pc, uint64(attributeCycle)/uint64(count))
-						}
-
-						for vectorPSV := range wf.OutstandingVectorPSV {
-							if _, ok := attributedPSVs[vectorPSV]; !ok {
-								attributedPSVs[vectorPSV] = struct{}{}
+						if wf.OutstandingVectorMemAccess > wf.Inst().VMCNT {
+							for vectorPSV := range wf.OutstandingVectorPSV {
+								if _, ok := attributedPSVs[vectorPSV]; !ok {
+									attributedPSVs[vectorPSV] = struct{}{}
+								}
 							}
 						}
 
@@ -207,28 +185,75 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 						}
 						attributedPSVs = nil
 					}
+				} else if wf.Inst().Opcode == 1 {
+					// S_ENDPGM instruction
+					if wf.OutstandingScalarMemAccess > 0 || wf.OutstandingVectorMemAccess > 0 {
+						count := len(wf.OutstandingScalarInst) + len(wf.OutstandingVectorInst)
+
+						for pc := range wf.OutstandingScalarInst {
+							cu.Profile(pc, uint64(attributeCycle)/uint64(count))
+						}
+
+						for pc := range wf.OutstandingVectorInst {
+							cu.Profile(pc, uint64(attributeCycle)/uint64(count))
+						}
+
+						if tip.useTEA {
+							attributedPSVs := make(map[*psv.PerfSignatureVec]struct{})
+
+							for scalarPSV := range wf.OutstandingScalarPSV {
+								if _, ok := attributedPSVs[scalarPSV]; !ok {
+									attributedPSVs[scalarPSV] = struct{}{}
+								}
+							}
+
+							for vectorPSV := range wf.OutstandingVectorPSV {
+								if _, ok := attributedPSVs[vectorPSV]; !ok {
+									attributedPSVs[vectorPSV] = struct{}{}
+								}
+							}
+
+							for attributedPSV := range attributedPSVs {
+								event := tip.Attribute(cu)
+
+								attributedEvents = append(attributedEvents,
+									TEAItems{
+										InstAddress: attributedPSV.InstAddress,
+										Event:       event,
+									},
+								)
+
+								delete(attributedPSVs, attributedPSV)
+							}
+							attributedPSVs = nil
+						}
+					}
 				} else {
 					cu.Profile(wf.PC, uint64(attributeCycle))
 
-					event := tip.Attribute(cu)
+					if tip.useTEA {
+						event := tip.Attribute(cu)
 
-					attributedEvents = append(attributedEvents,
-						TEAItems{
-							InstAddress: wf.PSV.InstAddress,
-							Event:       event,
-						},
-					)
+						attributedEvents = append(attributedEvents,
+							TEAItems{
+								InstAddress: wf.PSV.InstAddress,
+								Event:       event,
+							},
+						)
+					}
 				}
 			}
 		}
 
-		attributeCycle = float64(cycleInterval) / float64(len(attributedEvents))
+		if tip.useTEA {
+			attributeCycle = float64(cycleInterval) / float64(len(attributedEvents))
 
-		for _, item := range attributedEvents {
-			if _, ok := cu.PICS[item]; !ok {
-				cu.PICS[item] = 0
+			for _, item := range attributedEvents {
+				if _, ok := cu.PICS[item]; !ok {
+					cu.PICS[item] = 0
+				}
+				cu.PICS[item] += uint64(attributeCycle)
 			}
-			cu.PICS[item] += uint64(attributeCycle)
 		}
 	}
 }
@@ -251,7 +276,9 @@ func (tip *TimeEventAnalysisEngine) RegisterWavefront(
 
 	cu.wavefronts = append(cu.wavefronts, wf)
 
-	wf.PSV = psv.NewPerfSignatureVector()
+	if tip.useTEA {
+		wf.PSV = psv.NewPerfSignatureVector()
+	}
 }
 
 func (tip *TimeEventAnalysisEngine) RegisterCU(
@@ -315,6 +342,10 @@ func (tip *TimeEventAnalysisEngine) GenerateNewPSV(
 	cuName string,
 	wf *wavefront.Wavefront,
 ) {
+	if !tip.useTEA {
+		return
+	}
+
 	core, ok := tip.GPUCore[cuName]
 	if !ok {
 		panic("CU not found")
@@ -386,4 +417,21 @@ func (tip *TimeEventAnalysisEngine) Attribute(
 		panic("Unknown PSV result")
 	}
 	panic("Don't find the component to attribute")
+}
+
+func (tip *TimeEventAnalysisEngine) DumpLog() {
+	for _, cu := range tip.CompletedGPUCore {
+		tip.tipLogger.Printf("GPU core: %s", cu.name)
+		for pc, cycles := range cu.Oracle {
+			tip.tipLogger.Printf("%X, %v\n", pc, cycles)
+		}
+
+		if tip.useTEA {
+			tip.teaLogger.Printf("GPU core: %s", cu.name)
+			for item, cycles := range cu.PICS {
+				tip.teaLogger.Printf("%X, %v, %v\n",
+					item.InstAddress, item.Event, cycles)
+			}
+		}
+	}
 }

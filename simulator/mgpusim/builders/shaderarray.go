@@ -55,7 +55,7 @@ type shaderArrayBuilder struct {
 
 	config string
 
-	teaEngine *tip.TimeEventAnalysisEngine
+	tipEngine *tip.TimeEventAnalysisEngine
 }
 
 func makeShaderArrayBuilder() shaderArrayBuilder {
@@ -112,10 +112,10 @@ func (b *shaderArrayBuilder) withConfig(config string) {
 	b.config = config
 }
 
-func (b *shaderArrayBuilder) withTEAEngine(
-	teaEngine *tip.TimeEventAnalysisEngine,
+func (b *shaderArrayBuilder) withTipEngine(
+	tipEngine *tip.TimeEventAnalysisEngine,
 ) {
-	b.teaEngine = teaEngine
+	b.tipEngine = tipEngine
 }
 
 func (b *shaderArrayBuilder) Build(name string, i int) shaderArray {
@@ -316,8 +316,8 @@ func (b *shaderArrayBuilder) buildCUs(sa *shaderArray) {
 		WithFreq(b.freq).
 		WithLog2CachelineSize(b.log2CacheLineSize)
 
-	if b.teaEngine != nil {
-		cuBuilder = cuBuilder.WithTEAEngine(b.teaEngine)
+	if b.tipEngine != nil {
+		cuBuilder = cuBuilder.WithTipEngine(b.tipEngine)
 	}
 
 	for i := 0; i < b.numCU; i++ {

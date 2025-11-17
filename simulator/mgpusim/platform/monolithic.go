@@ -69,6 +69,10 @@ func (b *MonolithicPlatformBuilder) createGPUBuilder(
 	gpuBuilder.WithBookSimTLB(b.booksimTLB)
 	gpuBuilder.WithBookSimDir(b.booksimDir)
 
+	if b.useTimeInstProfiling {
+		gpuBuilder.UseTimeInstProfiling()
+	}
+
 	if b.useTimeEventAnalysis {
 		gpuBuilder.UseTimeEventAnalysis()
 	}

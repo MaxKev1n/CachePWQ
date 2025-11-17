@@ -121,9 +121,10 @@ type CommonBuilder struct {
 	booksimTLB    string
 	booksimDir    string
 
+	useTimeInstProfiling bool
 	useTimeEventAnalysis bool
 
-	TeaEngine *tip.TimeEventAnalysisEngine
+	TipEngine *tip.TimeEventAnalysisEngine
 }
 
 // MakeCommonBuilder provides a GPU builder that can builds the MCM GPU.
@@ -280,6 +281,10 @@ func (b *CommonBuilder) WithBookSimDir(dir string) {
 	b.booksimDir = dir
 }
 
+func (b *CommonBuilder) UseTimeInstProfiling() {
+	b.useTimeInstProfiling = true
+}
+
 func (b *CommonBuilder) UseTimeEventAnalysis() {
 	b.useTimeEventAnalysis = true
 }
@@ -353,8 +358,8 @@ func (b *CommonBuilder) BuildSAs(chiplet *Chiplet) {
 		saBuilder.withVisTracer(b.visTracer)
 	}
 
-	if b.useTimeEventAnalysis {
-		saBuilder.withTEAEngine(b.TeaEngine)
+	if b.useTimeInstProfiling {
+		saBuilder.withTipEngine(b.TipEngine)
 	}
 
 	for i := 0; i < b.numShaderArrayPerChiplet; i++ {
@@ -374,9 +379,9 @@ func (b *CommonBuilder) collectSAComponents(
 		chiplet.CUs = append(chiplet.CUs, cu)
 	}
 
-	if b.TeaEngine != nil {
+	if b.TipEngine != nil {
 		for index, core := range sa.cus {
-			b.TeaEngine.RegisterCU(
+			b.TipEngine.RegisterCU(
 				core.Name(),
 				core.VectorMemUnit.(*cu.VectorMemoryUnit),
 				sa.l1vROBs[index],
@@ -487,7 +492,7 @@ func (b *CommonBuilder) buildMemBanks(chiplet *Chiplet) {
 		}
 
 		if b.useTimeEventAnalysis {
-			b.TeaEngine.L2Caches = append(b.TeaEngine.L2Caches, l2)
+			b.TipEngine.L2Caches = append(b.TipEngine.L2Caches, l2)
 		}
 	}
 }
@@ -595,7 +600,7 @@ func (b *CommonBuilder) buildL2TLB(chiplet *Chiplet) {
 	}
 
 	if b.useTimeEventAnalysis {
-		b.TeaEngine.L2TLB = l2TLB.(*tlb.LatTLB)
+		b.TipEngine.L2TLB = l2TLB.(*tlb.LatTLB)
 	}
 }
 

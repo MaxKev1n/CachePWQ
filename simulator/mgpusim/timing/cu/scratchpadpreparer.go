@@ -20,7 +20,7 @@ type ScratchpadPreparer interface {
 type ScratchpadPreparerImpl struct {
 	cu *ComputeUnit
 
-	teaEngine *tip.TimeEventAnalysisEngine
+	tipEngine *tip.TimeEventAnalysisEngine
 }
 
 // NewScratchpadPreparerImpl returns a newly created ScratchpadPreparerImpl,
@@ -31,11 +31,11 @@ func NewScratchpadPreparerImpl(cu *ComputeUnit) *ScratchpadPreparerImpl {
 	return p
 }
 
-// EquipTEAEngine equips the TEA engine into the scratchpad preparer
-func (p *ScratchpadPreparerImpl) EquipTEAEngine(
-	teaEngine *tip.TimeEventAnalysisEngine,
+// EquipTipEngine equips the TEA engine into the scratchpad preparer
+func (p *ScratchpadPreparerImpl) EquipTipEngine(
+	tipEngine *tip.TimeEventAnalysisEngine,
 ) {
-	p.teaEngine = teaEngine
+	p.tipEngine = tipEngine
 }
 
 // Prepare read from the register file and sets the scratchpad layout
@@ -48,8 +48,8 @@ func (p *ScratchpadPreparerImpl) Prepare(
 	p.clear(instEmuState.Scratchpad())
 	inst := instEmuState.Inst()
 
-	if p.teaEngine != nil {
-		p.teaEngine.GenerateNewPSV(
+	if p.tipEngine != nil {
+		p.tipEngine.GenerateNewPSV(
 			p.cu.Name(),
 			wf,
 		)

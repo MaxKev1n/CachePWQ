@@ -207,8 +207,8 @@ func (s *SchedulerImpl) DoIssue(now akita.VTimeInSec) bool {
 func (s *SchedulerImpl) issueToInternal(wf *wavefront.Wavefront, now akita.VTimeInSec) bool {
 	wf.SetDynamicInst(wf.InstToIssue)
 
-	if s.cu.teaEngine != nil {
-		s.cu.teaEngine.GenerateNewPSV(
+	if s.cu.tipEngine != nil {
+		s.cu.tipEngine.GenerateNewPSV(
 			s.cu.Name(),
 			wf,
 		)

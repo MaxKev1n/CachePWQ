@@ -76,7 +76,7 @@ type ComputeUnit struct {
 	currentFlushReq   *protocol.CUPipelineFlushReq
 	currentRestartReq *protocol.CUPipelineRestartReq
 
-	teaEngine *tip.TimeEventAnalysisEngine
+	tipEngine *tip.TimeEventAnalysisEngine
 }
 
 // Handle processes that events that are scheduled on the ComputeUnit
@@ -356,8 +356,8 @@ func (cu *ComputeUnit) handleMapWGReq(
 		location := req.Wavefronts[i]
 		cu.WfPools[location.SIMDID].AddWf(wf)
 
-		if cu.teaEngine != nil {
-			cu.teaEngine.RegisterWavefront(cu.Name(), wf)
+		if cu.tipEngine != nil {
+			cu.tipEngine.RegisterWavefront(cu.Name(), wf)
 		}
 
 		cu.WfDispatcher.DispatchWf(now, wf, req.Wavefronts[i])
@@ -411,8 +411,8 @@ func (cu *ComputeUnit) clearWGResource(wg *wavefront.WorkGroup) {
 		wfPool := cu.WfPools[wf.SIMDID]
 		wfPool.RemoveWf(wf)
 
-		if cu.teaEngine != nil {
-			cu.teaEngine.RemoveWavefront(cu.Name(), wf)
+		if cu.tipEngine != nil {
+			cu.tipEngine.RemoveWavefront(cu.Name(), wf)
 		}
 	}
 }

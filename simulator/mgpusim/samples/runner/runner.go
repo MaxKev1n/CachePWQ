@@ -140,8 +140,10 @@ var booksimDir = flag.String("booksim-dir", "",
 	"Specify the path to the booksim directory.")
 var nocFileName = flag.String("noc-file-name", "",
 	"Specify the name of the output noc trace file.")
+var tipFlag = flag.Bool("tip", false,
+	"Enable Time-Proportional Instruction Profiling (TIP).")
 var teaFlag = flag.Bool("tea", false,
-	"Enable Time-Proportional Event Analysis (TEA) tracing.")
+	"Enable Time-Proportional Event Analysis (TEA).")
 
 type verificationPreEnablingBenchmark interface {
 	benchmarks.Benchmark
@@ -1056,7 +1058,15 @@ func (r *Runner) buildTimingPlatform() {
 			b.WithoutProgressBar()
 		}
 
+		if *tipFlag {
+			b.UseTimeInstProfiling()
+		}
+
 		if *teaFlag {
+			if !*tipFlag {
+				log.Panic("TEA requires TIP to be enabled.")
+			}
+
 			b.UseTimeEventAnalysis()
 		}
 

@@ -29,7 +29,7 @@ type Builder struct {
 	visTracer        tracing.Tracer
 	enableVisTracing bool
 
-	teaEngine *tip.TimeEventAnalysisEngine
+	tipEngine *tip.TimeEventAnalysisEngine
 }
 
 // MakeBuilder returns a default builder object
@@ -91,11 +91,11 @@ func (b Builder) WithVisTracer(t tracing.Tracer) Builder {
 	return b
 }
 
-// WithTEAEngine enables the time-event analysis feature in the CU.
-func (b Builder) WithTEAEngine(
-	teaEngine *tip.TimeEventAnalysisEngine,
+// WithTipEngine enables the time-event analysis feature in the CU.
+func (b Builder) WithTipEngine(
+	tipEngine *tip.TimeEventAnalysisEngine,
 ) Builder {
-	b.teaEngine = teaEngine
+	b.tipEngine = tipEngine
 	return b
 }
 
@@ -112,11 +112,11 @@ func (b *Builder) Build(name string) *ComputeUnit {
 	b.alu = emu.NewALU(nil)
 	b.scratchpadPreparer = NewScratchpadPreparerImpl(cu)
 
-	if b.teaEngine != nil {
+	if b.tipEngine != nil {
 		b.scratchpadPreparer.(*ScratchpadPreparerImpl).
-			EquipTEAEngine(b.teaEngine)
+			EquipTipEngine(b.tipEngine)
 
-		cu.teaEngine = b.teaEngine
+		cu.tipEngine = b.tipEngine
 	}
 
 	for i := 0; i < 4; i++ {

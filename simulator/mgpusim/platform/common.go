@@ -45,6 +45,7 @@ type CommonPlatformBuilder struct {
 	booksimTLB    string
 	booksimDir    string
 
+	useTimeInstProfiling bool
 	useTimeEventAnalysis bool
 }
 
@@ -138,6 +139,10 @@ func (b *CommonPlatformBuilder) WithBookSimTLBNoC(config string) {
 
 func (b *CommonPlatformBuilder) WithBookSimDir(dir string) {
 	b.booksimDir = dir
+}
+
+func (b *CommonPlatformBuilder) UseTimeInstProfiling() {
+	b.useTimeInstProfiling = true
 }
 
 func (b *CommonPlatformBuilder) UseTimeEventAnalysis() {
