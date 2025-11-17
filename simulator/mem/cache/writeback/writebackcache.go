@@ -6,7 +6,9 @@ import (
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/akitaext"
+	"gitlab.com/akita/util/ca"
 	"gitlab.com/akita/util/pipelining"
+	"gitlab.com/akita/util/psv"
 )
 
 type cacheState int
@@ -142,4 +144,88 @@ func (c *Cache) discardInflightTransactions(now akita.VTimeInSec) {
 	c.topSender.Clear()
 
 	c.inFlightTransactions = nil
+}
+
+func (c *Cache) GetName() string {
+	return c.Name()
+}
+
+func (c *Cache) CheckTopPort(port akita.Port) bool {
+	return port == c.TopPort
+}
+
+func (c *Cache) CheckBottomPort(port akita.Port) bool {
+	return port == c.BottomPort
+}
+
+func (c *Cache) Attribute(
+	msg akita.Msg,
+) (psv.Result, akita.Msg) {
+	// Search whether it need to attribute to L2 Cache
+	if msg != nil {
+		perfVec := msg.(mem.AccessReq).GetPSV()
+		for _, item := range perfVec.L2Cache {
+			if item.SrcMsg == msg {
+				return psv.FAIL, item.Msg
+			}
+		}
+	}
+
+	if c.pipeline.CanAccept() {
+		return psv.SUCCESS, nil
+	}
+
+	pipelineitem := c.lookupBuffer.Peek()
+	if pipelineitem == nil {
+		panic("Pipeline buffer is empty")
+	}
+	pitem := pipelineitem.(cachePipelineItem)
+	item := pitem.trans
+	trans := item
+
+	var pid ca.PID
+	var address uint64
+
+	if trans.read != nil {
+		address = trans.read.Address
+		pid = trans.read.PID
+	} else {
+		address = trans.write.Address
+		pid = trans.write.PID
+	}
+
+	cachelineID, _ := getCacheLineID(
+		address, c.log2BlockSize)
+
+	var block *cache.Block
+
+	mshrEntry := c.mshr.Query(pid, cachelineID)
+	if mshrEntry != nil {
+		block = mshrEntry.Block
+	}
+
+	block = c.directory.Lookup(
+		pid, cachelineID)
+
+	if block == nil {
+		block = c.directory.FindVictim(cachelineID)
+	}
+
+	numBanks := len(c.dirToBankBuffers)
+	bank := bankID(block, c.directory.WayAssociativity(), numBanks)
+
+	bankStage := c.bankStages[bank]
+	if bankStage.currentTrans == nil {
+		return psv.SUCCESS, nil
+	} else {
+		action := bankStage.currentTrans.action
+
+		if action == bankReadHit || action == bankWriteHit {
+			return psv.SUCCESS, nil
+		}
+
+		return psv.FAIL, nil
+	}
+
+	return psv.SUCCESS, nil
 }

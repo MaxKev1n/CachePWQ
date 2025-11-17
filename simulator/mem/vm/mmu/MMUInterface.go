@@ -37,8 +37,9 @@ const (
 type Transaction struct {
 	akita.MsgMeta
 
-	req  *device.TranslationReq
-	page device.Page
+	req    *device.TranslationReq
+	memReq *mem.ReadReq
+	page   device.Page
 	//cycleLeft int
 	//migration *device.PageMigrationReqToDriver
 	level             int

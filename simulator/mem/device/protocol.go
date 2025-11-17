@@ -4,6 +4,7 @@ package device
 import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/util/ca"
+	"gitlab.com/akita/util/psv"
 )
 
 var accessReqByteOverhead = 12
@@ -27,6 +28,7 @@ type TranslationReq struct {
 	DeviceID    uint64
 	TLBID       int
 	PartitionID int
+	PSV         *psv.PerfSignatureVec
 }
 
 // Meta returns the meta data associated with the message.

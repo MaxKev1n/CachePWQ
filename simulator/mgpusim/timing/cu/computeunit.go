@@ -512,6 +512,14 @@ func (cu *ComputeUnit) handleFetchReturn(
 		return false
 	}
 
+	if info.Req.PSV != nil {
+		info.Req.PSV.RemoveItem(
+			&info.Req.PSV.IFU,
+			info.Req,
+			nil,
+		)
+	}
+
 	wf := info.Wavefront
 	addr := info.Address
 	cu.InFlightInstFetch = cu.InFlightInstFetch[1:]
@@ -575,6 +583,15 @@ func (cu *ComputeUnit) handleScalarDataLoadReturn(
 	if cu.isLastRead(req) {
 		wf.OutstandingScalarMemAccess--
 		wf.OutstandingScalarInst[info.PC]--
+		delete(wf.OutstandingScalarPSV, req.PSV)
+	}
+
+	if req.PSV != nil {
+		req.PSV.RemoveItem(
+			&req.PSV.SU,
+			req,
+			nil,
+		)
 	}
 }
 
@@ -646,9 +663,34 @@ func (cu *ComputeUnit) handleVectorDataLoadReturn(
 	if !info.Read.CanWaitForCoalesce {
 		wf.OutstandingVectorMemAccess--
 		wf.OutstandingVectorInst[info.PC]--
+
+		if wf.OutstandingVectorInst[info.PC] == 0 {
+			delete(wf.OutstandingVectorPSV, info.Read.PSV)
+		}
+
+		if info.Read.PSV != nil {
+			info.Read.PSV.RemoveItem(
+				&info.Read.PSV.VMEM,
+				info.Read,
+				nil,
+			)
+		}
+
 		if info.Inst.FormatType == insts.FLAT {
 			wf.OutstandingScalarMemAccess--
 			wf.OutstandingScalarInst[info.PC]--
+
+			if wf.OutstandingScalarInst[info.PC] == 0 {
+				delete(wf.OutstandingScalarPSV, info.Read.PSV)
+			}
+
+			if info.Read.PSV != nil {
+				info.Read.PSV.RemoveItem(
+					&info.Read.PSV.VMEM,
+					info.Read,
+					nil,
+				)
+			}
 		}
 
 		cu.logInstTask(now, wf, info.Inst, true)
@@ -680,9 +722,35 @@ func (cu *ComputeUnit) handleVectorDataStoreRsp(
 	if !info.Write.CanWaitForCoalesce {
 		wf.OutstandingVectorMemAccess--
 		wf.OutstandingVectorInst[info.PC]--
+
+		if wf.OutstandingVectorInst[info.PC] == 0 {
+			delete(wf.OutstandingVectorPSV, info.Write.PSV)
+		}
+
+		if info.Write.PSV != nil {
+			info.Write.PSV.RemoveItem(
+				&info.Write.PSV.VMEM,
+				info.Write,
+				nil,
+			)
+		}
+
 		if info.Inst.FormatType == insts.FLAT {
 			wf.OutstandingScalarMemAccess--
 			wf.OutstandingScalarInst[info.PC]--
+
+			if wf.OutstandingScalarInst[info.PC] == 0 {
+				delete(wf.OutstandingScalarPSV, info.Write.PSV)
+			}
+
+			if info.Write.PSV != nil {
+				info.Write.PSV.RemoveItem(
+					&info.Write.PSV.VMEM,
+					info.Write,
+					nil,
+				)
+			}
+
 		}
 		cu.logInstTask(now, wf, info.Inst, true)
 	}

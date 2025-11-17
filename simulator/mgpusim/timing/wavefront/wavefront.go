@@ -8,6 +8,7 @@ import (
 	"gitlab.com/akita/mgpusim/insts"
 	"gitlab.com/akita/mgpusim/kernels"
 	"gitlab.com/akita/util/ca"
+	"gitlab.com/akita/util/psv"
 )
 
 // WfState marks what state that wavefront it in.
@@ -21,22 +22,6 @@ const (
 	WfCompleted                  // Wavefront completed
 	WfAtBarrier                  // Wavefront at barrier
 )
-
-type PerfSignatureVec struct {
-	InstAddress uint64
-	EventBits   []bool
-}
-
-func NewPerfSignatureVector(
-	address uint64,
-) *PerfSignatureVec {
-	PSV := &PerfSignatureVec{
-		InstAddress: address,
-		EventBits:   make([]bool, 16),
-	}
-
-	return PSV
-}
 
 // A Wavefront in the timing package contains the information of the progress
 // of a wavefront
@@ -75,7 +60,10 @@ type Wavefront struct {
 	OutstandingScalarInst map[uint64]int
 	OutstandingVectorInst map[uint64]int
 
-	PSV *PerfSignatureVec
+	OutstandingScalarPSV map[*psv.PerfSignatureVec]struct{}
+	OutstandingVectorPSV map[*psv.PerfSignatureVec]struct{}
+
+	PSV *psv.PerfSignatureVec
 }
 
 // NewWavefront creates a new Wavefront of the timing package, wrapping the
@@ -89,6 +77,9 @@ func NewWavefront(raw *kernels.Wavefront) *Wavefront {
 
 	wf.OutstandingScalarInst = make(map[uint64]int)
 	wf.OutstandingVectorInst = make(map[uint64]int)
+
+	wf.OutstandingScalarPSV = make(map[*psv.PerfSignatureVec]struct{})
+	wf.OutstandingVectorPSV = make(map[*psv.PerfSignatureVec]struct{})
 
 	return wf
 }

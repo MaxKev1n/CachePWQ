@@ -151,6 +151,16 @@ func (s *SchedulerImpl) DoFetch(now akita.VTimeInSec) bool {
 			s.cu.InFlightInstFetch = append(s.cu.InFlightInstFetch, info)
 			wf.IsFetching = true
 
+			if wf.PSV != nil {
+				req.PSV = wf.PSV
+				req.PSV.AddItem(
+					&req.PSV.IFU,
+					req,
+					nil,
+					nil,
+				)
+			}
+
 			madeProgress = true
 
 			tracing.StartTask(req.ID+"_fetch", wf.UID,
@@ -196,6 +206,14 @@ func (s *SchedulerImpl) DoIssue(now akita.VTimeInSec) bool {
 
 func (s *SchedulerImpl) issueToInternal(wf *wavefront.Wavefront, now akita.VTimeInSec) bool {
 	wf.SetDynamicInst(wf.InstToIssue)
+
+	if s.cu.teaEngine != nil {
+		s.cu.teaEngine.GenerateNewPSV(
+			s.cu.Name(),
+			wf,
+		)
+	}
+
 	wf.InstToIssue = nil
 	s.internalExecuting = append(s.internalExecuting, wf)
 	wf.State = wavefront.WfRunning

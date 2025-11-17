@@ -20,6 +20,7 @@ import (
 	"gitlab.com/akita/mgpusim/rdma"
 	"gitlab.com/akita/mgpusim/remotetranslation"
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
+	"gitlab.com/akita/mgpusim/timing/caches/l1v"
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
 	"gitlab.com/akita/mgpusim/timing/cp"
 	"gitlab.com/akita/mgpusim/timing/cu"
@@ -122,7 +123,7 @@ type CommonBuilder struct {
 
 	useTimeEventAnalysis bool
 
-	teaEngine *tip.TimeEventAnalysisEngine
+	TeaEngine *tip.TimeEventAnalysisEngine
 }
 
 // MakeCommonBuilder provides a GPU builder that can builds the MCM GPU.
@@ -353,7 +354,7 @@ func (b *CommonBuilder) BuildSAs(chiplet *Chiplet) {
 	}
 
 	if b.useTimeEventAnalysis {
-		saBuilder.withTEAEngine(b.teaEngine)
+		saBuilder.withTEAEngine(b.TeaEngine)
 	}
 
 	for i := 0; i < b.numShaderArrayPerChiplet; i++ {
@@ -371,6 +372,19 @@ func (b *CommonBuilder) collectSAComponents(
 		b.gpu.CUs = append(b.gpu.CUs, cu)
 		b.cus = append(b.cus, cu)
 		chiplet.CUs = append(chiplet.CUs, cu)
+	}
+
+	if b.TeaEngine != nil {
+		for index, core := range sa.cus {
+			b.TeaEngine.RegisterCU(
+				core.Name(),
+				core.VectorMemUnit.(*cu.VectorMemoryUnit),
+				sa.l1vROBs[index],
+				sa.l1vATs[index].(*addresstranslator.DefaultAddressTranslator),
+				sa.l1vTLBs[index].(*tlb.TLB),
+				sa.l1vCaches[index].(*l1v.Cache),
+			)
+		}
 	}
 
 	for _, rob := range sa.l1vROBs {
@@ -470,6 +484,10 @@ func (b *CommonBuilder) buildMemBanks(chiplet *Chiplet) {
 		})
 		if b.enableVisTracing {
 			tracing.CollectTrace(l2, b.visTracer)
+		}
+
+		if b.useTimeEventAnalysis {
+			b.TeaEngine.L2Caches = append(b.TeaEngine.L2Caches, l2)
 		}
 	}
 }
@@ -574,6 +592,10 @@ func (b *CommonBuilder) buildL2TLB(chiplet *Chiplet) {
 
 	if b.enableVisTracing {
 		tracing.CollectTrace(l2TLB, b.visTracer)
+	}
+
+	if b.useTimeEventAnalysis {
+		b.TeaEngine.L2TLB = l2TLB.(*tlb.LatTLB)
 	}
 }
 

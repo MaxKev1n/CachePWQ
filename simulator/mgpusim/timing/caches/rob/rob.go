@@ -7,6 +7,7 @@ import (
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
+	"gitlab.com/akita/util/psv"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -158,6 +159,18 @@ func (b *ReorderBuffer) topDown(now akita.VTimeInSec) bool {
 		return false
 	}
 
+	if req.GetPSV() != nil {
+		perfVec := req.GetPSV()
+		perfVec.AddItem(
+			&perfVec.ROB,
+			trans.reqToBottom,
+			req,
+			nil,
+		)
+
+		trans.reqToBottom.SetPSV(perfVec)
+	}
+
 	b.addTransaction(trans)
 	b.TopPort.Retrieve(now)
 
@@ -184,6 +197,15 @@ func (b *ReorderBuffer) parseBottom(now akita.VTimeInSec) bool {
 	if found {
 		trans := transElement.Value.(*transaction)
 		trans.rspFromBottom = rsp
+
+		if trans.reqToBottom.GetPSV() != nil {
+			perfVec := trans.reqToBottom.GetPSV()
+			perfVec.RemoveItem(
+				&perfVec.ROB,
+				trans.reqToBottom,
+				nil,
+			)
+		}
 
 		tracing.TraceReqFinalize(trans.reqToBottom, now, b)
 	}
@@ -304,4 +326,36 @@ func (b *ReorderBuffer) duplicateWriteDoneRsp(
 	return mem.WriteDoneRspBuilder{}.
 		WithRspTo(rspTo).
 		Build()
+}
+
+func (b *ReorderBuffer) GetName() string {
+	return b.Name()
+}
+
+func (b *ReorderBuffer) CheckTopPort(port akita.Port) bool {
+	return port == b.TopPort
+}
+
+func (b *ReorderBuffer) CheckBottomPort(port akita.Port) bool {
+	return port == b.BottomPort
+}
+
+func (b *ReorderBuffer) Attribute(
+	msg akita.Msg,
+) (psv.Result, akita.Msg) {
+	// Search whether it need to attribute to ROB
+	if msg != nil {
+		perfVec := msg.(mem.AccessReq).GetPSV()
+		for _, item := range perfVec.ROB {
+			if item.SrcMsg == msg {
+				return psv.FAIL, item.Msg
+			}
+		}
+	}
+
+	if b.transactions.Front() == nil {
+		return psv.SUCCESS, nil
+	}
+
+	return psv.FAIL, b.transactions.Front().Value.(*transaction).reqToBottom
 }

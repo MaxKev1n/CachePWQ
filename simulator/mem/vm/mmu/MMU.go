@@ -237,6 +237,8 @@ func (walker *PageWalker) generateMemReq(
 		WithInfo(readReqInfo).
 		Build()
 
+	trans.memReq = readReq
+
 	return readReq
 }
 
@@ -365,6 +367,16 @@ func (mmu *MMUImpl) sendToMem(now akita.VTimeInSec) bool {
 
 		trans.msgID = req.ID
 
+		if trans.req.PSV != nil {
+			req.PSV = trans.req.PSV
+			req.PSV.AddItem(
+				&req.PSV.PTW,
+				req,
+				trans.req,
+				nil,
+			)
+		}
+
 		// remove from pendingIssueToMem
 		mmu.inflightMemRequests = mmu.inflightMemRequests[1:]
 
@@ -439,8 +451,17 @@ func (mmu *MMUImpl) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSe
 			mmu,
 		)
 
+		if trans.req.PSV != nil {
+			trans.req.PSV.RemoveItem(
+				&trans.req.PSV.PTW,
+				trans.memReq,
+				nil,
+			)
+		}
+
 		trans.PPN = binary.LittleEndian.Uint64(rsp.Data)
 		trans.state = memDone
+		trans.memReq = nil
 		if trans.level+1 == 4 {
 			walker.finalizeTransaction(now, trans)
 		} else {

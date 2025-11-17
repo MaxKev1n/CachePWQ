@@ -32,7 +32,9 @@ func MakeMonolithicGPUBuilder() MonolithicGPUBuilder {
 func (b MonolithicGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
 	b.createGPU(name, id)
 
-	b.buildTEA()
+	if b.useTimeEventAnalysis {
+		b.buildTEA()
+	}
 
 	b.buildCP()
 
@@ -74,7 +76,7 @@ func (b MonolithicGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
 }
 
 func (b *MonolithicGPUBuilder) buildTEA() {
-	b.teaEngine = tip.NewTimeEventAnalysisEngine(
+	b.TeaEngine = tip.NewTimeEventAnalysisEngine(
 		b.engine,
 	)
 }

@@ -163,6 +163,17 @@ func (u *ScalarUnit) executeSMEMLoad(byteSize int, now akita.VTimeInSec) bool {
 			Inst:      inst,
 			PC:        u.toExec.PC,
 		}
+
+		if u.toExec.PSV != nil {
+			req.PSV = u.toExec.PSV
+			req.PSV.AddItem(
+				&req.PSV.SU,
+				req,
+				nil,
+				nil,
+			)
+		}
+
 		u.cu.InFlightScalarMemAccess = append(
 			u.cu.InFlightScalarMemAccess, info)
 
@@ -174,6 +185,7 @@ func (u *ScalarUnit) executeSMEMLoad(byteSize int, now akita.VTimeInSec) bool {
 	u.toExec.OutstandingScalarMemAccess++
 
 	u.toExec.OutstandingScalarInst[u.toExec.PC]++
+	u.toExec.OutstandingScalarPSV[u.toExec.PSV] = struct{}{}
 
 	u.cu.UpdatePCAndSetReady(u.toExec)
 	u.toExec = nil

@@ -16,6 +16,7 @@ import (
 	"gitlab.com/akita/mem/vm/tlb/internal"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/pipelining"
+	"gitlab.com/akita/util/psv"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -213,6 +214,23 @@ func (tlb *LatTLB) respondMSHREntry(now akita.VTimeInSec) bool {
 	mshrEntry := tlb.respondingMSHREntry
 	page := mshrEntry.page
 	req := mshrEntry.Requests[0]
+
+	if req.PSV != nil {
+		if req.PSV == mshrEntry.reqToBottom.PSV {
+			req.PSV.RemoveItem(
+				&req.PSV.L2TLB,
+				mshrEntry.reqToBottom,
+				nil,
+			)
+		} else {
+			req.PSV.RemoveItem(
+				&req.PSV.L2TLB,
+				mshrEntry.reqToBottom,
+				mshrEntry.reqToBottom.PSV,
+			)
+		}
+	}
+
 	var accessResult device.AccessResult
 	if mshrEntry.NumResponded() == 0 {
 		accessResult = device.TLBMiss
@@ -579,6 +597,16 @@ func (tlb *LatTLB) processTLBMSHRHit(
 ) bool {
 	// if len(mshrEntry.Requests) < 8 {
 	mshrEntry.Requests = append(mshrEntry.Requests, req)
+
+	if req.PSV != nil {
+		req.PSV.AddItem(
+			&req.PSV.L2TLB,
+			mshrEntry.reqToBottom,
+			req,
+			mshrEntry.reqToBottom.PSV,
+		)
+	}
+
 	return true
 	// }
 	// return false
@@ -598,6 +626,16 @@ func (tlb *LatTLB) fetchBottom(now akita.VTimeInSec, req *device.TranslationReq)
 	err := tlb.BottomPort.Send(fetchBottom)
 	if err != nil {
 		return false
+	}
+
+	if req.PSV != nil {
+		fetchBottom.PSV = req.PSV
+		fetchBottom.PSV.AddItem(
+			&fetchBottom.PSV.L2TLB,
+			fetchBottom,
+			req,
+			nil,
+		)
 	}
 
 	mshrEntry := tlb.mshr.Add(req.PID, req.VAddr)
@@ -868,4 +906,62 @@ func (tlb *LatTLB) doStatsCollection(now akita.VTimeInSec) bool {
 // SetTLBFinder sets the TLBFinder of the LatTLB
 func (tlb *LatTLB) SetTLBFinder(lmf cache.LowModuleFinder) {
 	tlb.TLBFinder = lmf
+}
+
+func (tlb *LatTLB) GetName() string {
+	return tlb.Name()
+}
+
+func (tlb *LatTLB) CheckTopPort(port akita.Port) bool {
+	return port == tlb.TopPort
+}
+
+func (tlb *LatTLB) CheckBottomPort(port akita.Port) bool {
+	return port == tlb.BottomPort
+}
+
+func (tlb *LatTLB) Attribute(
+	msg akita.Msg,
+) (psv.Result, akita.Msg) {
+	// Search whether it need to attribute to L2 TLB
+	if msg != nil {
+		perfVec := msg.(*device.TranslationReq).PSV
+		for _, item := range perfVec.L2TLB {
+			if item.SrcMsg == msg {
+				return psv.FAIL, item.Msg
+			}
+		}
+	}
+
+	if tlb.pipeline.CanAccept() {
+		return psv.SUCCESS, nil
+	}
+
+	item := tlb.lookupBuffer.Peek()
+	if item == nil {
+		panic("no item in lookup buffer")
+	}
+
+	pipelineItem := item.(tlbPipelineItem)
+	req := pipelineItem.translationReq
+
+	mshrEntry := tlb.mshr.Query(req.PID, req.VAddr)
+	if mshrEntry != nil {
+		panic("message in MSHR")
+	}
+
+	setID := tlb.vAddrToSetID(req.VAddr)
+	set := tlb.Sets[setID]
+	_, page, found := set.Lookup(req.PID, req.VAddr)
+	if found && page.Valid {
+		return psv.SUCCESS, nil
+	}
+
+	if tlb.mshr.IsFull() {
+		oldestEntry := tlb.mshr.AllEntries()[0]
+
+		return psv.FAIL, oldestEntry.reqToBottom
+	}
+
+	return psv.FAIL, nil
 }

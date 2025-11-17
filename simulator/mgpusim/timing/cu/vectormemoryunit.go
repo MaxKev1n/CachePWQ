@@ -4,10 +4,12 @@ import (
 	"log"
 
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mgpusim/insts"
 	"gitlab.com/akita/mgpusim/timing/wavefront"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/pipelining"
+	"gitlab.com/akita/util/psv"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -177,6 +179,9 @@ func (u *VectorMemoryUnit) executeFlatLoad(
 	wave.OutstandingScalarMemAccess++
 	wave.OutstandingScalarInst[wave.PC]++
 
+	wave.OutstandingVectorPSV[wave.PSV] = struct{}{}
+	wave.OutstandingScalarPSV[wave.PSV] = struct{}{}
+
 	for i, t := range transactions {
 		u.cu.InFlightVectorMemAccess = append(u.cu.InFlightVectorMemAccess, t)
 		if i != len(transactions)-1 {
@@ -187,6 +192,11 @@ func (u *VectorMemoryUnit) executeFlatLoad(
 		t.Read.Src = u.cu.ToVectorMem
 		t.Read.PID = wave.PID()
 		u.transactionsWaiting = append(u.transactionsWaiting, t)
+
+		if wave.PSV != nil {
+			t.Read.PSV = wave.PSV
+			wave.PSV.AddItem(&wave.PSV.VMEM, t.Read, nil, nil)
+		}
 	}
 
 	return true
@@ -219,6 +229,9 @@ func (u *VectorMemoryUnit) executeFlatStore(
 	wave.OutstandingScalarMemAccess++
 	wave.OutstandingScalarInst[wave.PC]++
 
+	wave.OutstandingVectorPSV[wave.PSV] = struct{}{}
+	wave.OutstandingScalarPSV[wave.PSV] = struct{}{}
+
 	for i, t := range transactions {
 		u.cu.InFlightVectorMemAccess = append(u.cu.InFlightVectorMemAccess, t)
 		if i != len(transactions)-1 {
@@ -229,6 +242,11 @@ func (u *VectorMemoryUnit) executeFlatStore(
 		t.Write.Src = u.cu.ToVectorMem
 		t.Write.PID = wave.PID()
 		u.transactionsWaiting = append(u.transactionsWaiting, t)
+
+		if wave.PSV != nil {
+			t.Write.PSV = wave.PSV
+			wave.PSV.AddItem(&wave.PSV.VMEM, t.Write, nil, nil)
+		}
 	}
 
 	return true
@@ -277,4 +295,37 @@ func (u *VectorMemoryUnit) Flush() {
 	u.transactionsWaiting = nil
 	u.numInstInFlight = 0
 	u.numTransactionInFlight = 0
+}
+
+func (u *VectorMemoryUnit) GetName() string {
+	return u.cu.Name() + ".VectorMemoryUnit"
+}
+
+func (u *VectorMemoryUnit) CheckTopPort(port akita.Port) bool {
+	panic("vector memory unit has no top port")
+}
+
+func (u *VectorMemoryUnit) CheckBottomPort(port akita.Port) bool {
+	return port == u.cu.ToVectorMem
+}
+
+func (u *VectorMemoryUnit) Attribute(
+	msg akita.Msg,
+) (psv.Result, akita.Msg) {
+	// Search whether it need to attribute to VMem
+	if msg != nil {
+		perfVec := msg.(mem.AccessReq).GetPSV()
+		for _, item := range perfVec.VMEM {
+			if item.SrcMsg == msg {
+				log.Printf("find in VMem, attribute to AddressTranslator")
+				return psv.FAIL, item.Msg
+			}
+		}
+	}
+
+	if u.transactionPipeline.CanAccept() {
+		return psv.SUCCESS, nil
+	}
+
+	return psv.FAIL, nil
 }

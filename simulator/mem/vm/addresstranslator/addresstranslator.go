@@ -3,11 +3,13 @@ package addresstranslator
 import (
 	"log"
 	"reflect"
+	"strings"
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/device"
+	"gitlab.com/akita/util/psv"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -159,6 +161,16 @@ func (t *DefaultAddressTranslator) translate(now akita.VTimeInSec) bool {
 		return false
 	}
 
+	if req.GetPSV() != nil {
+		transReq.PSV = req.GetPSV()
+		transReq.PSV.AddItem(
+			&transReq.PSV.AT,
+			transReq,
+			req,
+			nil,
+		)
+	}
+
 	translation := &transaction{
 		incomingReqs:   []mem.AccessReq{req},
 		translationReq: transReq,
@@ -208,6 +220,14 @@ func (t *DefaultAddressTranslator) parseTranslation(now akita.VTimeInSec) bool {
 	transaction.translationRsp = transRsp
 	transaction.translationDone = true
 
+	if transaction.translationReq.PSV != nil {
+		transaction.translationReq.PSV.RemoveItem(
+			&transaction.translationReq.PSV.AT,
+			transaction.translationReq,
+			nil,
+		)
+	}
+
 	t.TranslationPort.Retrieve(now)
 
 	tracing.AddTaskStep(
@@ -236,6 +256,18 @@ func (t *DefaultAddressTranslator) sendToBottom(now akita.VTimeInSec) bool {
 			err := t.BottomPort.Send(translatedReq)
 			if err != nil {
 				return false
+			}
+
+			if reqFromTop.GetPSV() != nil {
+				perfVector := reqFromTop.GetPSV()
+				perfVector.AddItem(
+					&perfVector.AT,
+					translatedReq,
+					reqFromTop,
+					nil,
+				)
+
+				translatedReq.SetPSV(perfVector)
 			}
 
 			t.inflightReqToBottom = append(t.inflightReqToBottom,
@@ -302,6 +334,15 @@ func (t *DefaultAddressTranslator) respond(now akita.VTimeInSec) bool {
 		err := t.TopPort.Send(rspToTop)
 		if err != nil {
 			return false
+		}
+
+		if reqToBottomCombo.reqToBottom.GetPSV() != nil {
+			perfVector := reqToBottomCombo.reqToBottom.GetPSV()
+			perfVector.RemoveItem(
+				&perfVector.AT,
+				reqToBottomCombo.reqToBottom,
+				nil,
+			)
 		}
 
 		t.removeReqToBottomByID(rsp.(mem.AccessRsp).GetRespondTo())
@@ -502,4 +543,50 @@ func (t *DefaultAddressTranslator) handleRestartReq(
 	t.CtrlPort.Retrieve(now)
 
 	return true
+}
+
+func (t *DefaultAddressTranslator) Attribute(
+	msg akita.Msg,
+) (psv.Result, akita.Msg) {
+	// Search whether it need to attribute to AddressTranslator
+	if msg != nil {
+		perfVec := msg.(mem.AccessReq).GetPSV()
+		for _, item := range perfVec.AT {
+			if item.SrcMsg == msg {
+				if strings.Contains(item.Msg.Meta().Dst.Name(), "TLB") {
+					return psv.FAIL, item.Msg
+				} else if strings.Contains(item.Msg.Meta().Dst.Name(), "Cache") {
+					return psv.FAILSECONDARY, item.Msg
+				} else {
+					panic("invalid msg in PSV")
+				}
+			}
+		}
+	}
+
+	for _, transaction := range t.transactions {
+		if transaction.incomingReqs[0] == msg {
+			return psv.FAIL, nil
+		}
+	}
+
+	for _, reqToBottom := range t.inflightReqToBottom {
+		if reqToBottom.reqFromTop == msg {
+			return psv.FAILSECONDARY, nil
+		}
+	}
+
+	return psv.SUCCESS, nil
+}
+
+func (t *DefaultAddressTranslator) CheckTopPort(port akita.Port) bool {
+	return port == t.TopPort
+}
+
+func (t *DefaultAddressTranslator) CheckBottomPort(port akita.Port) bool {
+	return port == t.BottomPort
+}
+
+func (t *DefaultAddressTranslator) GetName() string {
+	return t.Name()
 }

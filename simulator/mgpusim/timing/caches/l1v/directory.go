@@ -5,6 +5,8 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/util"
+	"gitlab.com/akita/util/ca"
+	"gitlab.com/akita/util/psv"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -52,6 +54,17 @@ func (d *directory) processMSHRHit(
 	mshrEntry *cache.MSHREntry,
 ) bool {
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
+
+	if trans.read != nil {
+		if trans.read.PSV != nil {
+			trans.read.PSV.AddItem(
+				&trans.read.PSV.L1Cache,
+				mshrEntry.ReadReq,
+				trans.read,
+				mshrEntry.ReadReq.PSV,
+			)
+		}
+	}
 
 	d.cache.dirBuf.Pop()
 
@@ -318,6 +331,16 @@ func (d *directory) fetchFromBottom(
 		return false
 	}
 
+	if trans.read.PSV != nil {
+		readToBottom.PSV = trans.read.PSV
+		readToBottom.PSV.AddItem(
+			&trans.read.PSV.L1Cache,
+			readToBottom,
+			trans.read,
+			nil,
+		)
+	}
+
 	tracing.TraceReqInitiate(readToBottom, now, d.cache, trans.id)
 	trans.readToBottom = readToBottom
 	trans.block = victim
@@ -341,4 +364,55 @@ func (d *directory) getBankBuf(block *cache.Block) util.Buffer {
 	blockID := block.SetID*numWaysPerSet + block.WayID
 	bankID := blockID % len(d.cache.bankBufs)
 	return d.cache.bankBufs[bankID]
+}
+
+func (d *directory) tryToAttribute(
+	msg akita.Msg,
+) (psv.Result, akita.Msg) {
+	if msg != nil {
+		perfVec := msg.(mem.AccessReq).GetPSV()
+		for _, item := range perfVec.L1Cache {
+			if item.SrcMsg == msg {
+				return psv.FAIL, item.Msg
+			}
+		}
+	}
+
+	item := d.cache.dirBuf.Peek()
+	if item == nil {
+		return psv.SUCCESS, nil
+	}
+
+	trans := item.(*transaction)
+
+	var addr uint64
+	var pid ca.PID
+
+	if trans.read != nil {
+		addr = trans.read.Address
+		pid = trans.read.PID
+	} else {
+		addr = trans.write.Address
+		pid = trans.write.PID
+	}
+
+	blockSize := uint64(1 << d.cache.log2BlockSize)
+	cacheLineID := addr / blockSize * blockSize
+	mshrEntry := d.cache.mshr.Query(pid, cacheLineID)
+	if mshrEntry != nil {
+		return psv.FAIL, mshrEntry.ReadReq
+	}
+
+	block := d.cache.directory.Lookup(pid, cacheLineID)
+	if block != nil && block.IsValid {
+		return psv.SUCCESS, nil
+	}
+
+	if d.cache.mshr.IsFull() {
+		oldestMSHR := d.cache.mshr.AllEntries()[0]
+
+		return psv.FAIL, oldestMSHR.ReadReq
+	}
+
+	return psv.SUCCESS, nil
 }

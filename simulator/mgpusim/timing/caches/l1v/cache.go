@@ -5,6 +5,7 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/util"
+	"gitlab.com/akita/util/psv"
 )
 
 // A Cache is a customized L1 cache the for R9nano GPUs.
@@ -121,4 +122,36 @@ func (c *Cache) GetBottomPort() akita.Port {
 
 func (c *Cache) GetControlPort() akita.Port {
 	return c.ControlPort
+}
+
+func (c *Cache) GetName() string {
+	return c.Name()
+}
+
+func (c *Cache) CheckTopPort(port akita.Port) bool {
+	return port == c.TopPort
+}
+
+func (c *Cache) CheckBottomPort(port akita.Port) bool {
+	return port == c.BottomPort
+}
+
+func (c *Cache) Attribute(
+	msg akita.Msg,
+) (psv.Result, akita.Msg) {
+	// Search whether it need to attribute to L1 Cache
+	if msg != nil {
+		perfVec := msg.(mem.AccessReq).GetPSV()
+		for _, item := range perfVec.L1Coalescer {
+			if item.SrcMsg == msg {
+				return c.directoryStage.tryToAttribute(item.Msg)
+			}
+		}
+	}
+
+	if c.dirBuf.CanPush() {
+		return psv.SUCCESS, nil
+	}
+
+	return c.directoryStage.tryToAttribute(nil)
 }
