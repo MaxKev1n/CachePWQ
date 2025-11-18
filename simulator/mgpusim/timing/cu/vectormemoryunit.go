@@ -40,6 +40,8 @@ type VectorMemoryUnit struct {
 	postTransactionPipelineBuffer util.Buffer
 
 	isIdle bool
+
+	reachLimitation bool
 }
 
 // NewVectorMemoryUnit creates a new Vector Memory Unit.
@@ -166,11 +168,17 @@ func (u *VectorMemoryUnit) executeFlatLoad(
 			wave.DynamicInst(),
 			true,
 		)
+
+		u.reachLimitation = false
+
 		return true
 	}
 
 	if len(transactions)+len(u.cu.InFlightVectorMemAccess) >
 		u.cu.InFlightVectorMemAccessLimit {
+
+		u.reachLimitation = true
+
 		return false
 	}
 
@@ -199,6 +207,8 @@ func (u *VectorMemoryUnit) executeFlatLoad(
 		}
 	}
 
+	u.reachLimitation = false
+
 	return true
 }
 
@@ -216,11 +226,17 @@ func (u *VectorMemoryUnit) executeFlatStore(
 			wave.DynamicInst(),
 			true,
 		)
+
+		u.reachLimitation = false
+
 		return true
 	}
 
 	if len(transactions)+len(u.cu.InFlightVectorMemAccess) >
 		u.cu.InFlightVectorMemAccessLimit {
+
+		u.reachLimitation = true
+
 		return false
 	}
 
@@ -248,6 +264,8 @@ func (u *VectorMemoryUnit) executeFlatStore(
 			wave.PSV.AddItem(&wave.PSV.VMEM, t.Write, nil, nil)
 		}
 	}
+
+	u.reachLimitation = false
 
 	return true
 }
@@ -323,9 +341,9 @@ func (u *VectorMemoryUnit) Attribute(
 		}
 	}
 
-	if u.transactionPipeline.CanAccept() {
-		return psv.SUCCESS, nil
+	if !u.transactionPipeline.CanAccept() || u.reachLimitation {
+		return psv.FAIL, nil
 	}
 
-	return psv.FAIL, nil
+	return psv.SUCCESS, nil
 }

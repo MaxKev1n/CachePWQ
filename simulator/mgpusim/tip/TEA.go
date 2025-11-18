@@ -172,7 +172,7 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 						}
 
 						for attributedPSV := range attributedPSVs {
-							event := tip.Attribute(cu)
+							event := tip.Attribute(cu, attributedPSV)
 
 							attributedEvents = append(attributedEvents,
 								TEAItems{
@@ -214,7 +214,7 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 							}
 
 							for attributedPSV := range attributedPSVs {
-								event := tip.Attribute(cu)
+								event := tip.Attribute(cu, attributedPSV)
 
 								attributedEvents = append(attributedEvents,
 									TEAItems{
@@ -232,11 +232,11 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 					cu.Profile(wf.PC, uint64(attributeCycle))
 
 					if tip.useTEA {
-						event := tip.Attribute(cu)
+						event := tip.Attribute(cu, wf.PSV)
 
 						attributedEvents = append(attributedEvents,
 							TEAItems{
-								InstAddress: wf.PSV.InstAddress,
+								InstAddress: wf.PC,
 								Event:       event,
 							},
 						)
@@ -366,8 +366,19 @@ func (tip *TimeEventAnalysisEngine) GenerateNewPSV(
 
 func (tip *TimeEventAnalysisEngine) Attribute(
 	cu *GPUCore,
+	perfVec *psv.PerfSignatureVec,
 ) psv.Event {
-	result, msg := cu.VROB.Attribute(nil)
+	var result psv.Result
+	var msg akita.Msg
+
+	if len(perfVec.VMEM) == 0 {
+		result, msg = cu.VMemUnit.Attribute(nil)
+		if result == psv.SUCCESS {
+			return psv.BASE
+		}
+	}
+
+	result, msg = cu.VROB.Attribute(nil)
 	if result == psv.SUCCESS {
 		return psv.BASE
 	}
