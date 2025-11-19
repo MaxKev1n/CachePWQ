@@ -162,6 +162,22 @@ func (p *bottomParser) finalizeMSHRTrans(
 			for _, preCTrans := range trans.preCoalesceTransactions {
 				preCTrans.done = true
 			}
+
+			if trans.write.PSV != nil {
+				if mshrEntry.ReadReq.PSV == trans.write.PSV {
+					trans.write.PSV.RemoveItem(
+						&trans.write.PSV.L1Cache,
+						mshrEntry.ReadReq,
+						nil,
+					)
+				} else {
+					trans.write.PSV.RemoveItem(
+						&trans.write.PSV.L1Cache,
+						mshrEntry.ReadReq,
+						mshrEntry.ReadReq.PSV,
+					)
+				}
+			}
 		}
 		p.removeTransaction(trans)
 

@@ -63,6 +63,15 @@ func (d *directory) processMSHRHit(
 				mshrEntry.ReadReq.PSV,
 			)
 		}
+	} else {
+		if trans.write.PSV != nil {
+			trans.write.PSV.AddItem(
+				&trans.write.PSV.L1Cache,
+				mshrEntry.ReadReq,
+				trans.write,
+				mshrEntry.ReadReq.PSV,
+			)
+		}
 	}
 
 	d.cache.dirBuf.Pop()
@@ -330,14 +339,26 @@ func (d *directory) fetchFromBottom(
 		return false
 	}
 
-	if trans.read.PSV != nil {
-		readToBottom.PSV = trans.read.PSV
-		readToBottom.PSV.AddItem(
-			&trans.read.PSV.L1Cache,
-			readToBottom,
-			trans.read,
-			nil,
-		)
+	if trans.read != nil {
+		if trans.read.PSV != nil {
+			readToBottom.PSV = trans.read.PSV
+			readToBottom.PSV.AddItem(
+				&trans.read.PSV.L1Cache,
+				readToBottom,
+				trans.read,
+				nil,
+			)
+		}
+	} else {
+		if trans.write.PSV != nil {
+			readToBottom.PSV = trans.write.PSV
+			readToBottom.PSV.AddItem(
+				&trans.write.PSV.L1Cache,
+				readToBottom,
+				trans.write,
+				nil,
+			)
+		}
 	}
 
 	tracing.TraceReqInitiate(readToBottom, now, d.cache, trans.id)

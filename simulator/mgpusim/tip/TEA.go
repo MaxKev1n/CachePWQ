@@ -33,6 +33,12 @@ type GPUCore struct {
 	PICS map[TEAItems]uint64
 }
 
+func (core *GPUCore) Clear() {
+	core.wavefronts = []*wavefront.Wavefront{}
+	core.Oracle = make(map[uint64]uint64)
+	core.PICS = make(map[TEAItems]uint64)
+}
+
 func (core *GPUCore) Profile(
 	pc uint64,
 	cycles uint64,
@@ -46,8 +52,7 @@ func (core *GPUCore) Profile(
 type TimeEventAnalysisEngine struct {
 	*akita.TickingComponent
 
-	GPUCore          map[string]*GPUCore
-	CompletedGPUCore []*GPUCore
+	GPUCore map[string]*GPUCore
 
 	L2TLB    TEAComponent
 	L2Caches []TEAComponent
@@ -327,12 +332,6 @@ func (tip *TimeEventAnalysisEngine) RemoveWavefront(
 				core.wavefronts[i+1:]...,
 			)
 
-			if len(core.wavefronts) == 0 {
-				tip.CompletedGPUCore = append(tip.CompletedGPUCore, core)
-
-				delete(tip.GPUCore, cuName)
-			}
-
 			return
 		}
 	}
@@ -431,7 +430,7 @@ func (tip *TimeEventAnalysisEngine) Attribute(
 }
 
 func (tip *TimeEventAnalysisEngine) DumpLog() {
-	for _, cu := range tip.CompletedGPUCore {
+	for _, cu := range tip.GPUCore {
 		tip.tipLogger.Printf("GPU core: %s", cu.name)
 		for pc, cycles := range cu.Oracle {
 			tip.tipLogger.Printf("%X, %v\n", pc, cycles)
@@ -444,5 +443,7 @@ func (tip *TimeEventAnalysisEngine) DumpLog() {
 					item.InstAddress, item.Event, cycles)
 			}
 		}
+
+		cu.Clear()
 	}
 }

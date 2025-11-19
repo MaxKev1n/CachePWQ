@@ -322,6 +322,10 @@ func (b *CommonBuilder) buildCP() {
 		builder = builder.WithVisTracer(b.visTracer)
 	}
 
+	if b.TipEngine != nil {
+		builder = builder.WithTipEngine(b.TipEngine)
+	}
+
 	b.cp = builder.Build(b.gpuName + ".CommandProcessor")
 	b.gpu.CommandProcessor = b.cp
 

@@ -8,6 +8,7 @@ import (
 	"gitlab.com/akita/mgpusim/protocol"
 	"gitlab.com/akita/mgpusim/timing/cp/internal/dispatching"
 	"gitlab.com/akita/mgpusim/timing/cp/internal/resource"
+	"gitlab.com/akita/mgpusim/tip"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/akitaext"
 	"gitlab.com/akita/util/tracing"
@@ -24,6 +25,8 @@ type Builder struct {
 
 	partition         string
 	customHSLpmdUnits uint64
+
+	tipEngine *tip.TimeEventAnalysisEngine
 }
 
 // MakeBuilder creates a new builder with default configuration values.
@@ -75,6 +78,12 @@ func (b Builder) WithPartition(partition string) Builder {
 // WithAlg sets the scheduling algorithm.
 func (b Builder) WithCustomHSLpmdUnits(customHSLpmdUnits uint64) Builder {
 	b.customHSLpmdUnits = customHSLpmdUnits
+	return b
+}
+
+// WithTipEngine sets the TIP engine.
+func (b Builder) WithTipEngine(tipEngine *tip.TimeEventAnalysisEngine) Builder {
+	b.tipEngine = tipEngine
 	return b
 }
 
@@ -176,6 +185,10 @@ func (b *Builder) buildDispatchers(cp *CommandProcessor) {
 
 	for i := 0; i < b.numDispatchers; i++ {
 		disp := builder.Build(fmt.Sprintf("%s.Dispatcher%d", cp.Name(), i))
+
+		if b.tipEngine != nil {
+			disp.(*dispatching.DispatcherImpl).TipEngine = b.tipEngine
+		}
 
 		if b.visTracer != nil {
 			tracing.CollectTrace(disp, b.visTracer)
