@@ -130,10 +130,10 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 
 		attributeCycle := float64(cycleInterval) / float64(numRunningWfs+numStalledWfs)
 
-		attributedEvents := make([]TEAItems, 0)
+		attributedEvents := make(map[TEAItems]struct{})
 
 		for _, wf := range cu.wavefronts {
-			if wf.State == wavefront.WfRunning || wf.State == wavefront.WfAtBarrier {
+			if wf.State == wavefront.WfRunning {
 				if wf.Inst().Opcode == 12 {
 					// S_WAITCNT instruction
 					count := 0
@@ -179,12 +179,14 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 						for attributedPSV := range attributedPSVs {
 							event := tip.Attribute(cu, attributedPSV)
 
-							attributedEvents = append(attributedEvents,
-								TEAItems{
-									InstAddress: attributedPSV.InstAddress,
-									Event:       event,
-								},
-							)
+							item := TEAItems{
+								InstAddress: attributedPSV.InstAddress,
+								Event:       event,
+							}
+
+							if _, ok := attributedEvents[item]; !ok {
+								attributedEvents[item] = struct{}{}
+							}
 
 							delete(attributedPSVs, attributedPSV)
 						}
@@ -221,12 +223,14 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 							for attributedPSV := range attributedPSVs {
 								event := tip.Attribute(cu, attributedPSV)
 
-								attributedEvents = append(attributedEvents,
-									TEAItems{
-										InstAddress: attributedPSV.InstAddress,
-										Event:       event,
-									},
-								)
+								item := TEAItems{
+									InstAddress: attributedPSV.InstAddress,
+									Event:       event,
+								}
+
+								if _, ok := attributedEvents[item]; !ok {
+									attributedEvents[item] = struct{}{}
+								}
 
 								delete(attributedPSVs, attributedPSV)
 							}
@@ -239,12 +243,103 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 					if tip.useTEA {
 						event := tip.Attribute(cu, wf.PSV)
 
-						attributedEvents = append(attributedEvents,
-							TEAItems{
-								InstAddress: wf.PC,
+						item := TEAItems{
+							InstAddress: wf.PC,
+							Event:       event,
+						}
+
+						if _, ok := attributedEvents[item]; !ok {
+							attributedEvents[item] = struct{}{}
+						}
+					}
+				}
+			} else if wf.State == wavefront.WfAtBarrier {
+				if tip.useTEA {
+					for _, attrWf := range wf.WG.Wfs {
+						if attrWf.State == wavefront.WfAtBarrier {
+							continue
+						}
+
+						if attrWf.Inst().Opcode == 12 {
+							attributedPSVs := make(map[*psv.PerfSignatureVec]struct{})
+
+							// S_WAITCNT instruction
+							if attrWf.OutstandingScalarMemAccess > attrWf.Inst().LKGMCNT {
+								for scalarPSV := range attrWf.OutstandingScalarPSV {
+									if _, ok := attributedPSVs[scalarPSV]; !ok {
+										attributedPSVs[scalarPSV] = struct{}{}
+									}
+								}
+							}
+
+							if attrWf.OutstandingVectorMemAccess > attrWf.Inst().VMCNT {
+								for vectorPSV := range attrWf.OutstandingVectorPSV {
+									if _, ok := attributedPSVs[vectorPSV]; !ok {
+										attributedPSVs[vectorPSV] = struct{}{}
+									}
+								}
+							}
+
+							for attributedPSV := range attributedPSVs {
+								event := tip.Attribute(cu, attributedPSV)
+
+								item := TEAItems{
+									InstAddress: attributedPSV.InstAddress,
+									Event:       event,
+								}
+
+								if _, ok := attributedEvents[item]; !ok {
+									attributedEvents[item] = struct{}{}
+								}
+
+								delete(attributedPSVs, attributedPSV)
+							}
+							attributedPSVs = nil
+						} else if attrWf.Inst().Opcode == 1 {
+							// S_ENDPGM instruction
+							attributedPSVs := make(map[*psv.PerfSignatureVec]struct{})
+
+							if attrWf.OutstandingScalarMemAccess > 0 || attrWf.OutstandingVectorMemAccess > 0 {
+								for scalarPSV := range attrWf.OutstandingScalarPSV {
+									if _, ok := attributedPSVs[scalarPSV]; !ok {
+										attributedPSVs[scalarPSV] = struct{}{}
+									}
+								}
+
+								for vectorPSV := range attrWf.OutstandingVectorPSV {
+									if _, ok := attributedPSVs[vectorPSV]; !ok {
+										attributedPSVs[vectorPSV] = struct{}{}
+									}
+								}
+
+								for attributedPSV := range attributedPSVs {
+									event := tip.Attribute(cu, attributedPSV)
+
+									item := TEAItems{
+										InstAddress: attributedPSV.InstAddress,
+										Event:       event,
+									}
+
+									if _, ok := attributedEvents[item]; !ok {
+										attributedEvents[item] = struct{}{}
+									}
+
+									delete(attributedPSVs, attributedPSV)
+								}
+								attributedPSVs = nil
+							}
+						} else {
+							event := tip.Attribute(cu, attrWf.PSV)
+
+							item := TEAItems{
+								InstAddress: attrWf.PC,
 								Event:       event,
-							},
-						)
+							}
+
+							if _, ok := attributedEvents[item]; !ok {
+								attributedEvents[item] = struct{}{}
+							}
+						}
 					}
 				}
 			}
@@ -253,12 +348,14 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 		if tip.useTEA {
 			attributeCycle = float64(cycleInterval) / float64(len(attributedEvents))
 
-			for _, item := range attributedEvents {
+			for item, _ := range attributedEvents {
 				if _, ok := cu.PICS[item]; !ok {
 					cu.PICS[item] = 0
 				}
 				cu.PICS[item] += uint64(attributeCycle)
 			}
+
+			attributedEvents = nil
 		}
 	}
 }
