@@ -7,6 +7,7 @@ import (
 
 	"github.com/tebeka/atexit"
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/mgpusim/insts"
 	"gitlab.com/akita/mgpusim/timing/wavefront"
 	"gitlab.com/akita/util/psv"
 )
@@ -241,7 +242,11 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 					cu.Profile(wf.PC, uint64(attributeCycle))
 
 					if tip.useTEA {
-						event := tip.Attribute(cu, wf.PSV)
+						event := psv.BASE
+
+						if wf.Inst().ExeUnit == insts.ExeUnitVMem {
+							event = tip.Attribute(cu, wf.PSV)
+						}
 
 						item := TEAItems{
 							InstAddress: wf.PC,
@@ -329,7 +334,11 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 								attributedPSVs = nil
 							}
 						} else {
-							event := tip.Attribute(cu, attrWf.PSV)
+							event := psv.BASE
+
+							if attrWf.Inst().ExeUnit == insts.ExeUnitVMem {
+								event = tip.Attribute(cu, attrWf.PSV)
+							}
 
 							item := TEAItems{
 								InstAddress: attrWf.PC,
