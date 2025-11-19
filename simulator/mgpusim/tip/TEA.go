@@ -94,6 +94,8 @@ func NewTimeEventAnalysisEngine(
 	tipEngine.tipLogger = log.New(file, "", 0)
 
 	atexit.Register(func() {
+		tipEngine.tipLogger.Println("Dumping TIP logs...")
+		tipEngine.teaLogger.Println("Dumping TEA logs...")
 		tipEngine.DumpLog()
 	})
 
