@@ -13,6 +13,7 @@ import (
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	"gitlab.com/akita/mgpusim/timing/caches/l1v"
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
+	"gitlab.com/akita/mgpusim/timing/caches/smside"
 	"gitlab.com/akita/mgpusim/timing/cu"
 	"gitlab.com/akita/mgpusim/tip"
 	"gitlab.com/akita/util/tracing"
@@ -131,6 +132,8 @@ func (b *shaderArrayBuilder) Build(name string, i int) shaderArray {
 
 func (b *shaderArrayBuilder) buildComponents(sa *shaderArray) {
 	switch b.config {
+	case "FullSMSide":
+		b.buildFullSMSideComponents(sa)
 	case "SMSide":
 		b.buildSMSideComponents(sa)
 	case "CaPWQ":
@@ -154,6 +157,25 @@ func (b *shaderArrayBuilder) buildDefaultComponents(sa *shaderArray) {
 	b.buildL1SCache(sa)
 
 	b.buildL1ITLB(sa)
+	b.buildL1IAddressTranslator(sa)
+	b.buildL1IReorderBuffer(sa)
+	b.buildL1ICache(sa)
+}
+
+func (b *shaderArrayBuilder) buildFullSMSideComponents(sa *shaderArray) {
+	b.buildCUs(sa)
+
+	b.buildSMSideL1VTLBs(sa)
+	b.buildL1VAddressTranslators(sa)
+	b.buildL1VReorderBuffers(sa)
+	b.buildFullSMSideL1VCaches(sa)
+
+	b.buildSMSideL1STLB(sa)
+	b.buildL1SAddressTranslator(sa)
+	b.buildL1SReorderBuffer(sa)
+	b.buildL1SCache(sa)
+
+	b.buildSMSideL1ITLB(sa)
 	b.buildL1IAddressTranslator(sa)
 	b.buildL1IReorderBuffer(sa)
 	b.buildL1ICache(sa)
@@ -439,6 +461,30 @@ func (b *shaderArrayBuilder) buildL1VCaches(sa *shaderArray) {
 
 	for i := 0; i < b.numCU; i++ {
 		name := fmt.Sprintf("%s.L1VCache_%02d", b.name, i)
+		cache := builder.Build(name)
+		sa.l1vCaches = append(sa.l1vCaches, cache)
+	}
+}
+
+func (b *shaderArrayBuilder) buildFullSMSideL1VCaches(sa *shaderArray) {
+	builder := smside.NewBuilder().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithBankLatency(20).
+		WithNumBanks(1).
+		WithLog2BlockSize(b.log2CacheLineSize).
+		WithWayAssocitivity(16).
+		WithNumMSHREntry(32).
+		WithTotalByteSize(64 * mem.KB).
+		WithNumReqsPerCycle(2).
+		WithBankLatency(28)
+
+	if b.visTracer != nil {
+		builder = builder.WithVisTracer(b.visTracer)
+	}
+
+	for i := 0; i < b.numCU; i++ {
+		name := fmt.Sprintf("%s.FullSMSideL1VCache_%02d", b.name, i)
 		cache := builder.Build(name)
 		sa.l1vCaches = append(sa.l1vCaches, cache)
 	}
