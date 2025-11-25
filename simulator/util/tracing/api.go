@@ -74,6 +74,32 @@ func AddTaskStep(
 	domain.InvokeHook(ctx)
 }
 
+// AddTaskStep marks that a milestone has been reached when processing a task.
+func AddTaskDetailedStep(
+	id string,
+	now akita.VTimeInSec,
+	domain NamedHookable,
+	what string,
+	detail interface{},
+) {
+	step := TaskStep{
+		Time: now,
+		What: what,
+	}
+	task := Task{
+		ID:     id,
+		Steps:  []TaskStep{step},
+		Detail: detail,
+	}
+	ctx := akita.HookCtx{
+		Now:    now,
+		Domain: domain,
+		Item:   task,
+		Pos:    HookPosTaskStep,
+	}
+	domain.InvokeHook(ctx)
+}
+
 // EndTask notifies the hooks about the end of a task.
 func EndTask(
 	id string,
@@ -150,7 +176,7 @@ func StartTracingNetwork(
 		"",
 		"",
 		now, domain, kind,
-		reflect.TypeOf(req).String(), 
+		reflect.TypeOf(req).String(),
 		req.Meta().ID+"-"+kind,
 	)
 }

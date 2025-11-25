@@ -249,7 +249,7 @@ func (b *CommonPlatformBuilder) setTLBTracer(
 		panic(err)
 	}
 	logger := log.New(file, "", 0)
-	tlbTracer := memtraces.NewTracer(logger)
+	tlbTracer := memtraces.NewTLBTracer(logger)
 	gpuBuilder.WithTLBTracer(tlbTracer)
 	return gpuBuilder
 }

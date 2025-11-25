@@ -362,6 +362,10 @@ func (b *CommonBuilder) BuildSAs(chiplet *Chiplet) {
 		saBuilder.withVisTracer(b.visTracer)
 	}
 
+	if b.enableTLBTracing {
+		saBuilder.withTLBTracer(b.tlbTracer)
+	}
+
 	if b.useTimeInstProfiling {
 		saBuilder.withTipEngine(b.TipEngine)
 	}
@@ -601,6 +605,10 @@ func (b *CommonBuilder) buildL2TLB(chiplet *Chiplet) {
 
 	if b.enableVisTracing {
 		tracing.CollectTrace(l2TLB, b.visTracer)
+	}
+
+	if b.enableTLBTracing {
+		tracing.CollectTrace(l2TLB, b.tlbTracer)
 	}
 
 	if b.useTimeEventAnalysis {

@@ -190,10 +190,11 @@ func (tlb *TLB) lookup(now akita.VTimeInSec) bool {
 	if mshrEntry != nil {
 		ok := tlb.processTLBMSHRHit(now, mshrEntry, req)
 		if ok {
-			tracing.AddTaskStep(
+			tracing.AddTaskDetailedStep(
 				tracing.MsgIDAtReceiver(req, tlb),
 				now, tlb,
 				"tlb-mshr-hit",
+				req.VAddr,
 			)
 			tlb.lookupBuffer.Pop()
 			return true
@@ -226,10 +227,11 @@ func (tlb *TLB) handleTranslationHit(
 	tlb.visit(setID, wayID)
 	tlb.lookupBuffer.Pop()
 
-	tracing.AddTaskStep(
+	tracing.AddTaskDetailedStep(
 		tracing.MsgIDAtReceiver(req, tlb),
 		now, tlb,
 		"tlb-hit",
+		req.VAddr,
 	)
 	// tracing.AddTaskStep(
 	// 	tracing.MsgIDAtReceiver(req, tlb),
@@ -254,10 +256,11 @@ func (tlb *TLB) handleTranslationMiss(
 	fetched := tlb.fetchBottom(now, req)
 	if fetched {
 		tlb.lookupBuffer.Pop()
-		tracing.AddTaskStep(
+		tracing.AddTaskDetailedStep(
 			tracing.MsgIDAtReceiver(req, tlb),
 			now, tlb,
 			"tlb-miss",
+			req.VAddr,
 		)
 		return true
 	}

@@ -49,6 +49,7 @@ type shaderArrayBuilder struct {
 	log2CacheLineSize uint64
 	log2PageSize      uint64
 	visTracer         tracing.Tracer
+	tlbTracer         tracing.Tracer
 
 	saID int
 
@@ -103,6 +104,12 @@ func (b *shaderArrayBuilder) withVisTracer(
 	visTracer tracing.Tracer,
 ) {
 	b.visTracer = visTracer
+}
+
+func (b *shaderArrayBuilder) withTLBTracer(
+	tlbTracer tracing.Tracer,
+) {
+	b.tlbTracer = tlbTracer
 }
 
 func (b *shaderArrayBuilder) withPageTable(pt device.PageTable) {
@@ -416,6 +423,10 @@ func (b *shaderArrayBuilder) buildL1VTLBs(sa *shaderArray) {
 		if b.visTracer != nil {
 			tracing.CollectTrace(tlb, b.visTracer)
 		}
+
+		if b.tlbTracer != nil {
+			tracing.CollectTrace(tlb, b.tlbTracer)
+		}
 	}
 }
 
@@ -536,6 +547,10 @@ func (b *shaderArrayBuilder) buildL1STLB(sa *shaderArray) {
 	if b.visTracer != nil {
 		tracing.CollectTrace(tlb, b.visTracer)
 	}
+
+	if b.tlbTracer != nil {
+		tracing.CollectTrace(tlb, b.tlbTracer)
+	}
 }
 
 func (b *shaderArrayBuilder) buildSMSideL1STLB(sa *shaderArray) {
@@ -647,6 +662,10 @@ func (b *shaderArrayBuilder) buildL1ITLB(sa *shaderArray) {
 
 	if b.visTracer != nil {
 		tracing.CollectTrace(tlb, b.visTracer)
+	}
+
+	if b.tlbTracer != nil {
+		tracing.CollectTrace(tlb, b.tlbTracer)
 	}
 }
 
