@@ -276,12 +276,16 @@ func (u *VectorMemoryUnit) sendRequest(now akita.VTimeInSec) bool {
 		return false
 	}
 
+	var address uint64
+
 	var req akita.Msg
 	info := item.(VectorMemAccessInfo)
 	if info.Read != nil {
 		req = info.Read
+		address = info.Read.Address
 	} else {
 		req = info.Write
+		address = info.Write.Address
 	}
 
 	req.Meta().SendTime = now
@@ -292,6 +296,18 @@ func (u *VectorMemoryUnit) sendRequest(now akita.VTimeInSec) bool {
 
 		tracing.TraceReqInitiate(req, now, u.cu, info.Inst.ID)
 
+		tracing.AddTaskDetailedStep(
+			tracing.MsgIDAtReceiver(req, u.cu),
+			now, u.cu,
+			"cta-page-map",
+			struct {
+				CtaID int
+				Addr  uint64
+			}{
+				info.Wavefront.WG.FlattenedID(),
+				address,
+			},
+		)
 		// if info.Read != nil {
 		// 	fmt.Println("cta-page-map ", info.Wavefront.WG.IDX, info.Wavefront.WG.IDY, req.(*mem.ReadReq).Address)
 		// } else {

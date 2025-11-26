@@ -607,10 +607,6 @@ func (b *CommonBuilder) buildL2TLB(chiplet *Chiplet) {
 		tracing.CollectTrace(l2TLB, b.visTracer)
 	}
 
-	if b.enableTLBTracing {
-		tracing.CollectTrace(l2TLB, b.tlbTracer)
-	}
-
 	if b.useTimeEventAnalysis {
 		b.TipEngine.L2TLB = l2TLB.(*tlb.LatTLB)
 	}

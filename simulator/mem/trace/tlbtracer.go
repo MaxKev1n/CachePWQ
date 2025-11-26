@@ -19,16 +19,23 @@ func (t *tlbTracer) StartTask(task tracing.Task) {
 
 // StepTask marks the memory transaction has completed a milestone
 func (t *tlbTracer) StepTask(task tracing.Task) {
-	if !(task.Steps[0].What == "tlb-miss" ||
-		task.Steps[0].What == "tlb-hit" ||
-		task.Steps[0].What == "tlb-mshr-hit") {
+	if task.Steps[0].What != "cta-page-map" {
 		return
 	}
 
-	t.logger.Printf("%s, %s, %X\n",
+	pair, ok := task.Detail.(struct {
+		CtaID int
+		Addr  uint64
+	})
+	if !ok {
+		return
+	}
+
+	t.logger.Printf("%s, %s, %v, %X\n",
 		task.ID,
 		task.Steps[0].What,
-		task.Detail,
+		pair.CtaID,
+		pair.Addr,
 	)
 }
 

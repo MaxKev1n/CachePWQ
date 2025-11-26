@@ -37,6 +37,10 @@ type WorkGroup struct {
 	WorkItems  []*WorkItem
 }
 
+func (wg *WorkGroup) FlattenedID() int {
+	return wg.IDX + wg.IDY*wg.SizeX + wg.IDZ*wg.SizeX*wg.SizeY
+}
+
 // NewWorkGroup creates a workgroup object.
 func NewWorkGroup() *WorkGroup {
 	wg := new(WorkGroup)
