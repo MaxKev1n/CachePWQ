@@ -37,7 +37,7 @@ def collect_performance(
     Returns:
         list: A list of dictionaries containing performance data.
     """
-    performance_data = {}
+    performance_data = [0, 0, 0, 0, 0]
 
     if not os.path.exists(file_path):
         print(f"Performance data file {file_path} does not exist.")
@@ -56,27 +56,16 @@ def collect_performance(
             line = line.strip()
             values = line.split(", ")
 
-            key = values[0]
             event = int(values[1])
             value = int(values[2])
 
-            if key not in performance_data:
-                performance_data[key] = [
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                ]
-
-            performance_data[key][event] += float(value)
+            performance_data[event] += float(value)
 
     return performance_data
 
 
 def plot_tea(
-    benchmark_name: str,
-    data: set,
+    data: pd.DataFrame,
     out_dir: str,
 ) -> None:
     """
@@ -101,49 +90,34 @@ def plot_tea(
 
     plt.figure(figsize=(20, 5), dpi=300)
 
-    PCs = []
-    Base = []
-    L1TLBMISS = []
-    L2TLBMISS = []
-    L1CACHEMISS = []
-    L2CACHEMISS = []
+    benchmarks = get_benchmarks()
 
-    Total = []
+    bar_width = 0.2
+    r1 = np.arange(len(benchmarks)) * (bar_width + 0.2)
 
-    for pc in data.keys():
-        PCs.append(pc)
+    Base = data["Base"].tolist()
+    L1TLBMISS = data["L1TLBMiss"].tolist()
+    L2TLBMISS = data["L2TLBMiss"].tolist()
+    L1CACHEMISS = data["L1CacheMiss"].tolist()
+    L2CACHEMISS = data["L2CacheMiss"].tolist()
 
-    for events in data.values():
-        Base.append(events[0])
-        L1TLBMISS.append(events[1])
-        L2TLBMISS.append(events[2])
-        L1CACHEMISS.append(events[3])
-        L2CACHEMISS.append(events[4])
-        Total.append(sum(events))
+    Total = (
+        np.array(Base)
+        + np.array(L1TLBMISS)
+        + np.array(L2TLBMISS)
+        + np.array(L1CACHEMISS)
+        + np.array(L2CACHEMISS)
+    )
 
-    # sort by Total in descending order
-    sorted_indices = np.argsort(Total)[::-1]
-    PCs = [PCs[i] for i in sorted_indices]
-    Base = [Base[i] for i in sorted_indices]
-    L1TLBMISS = [L1TLBMISS[i] for i in sorted_indices]
-    L2TLBMISS = [L2TLBMISS[i] for i in sorted_indices]
-    L1CACHEMISS = [L1CACHEMISS[i] for i in sorted_indices]
-    L2CACHEMISS = [L2CACHEMISS[i] for i in sorted_indices]
-
-    if len(PCs) > 24:
-        PCs = PCs[:24]
-        Base = Base[:24]
-        L1TLBMISS = L1TLBMISS[:24]
-        L2TLBMISS = L2TLBMISS[:24]
-        L1CACHEMISS = L1CACHEMISS[:24]
-        L2CACHEMISS = L2CACHEMISS[:24]
-
-    bar_width = 0.4
-    r1 = np.arange(len(PCs)) * (bar_width + 0.2)
+    Base_Percent = np.array(Base) / Total * 100
+    L1TLBMISS_Percent = np.array(L1TLBMISS) / Total * 100
+    L2TLBMISS_Percent = np.array(L2TLBMISS) / Total * 100
+    L1CACHEMISS_Percent = np.array(L1CACHEMISS) / Total * 100
+    L2CACHEMISS_Percent = np.array(L2CACHEMISS) / Total * 100
 
     bar1 = plt.bar(
         r1,
-        Base,
+        Base_Percent,
         width=bar_width,
         label="Base",
         color="#fcfdf7",
@@ -152,43 +126,43 @@ def plot_tea(
     )
     bar2 = plt.bar(
         r1,
-        L1TLBMISS,
+        L1TLBMISS_Percent,
         width=bar_width,
         label="L1TLBMiss",
-        bottom=Base,
+        bottom=Base_Percent,
         color="#cce5d8",
         edgecolor="black",
         linewidth=1.5,
     )
     bar3 = plt.bar(
         r1,
-        L2TLBMISS,
+        L2TLBMISS_Percent,
         width=bar_width,
         label="L2TLBMiss",
-        bottom=np.array(Base) + np.array(L1TLBMISS),
+        bottom=Base_Percent + L1TLBMISS_Percent,
         color="#6ba78b",
         edgecolor="black",
         linewidth=1.5,
     )
     bar4 = plt.bar(
         r1,
-        L1CACHEMISS,
+        L1CACHEMISS_Percent,
         width=bar_width,
         label="L1CacheMiss",
-        bottom=np.array(Base) + np.array(L1TLBMISS) + np.array(L2TLBMISS),
+        bottom=Base_Percent + L1TLBMISS_Percent + L2TLBMISS_Percent,
         color="#3f6b5c",
         edgecolor="black",
         linewidth=1.5,
     )
     bar5 = plt.bar(
         r1,
-        L2CACHEMISS,
+        L2CACHEMISS_Percent,
         width=bar_width,
         label="L2CacheMiss",
-        bottom=np.array(Base)
-        + np.array(L1TLBMISS)
-        + np.array(L2TLBMISS)
-        + np.array(L1CACHEMISS),
+        bottom=Base_Percent
+        + L1TLBMISS_Percent
+        + L2TLBMISS_Percent
+        + L1CACHEMISS_Percent,
         color="#1f4036",
         edgecolor="black",
         linewidth=1.5,
@@ -196,12 +170,11 @@ def plot_tea(
 
     plt.xticks(
         [r for r in r1],
-        PCs,
+        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))],
         fontsize=22,
         fontweight="bold",
-        rotation=90,
     )
-    plt.ylabel("Events Cycles", fontsize=22, fontweight="bold")
+    plt.ylabel("% of Events Cycles", fontsize=22, fontweight="bold")
     plt.yticks(
         fontsize=22,
         fontweight="bold",
@@ -218,7 +191,6 @@ def plot_tea(
     )
     plt.tight_layout(rect=[0, 0, 1, 0.9])
     plt.grid(axis="y", alpha=0.3)
-    plt.axhline(y=1, color="red", linewidth=0.8, linestyle="--")
 
     ax = plt.gca()
 
@@ -226,35 +198,10 @@ def plot_tea(
     for spine in ax.spines.values():
         spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
 
-    output_file = os.path.join(out_dir, f"{benchmark_name}_TEA")
+    output_file = os.path.join(out_dir, "32Walkers_TEA")
     plt.savefig(output_file + ".png")
     plt.savefig(output_file + ".pdf")
     print(f"Plot saved to {output_file}")
-
-
-def single_benchmark(args):
-    perf_data = collect_performance(
-        file_path=args.trace,
-    )
-
-    plot_tea(
-        benchmark_name="",
-        data=perf_data,
-        out_dir=args.outDir,
-    )
-
-
-def multi_benchmark(args):
-    for benchmark in get_benchmarks():
-        perf_data = collect_performance(
-            file_path=args.trace + "/" + benchmark + ".tea.trace",
-        )
-
-        plot_tea(
-            benchmark_name=benchmark,
-            data=perf_data,
-            out_dir=args.outDir,
-        )
 
 
 if __name__ == "__main__":
@@ -268,21 +215,47 @@ if __name__ == "__main__":
         help="Directory path to save the output plots.",
     )
     parser.add_argument(
-        "--mode",
-        required=True,
+        "--inputDir",
         type=str,
-        choices=["single", "multi"],
-        help="Benchmark mode: single or multi.",
-    )
-    parser.add_argument(
-        "--trace",
-        type=str,
-        help="Path to the tea trace file for single benchmark mode.",
+        help="Directory path to load the traces.",
     )
 
     args = parser.parse_args()
 
-    if args.mode == "single":
-        single_benchmark(args)
-    else:
-        multi_benchmark(args)
+    data = pd.DataFrame(
+        columns=[
+            "Benchmark",
+            "Base",
+            "L1TLBMiss",
+            "L2TLBMiss",
+            "L1CacheMiss",
+            "L2CacheMiss",
+        ],
+    )
+
+    for benchmark in get_benchmarks():
+        perf_data = collect_performance(
+            file_path=args.inputDir + "/" + benchmark + ".tea.trace",
+        )
+
+        data = pd.concat(
+            [
+                data,
+                pd.DataFrame(
+                    {
+                        "Benchmark": [benchmark],
+                        "Base": [perf_data[0]],
+                        "L1TLBMiss": [perf_data[1]],
+                        "L2TLBMiss": [perf_data[2]],
+                        "L1CacheMiss": [perf_data[3]],
+                        "L2CacheMiss": [perf_data[4]],
+                    }
+                ),
+            ],
+            ignore_index=True,
+        )
+
+    plot_tea(
+        data=data,
+        out_dir=args.outDir,
+    )
