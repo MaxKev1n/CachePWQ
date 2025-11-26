@@ -175,9 +175,12 @@ func (c *Cache) Attribute(
 	}
 
 	if c.mshr.IsFull() {
-		oldestMSHR := c.mshr.AllEntries()[0]
+		return psv.FAIL, nil
+	}
 
-		return psv.FAIL, oldestMSHR.ReadReq
+	if c.writeBuffer.tooManyInflightFetches() ||
+		c.writeBuffer.tooManyInflightEvictions() {
+		return psv.FAIL, nil
 	}
 
 	return psv.SUCCESS, nil

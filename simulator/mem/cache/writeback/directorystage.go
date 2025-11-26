@@ -85,6 +85,28 @@ func (ds *directoryStage) handleReadMSHRHit(
 		}
 	}
 
+	if mshrEntry.ReadReq != nil {
+		if trans.read != nil {
+			if trans.read.PSV != nil {
+				trans.read.PSV.AddItem(
+					&trans.read.PSV.L2Cache,
+					mshrEntry.ReadReq,
+					trans.read,
+					mshrEntry.ReadReq.PSV,
+				)
+			}
+		} else {
+			if trans.write.PSV != nil {
+				trans.write.PSV.AddItem(
+					&trans.write.PSV.L2Cache,
+					mshrEntry.ReadReq,
+					trans.write,
+					mshrEntry.ReadReq.PSV,
+				)
+			}
+		}
+	}
+
 	return true
 }
 

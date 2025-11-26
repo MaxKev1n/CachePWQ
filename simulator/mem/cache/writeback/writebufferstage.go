@@ -1,12 +1,13 @@
 package writeback
 
 import (
+	"strings"
+
 	// "fmt"
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/util/tracing"
-	"strings"
 )
 
 type writeBufferStage struct {
@@ -116,44 +117,15 @@ func (wb *writeBufferStage) fetchFromBottom(
 	}
 	lowModulePort := wb.cache.lowModuleFinder.Find(trans.fetchAddress)
 	if strings.Contains(lowModulePort.Name(), "PwPort") {
-		// fmt.Println("*****************here")
-		// panic("something is wrong")
 		if !strings.Contains(trans.read.Src.Name(), "MMU") {
 			panic("something is wrong")
 		}
-		// wb.remoteMemAccesses++
-		// if wb.remoteMemAccesses%100 == 0 {
-		// fmt.Println(wb.cache.Name(), wb.remoteMemAccesses)
-		// }
-		// panic("everything is wrong")
 	}
-	// if strings.Contains(lowModulePort.Name(), "RDMA") {
-	// 	// }
-	// 	// if trans.read != nil && strings.Contains(trans.read.Src.Name(), "MMU") {
-	// 	// fmt.Println(trans.read.Src)
-	// 	if !wb.cache.topSender.CanSend(1) {
-	// 		return false
-	// 	}
-	// 	read := mem.ReadReqBuilder{}.
-	// 		WithSrc(wb.cache.TopPort).
-	// 		WithDst(lowModulePort).
-	// 		// WithDst(wb.rdmaPort).
-	// 		WithPID(trans.fetchPID).
-	// 		WithAddress(trans.fetchAddress).
-	// 		WithByteSize(1 << wb.cache.log2BlockSize).
-	// 		Build()
-	// 	// read.ID = trans.read.ID
-	// 	wb.cache.topSender.Send(read)
-	// 	trans.fetchReadReq = read
-	// 	wb.inflightFetch = append(wb.inflightFetch, trans)
-	// 	tracing.TraceReqInitiate(read, now, wb.cache,
-	// 		tracing.MsgIDAtReceiver(trans.req(), wb.cache))
 
-	// } else {
 	if !wb.cache.bottomSender.CanSend(1) {
 		return false
 	}
-	// lowModulePort := wb.cache.lowModuleFinder.Find(trans.fetchAddress)
+
 	read := mem.ReadReqBuilder{}.
 		WithSrc(wb.cache.BottomPort).
 		WithDst(lowModulePort).
@@ -166,9 +138,59 @@ func (wb *writeBufferStage) fetchFromBottom(
 	wb.inflightFetch = append(wb.inflightFetch, trans)
 	tracing.TraceReqInitiate(read, now, wb.cache,
 		tracing.MsgIDAtReceiver(trans.req(), wb.cache))
-	// }
 
 	wb.cache.writeBufferBuffer.Pop()
+
+	if trans.mshrEntry != nil {
+		trans.mshrEntry.ReadReq = read
+
+		if trans.read != nil {
+			if trans.read.PSV != nil {
+				read.PSV = trans.read.PSV
+				read.PSV.AddItem(
+					&trans.read.PSV.L2Cache,
+					read,
+					trans.read,
+					nil,
+				)
+			}
+		} else {
+			if trans.write.PSV != nil {
+				read.PSV = trans.write.PSV
+				read.PSV.AddItem(
+					&trans.write.PSV.L2Cache,
+					read,
+					trans.write,
+					nil,
+				)
+			}
+		}
+
+		for _, req := range trans.mshrEntry.Requests[1:] {
+			entry := req.(*transaction)
+
+			if entry.read != nil {
+				if entry.read.PSV != nil {
+					entry.read.PSV.AddItem(
+						&entry.read.PSV.L2Cache,
+						read,
+						entry.read,
+						read.PSV,
+					)
+				}
+			} else {
+				if entry.write.PSV != nil {
+					entry.write.PSV.AddItem(
+						&entry.write.PSV.L2Cache,
+						read,
+						entry.write,
+						read.PSV,
+					)
+				}
+			}
+		}
+	}
+
 	return true
 }
 
