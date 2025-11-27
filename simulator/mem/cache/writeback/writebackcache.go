@@ -71,6 +71,10 @@ type Cache struct {
 	inFlightTransactions []*transaction
 }
 
+func (c *Cache) GetStalledPSV() *psv.PerfSignatureVec {
+	panic("Does not support PSV yet")
+}
+
 func (c *Cache) GetPipeline() pipelining.Pipeline {
 	return c.pipeline
 }

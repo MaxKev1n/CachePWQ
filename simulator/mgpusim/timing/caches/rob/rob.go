@@ -35,6 +35,10 @@ type ReorderBuffer struct {
 	isFlushing                      bool
 }
 
+func (b *ReorderBuffer) GetStalledPSV() *psv.PerfSignatureVec {
+	panic("Does not support PSV yet")
+}
+
 // Tick updates the status of the ReorderBuffer.
 func (b *ReorderBuffer) Tick(now akita.VTimeInSec) (madeProgress bool) {
 	madeProgress = b.processControlMsg(now) || madeProgress

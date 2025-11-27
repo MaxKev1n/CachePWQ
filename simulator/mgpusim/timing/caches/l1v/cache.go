@@ -41,6 +41,10 @@ type Cache struct {
 	isPaused bool
 }
 
+func (c *Cache) GetStalledPSV() *psv.PerfSignatureVec {
+	panic("Does not support PSV yet")
+}
+
 // SetLowModuleFinder sets the finder that tells which remote port can serve
 // the data on a certain address.
 func (c *Cache) SetLowModuleFinder(lmf cache.LowModuleFinder) {

@@ -22,6 +22,7 @@ const (
 	L2TLBMISS
 	L1CACHEMISS
 	L2CACHEMISS
+	NoUnits
 )
 
 type PSVItem struct {

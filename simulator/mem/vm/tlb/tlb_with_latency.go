@@ -120,6 +120,10 @@ type LatTLB struct {
 	hysterisis   bool
 }
 
+func (tlb *LatTLB) GetStalledPSV() *psv.PerfSignatureVec {
+	panic("Does not support PSV yet")
+}
+
 // GetPipeline gets the pipeline in the LatTLB
 func (tlb *LatTLB) GetPipeline() pipelining.Pipeline {
 	return tlb.pipeline

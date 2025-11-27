@@ -44,6 +44,20 @@ type VectorMemoryUnit struct {
 	reachLimitation bool
 }
 
+func (u *VectorMemoryUnit) GetStalledPSV() *psv.PerfSignatureVec {
+	item := u.postTransactionPipelineBuffer.Peek()
+	if item == nil {
+		return nil
+	}
+
+	info := item.(VectorMemAccessInfo)
+	if info.Read != nil {
+		return info.Read.PSV
+	}
+
+	return info.Write.PSV
+}
+
 // NewVectorMemoryUnit creates a new Vector Memory Unit.
 func NewVectorMemoryUnit(
 	cu *ComputeUnit,

@@ -396,6 +396,7 @@ func (b *CommonBuilder) collectSAComponents(
 				sa.l1vATs[index].(*addresstranslator.DefaultAddressTranslator),
 				sa.l1vTLBs[index].(*tlb.TLB),
 				sa.l1vCaches[index].(*l1v.Cache),
+				core.Scheduler.(*cu.SchedulerImpl),
 			)
 		}
 	}

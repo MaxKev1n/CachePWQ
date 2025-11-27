@@ -8,6 +8,7 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mgpusim/insts"
 	"gitlab.com/akita/mgpusim/timing/wavefront"
+	"gitlab.com/akita/util/psv"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -409,4 +410,24 @@ func (s *SchedulerImpl) Resume() {
 func (s *SchedulerImpl) Flush() {
 	s.barrierBuffer = nil
 	s.internalExecuting = nil
+}
+
+func (s *SchedulerImpl) GetName() string {
+	return s.cu.Name() + ".Scheduler"
+}
+
+func (s *SchedulerImpl) Attribute(
+	unit int,
+) psv.Result {
+	if unit == int(insts.ExeUnitSpecial) {
+		return psv.SUCCESS
+	}
+
+	issueToUnit := s.getUnitToIssueTo(insts.ExeUnit(unit))
+
+	if issueToUnit.CanAcceptWave() {
+		return psv.SUCCESS
+	}
+
+	return psv.FAIL
 }

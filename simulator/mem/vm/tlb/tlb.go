@@ -58,6 +58,10 @@ type TLB struct {
 	GlobalIndex int
 }
 
+func (tlb *TLB) GetStalledPSV() *psv.PerfSignatureVec {
+	panic("Does not support PSV yet")
+}
+
 // GetNumSets gets the number of sets in the TLB
 func (tlb *TLB) GetNumSets() int {
 	return tlb.numSets

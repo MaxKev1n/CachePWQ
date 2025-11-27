@@ -59,6 +59,10 @@ type DefaultAddressTranslator struct {
 	inflightReqToBottom []reqToBottom
 }
 
+func (t *DefaultAddressTranslator) GetStalledPSV() *psv.PerfSignatureVec {
+	panic("Does not support PSV yet")
+}
+
 // SetTranslationProvider sets the remote port that can translate addresses.
 func (t *DefaultAddressTranslator) SetTranslationProvider(p interface{}) {
 	t.translationProvider = p.(akita.Port)

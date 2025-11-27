@@ -30,6 +30,7 @@ type GPUCore struct {
 	VTranslator TEAComponent
 	VTLB        TEAComponent
 	VCache      TEAComponent
+	Scheduler   SchedulerComponent
 
 	PICS map[TEAItems]uint64
 }
@@ -161,39 +162,13 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 					}
 
 					if tip.useTEA {
-						attributedPSVs := make(map[*psv.PerfSignatureVec]struct{})
+						items := tip.AttributeSWAITCNT(cu.name, wf)
 
-						if wf.OutstandingScalarMemAccess > wf.Inst().LKGMCNT {
-							for scalarPSV := range wf.OutstandingScalarPSV {
-								if _, ok := attributedPSVs[scalarPSV]; !ok {
-									attributedPSVs[scalarPSV] = struct{}{}
-								}
-							}
-						}
-
-						if wf.OutstandingVectorMemAccess > wf.Inst().VMCNT {
-							for vectorPSV := range wf.OutstandingVectorPSV {
-								if _, ok := attributedPSVs[vectorPSV]; !ok {
-									attributedPSVs[vectorPSV] = struct{}{}
-								}
-							}
-						}
-
-						for attributedPSV := range attributedPSVs {
-							event := tip.Attribute(cu, attributedPSV)
-
-							item := TEAItems{
-								InstAddress: attributedPSV.InstAddress,
-								Event:       event,
-							}
-
+						for item := range items {
 							if _, ok := attributedEvents[item]; !ok {
 								attributedEvents[item] = struct{}{}
 							}
-
-							delete(attributedPSVs, attributedPSV)
 						}
-						attributedPSVs = nil
 					}
 				} else if wf.Inst().Opcode == 1 {
 					// S_ENDPGM instruction
@@ -209,51 +184,20 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 						}
 
 						if tip.useTEA {
-							attributedPSVs := make(map[*psv.PerfSignatureVec]struct{})
+							items := tip.AttributeSENDPGM(cu.name, wf)
 
-							for scalarPSV := range wf.OutstandingScalarPSV {
-								if _, ok := attributedPSVs[scalarPSV]; !ok {
-									attributedPSVs[scalarPSV] = struct{}{}
-								}
-							}
-
-							for vectorPSV := range wf.OutstandingVectorPSV {
-								if _, ok := attributedPSVs[vectorPSV]; !ok {
-									attributedPSVs[vectorPSV] = struct{}{}
-								}
-							}
-
-							for attributedPSV := range attributedPSVs {
-								event := tip.Attribute(cu, attributedPSV)
-
-								item := TEAItems{
-									InstAddress: attributedPSV.InstAddress,
-									Event:       event,
-								}
-
+							for item := range items {
 								if _, ok := attributedEvents[item]; !ok {
 									attributedEvents[item] = struct{}{}
 								}
-
-								delete(attributedPSVs, attributedPSV)
 							}
-							attributedPSVs = nil
 						}
 					}
 				} else {
 					cu.Profile(wf.PC, uint64(attributeCycle))
 
 					if tip.useTEA {
-						event := psv.BASE
-
-						if wf.Inst().ExeUnit == insts.ExeUnitVMem {
-							event = tip.Attribute(cu, wf.PSV)
-						}
-
-						item := TEAItems{
-							InstAddress: wf.PC,
-							Event:       event,
-						}
+						item := tip.AttributeRunningWfs(cu.name, wf)
 
 						if _, ok := attributedEvents[item]; !ok {
 							attributedEvents[item] = struct{}{}
@@ -268,89 +212,58 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 						}
 
 						if attrWf.Inst().Opcode == 12 {
-							attributedPSVs := make(map[*psv.PerfSignatureVec]struct{})
-
 							// S_WAITCNT instruction
-							if attrWf.OutstandingScalarMemAccess > attrWf.Inst().LKGMCNT {
-								for scalarPSV := range attrWf.OutstandingScalarPSV {
-									if _, ok := attributedPSVs[scalarPSV]; !ok {
-										attributedPSVs[scalarPSV] = struct{}{}
-									}
-								}
-							}
+							items := tip.AttributeSWAITCNT(cu.name, attrWf)
 
-							if attrWf.OutstandingVectorMemAccess > attrWf.Inst().VMCNT {
-								for vectorPSV := range attrWf.OutstandingVectorPSV {
-									if _, ok := attributedPSVs[vectorPSV]; !ok {
-										attributedPSVs[vectorPSV] = struct{}{}
-									}
-								}
-							}
-
-							for attributedPSV := range attributedPSVs {
-								event := tip.Attribute(cu, attributedPSV)
-
-								item := TEAItems{
-									InstAddress: attributedPSV.InstAddress,
-									Event:       event,
-								}
-
+							for item := range items {
 								if _, ok := attributedEvents[item]; !ok {
 									attributedEvents[item] = struct{}{}
 								}
-
-								delete(attributedPSVs, attributedPSV)
 							}
-							attributedPSVs = nil
 						} else if attrWf.Inst().Opcode == 1 {
 							// S_ENDPGM instruction
-							attributedPSVs := make(map[*psv.PerfSignatureVec]struct{})
+							items := tip.AttributeSENDPGM(cu.name, attrWf)
 
-							if attrWf.OutstandingScalarMemAccess > 0 || attrWf.OutstandingVectorMemAccess > 0 {
-								for scalarPSV := range attrWf.OutstandingScalarPSV {
-									if _, ok := attributedPSVs[scalarPSV]; !ok {
-										attributedPSVs[scalarPSV] = struct{}{}
-									}
+							for item := range items {
+								if _, ok := attributedEvents[item]; !ok {
+									attributedEvents[item] = struct{}{}
 								}
-
-								for vectorPSV := range attrWf.OutstandingVectorPSV {
-									if _, ok := attributedPSVs[vectorPSV]; !ok {
-										attributedPSVs[vectorPSV] = struct{}{}
-									}
-								}
-
-								for attributedPSV := range attributedPSVs {
-									event := tip.Attribute(cu, attributedPSV)
-
-									item := TEAItems{
-										InstAddress: attributedPSV.InstAddress,
-										Event:       event,
-									}
-
-									if _, ok := attributedEvents[item]; !ok {
-										attributedEvents[item] = struct{}{}
-									}
-
-									delete(attributedPSVs, attributedPSV)
-								}
-								attributedPSVs = nil
 							}
 						} else {
-							event := psv.BASE
-
-							if attrWf.Inst().ExeUnit == insts.ExeUnitVMem {
-								event = tip.Attribute(cu, attrWf.PSV)
-							}
-
-							item := TEAItems{
-								InstAddress: attrWf.PC,
-								Event:       event,
-							}
+							item := tip.AttributeRunningWfs(cu.name, attrWf)
 
 							if _, ok := attributedEvents[item]; !ok {
 								attributedEvents[item] = struct{}{}
 							}
 						}
+					}
+				}
+			} else if wf.State == wavefront.WfReady {
+				issueToUnit := wf.InstToIssue.ExeUnit
+
+				result := cu.Scheduler.Attribute(int(issueToUnit))
+
+				if result == psv.FAIL {
+					item := TEAItems{}
+
+					if issueToUnit != insts.ExeUnitVMem {
+						item = TEAItems{
+							InstAddress: wf.PC,
+							Event:       psv.NoUnits,
+						}
+					} else {
+						stalledPSV := cu.VMemUnit.GetStalledPSV()
+
+						event := tip.Attribute(cu, stalledPSV)
+
+						item = TEAItems{
+							InstAddress: stalledPSV.InstAddress,
+							Event:       event,
+						}
+					}
+
+					if _, ok := attributedEvents[item]; !ok {
+						attributedEvents[item] = struct{}{}
 					}
 				}
 			}
@@ -369,6 +282,112 @@ func (tip *TimeEventAnalysisEngine) EvaluateWfs() {
 			attributedEvents = nil
 		}
 	}
+}
+
+func (tip *TimeEventAnalysisEngine) AttributeSWAITCNT(
+	cuName string,
+	wf *wavefront.Wavefront,
+) map[TEAItems]struct{} {
+	attributedPSVs := make(map[*psv.PerfSignatureVec]struct{})
+	attributedEvents := make(map[TEAItems]struct{})
+
+	if wf.OutstandingScalarMemAccess > wf.Inst().LKGMCNT {
+		for scalarPSV := range wf.OutstandingScalarPSV {
+			if _, ok := attributedPSVs[scalarPSV]; !ok {
+				attributedPSVs[scalarPSV] = struct{}{}
+			}
+		}
+	}
+
+	if wf.OutstandingVectorMemAccess > wf.Inst().VMCNT {
+		for vectorPSV := range wf.OutstandingVectorPSV {
+			if _, ok := attributedPSVs[vectorPSV]; !ok {
+				attributedPSVs[vectorPSV] = struct{}{}
+			}
+		}
+	}
+
+	for attributedPSV := range attributedPSVs {
+		cu := tip.GPUCore[cuName]
+
+		event := tip.Attribute(cu, attributedPSV)
+
+		item := TEAItems{
+			InstAddress: attributedPSV.InstAddress,
+			Event:       event,
+		}
+
+		if _, ok := attributedEvents[item]; !ok {
+			attributedEvents[item] = struct{}{}
+		}
+
+		delete(attributedPSVs, attributedPSV)
+	}
+
+	attributedEvents = nil
+
+	return attributedEvents
+}
+
+func (tip *TimeEventAnalysisEngine) AttributeSENDPGM(
+	cuName string,
+	wf *wavefront.Wavefront,
+) map[TEAItems]struct{} {
+	attributedPSVs := make(map[*psv.PerfSignatureVec]struct{})
+	attributedEvents := make(map[TEAItems]struct{})
+
+	for scalarPSV := range wf.OutstandingScalarPSV {
+		if _, ok := attributedPSVs[scalarPSV]; !ok {
+			attributedPSVs[scalarPSV] = struct{}{}
+		}
+	}
+
+	for vectorPSV := range wf.OutstandingVectorPSV {
+		if _, ok := attributedPSVs[vectorPSV]; !ok {
+			attributedPSVs[vectorPSV] = struct{}{}
+		}
+	}
+
+	for attributedPSV := range attributedPSVs {
+		cu := tip.GPUCore[cuName]
+
+		event := tip.Attribute(cu, attributedPSV)
+
+		item := TEAItems{
+			InstAddress: attributedPSV.InstAddress,
+			Event:       event,
+		}
+
+		if _, ok := attributedEvents[item]; !ok {
+			attributedEvents[item] = struct{}{}
+		}
+
+		delete(attributedPSVs, attributedPSV)
+	}
+
+	attributedPSVs = nil
+
+	return attributedEvents
+}
+
+func (tip *TimeEventAnalysisEngine) AttributeRunningWfs(
+	cuName string,
+	wf *wavefront.Wavefront,
+) TEAItems {
+	event := psv.BASE
+
+	if wf.Inst().ExeUnit == insts.ExeUnitVMem {
+		cu := tip.GPUCore[cuName]
+
+		event = tip.Attribute(cu, wf.PSV)
+	}
+
+	item := TEAItems{
+		InstAddress: wf.PC,
+		Event:       event,
+	}
+
+	return item
 }
 
 func (tip *TimeEventAnalysisEngine) RegisterWavefront(
@@ -401,6 +420,7 @@ func (tip *TimeEventAnalysisEngine) RegisterCU(
 	vtranslator TEAComponent,
 	vtlb TEAComponent,
 	vcache TEAComponent,
+	scheduler SchedulerComponent,
 ) {
 	if len(tip.GPUCore) == 0 {
 		tip.TickNow(tip.Engine.CurrentTime())
@@ -419,6 +439,7 @@ func (tip *TimeEventAnalysisEngine) RegisterCU(
 		VTranslator: vtranslator,
 		VTLB:        vtlb,
 		VCache:      vcache,
+		Scheduler:   scheduler,
 		PICS:        make(map[TEAItems]uint64),
 	}
 	tip.GPUCore[cuName] = cu

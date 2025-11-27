@@ -100,16 +100,16 @@ func (d *directory) processMSHRHit(
 	d.cache.dirBuf.Pop()
 
 	if trans.read != nil {
+		if trans.read.Info != nil {
+			readReqInfo := trans.read.Info.(*mem.ReadReqInfo)
+			if readReqInfo.ReturnAccessInfo {
+				readReqInfo.AccessResult = mem.ReadMSHRHit
+			}
+		}
+
 		tracing.AddTaskStep(trans.id, now, d.cache, "read-mshr-hit")
 	} else {
 		tracing.AddTaskStep(trans.id, now, d.cache, "write-mshr-hit")
-	}
-
-	if trans.read.Info != nil {
-		readReqInfo := trans.read.Info.(*mem.ReadReqInfo)
-		if readReqInfo.ReturnAccessInfo {
-			readReqInfo.AccessResult = mem.ReadMSHRHit
-		}
 	}
 
 	return true
