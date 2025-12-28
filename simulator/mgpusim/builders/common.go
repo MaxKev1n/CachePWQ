@@ -558,8 +558,8 @@ func (b *CommonBuilder) buildMemBanks(chiplet *Chiplet) {
 //}
 
 func (b *CommonBuilder) buildL2TLB(chiplet *Chiplet) {
-	numSets := 64 // 128 // 256 // changed this here
-	numWays := 8  // 8 // changed this here
+	numSets := 256 // 128 // 256 // changed this here
+	numWays := 8   // 8 // changed this here
 	log2NumSets := int(math.Log2(float64(numSets)))
 
 	tlbIndexBitsStart := int(math.Log2(float64(b.remoteTLBInterleavingSize))) + int(b.log2PageSize) + 1
@@ -584,7 +584,7 @@ func (b *CommonBuilder) buildL2TLB(chiplet *Chiplet) {
 		WithFreq(b.freq).
 		WithNumWays(numWays).
 		WithNumSets(numSets).
-		WithNumMSHREntry(64).
+		WithNumMSHREntry(256).
 		WithNumReqPerCycle(4).
 		WithLog2PageSize(b.log2PageSize).
 		WithLowModule(chiplet.MMU.ToTopPort()).
