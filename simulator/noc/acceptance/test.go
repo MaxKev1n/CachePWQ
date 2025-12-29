@@ -39,12 +39,12 @@ func (t *Test) RegisterAgent(agent *Agent) {
 // destination port.
 func (t *Test) GenerateMsgs(n uint64) {
 	for i := uint64(0); i < n; i++ {
-		srcAgentID := rand.Intn(192)
+		srcAgentID := rand.Intn(2)
 		srcAgent := t.agents[srcAgentID]
 		srcPortID := rand.Intn(len(srcAgent.Ports))
 		srcPort := srcAgent.Ports[srcPortID]
 
-		dstAgentID := rand.Intn(1) + 192
+		dstAgentID := 2
 		for dstAgentID == srcAgentID {
 			dstAgentID = rand.Intn(len(t.agents))
 		}
@@ -57,7 +57,7 @@ func (t *Test) GenerateMsgs(n uint64) {
 		msg.Meta().ID = akita.GetIDGenerator().Generate()
 		msg.Src = srcPort
 		msg.Dst = dstPort
-		msg.TrafficBytes = 32
+		msg.TrafficBytes = 128
 		srcAgent.MsgsToSend = append(srcAgent.MsgsToSend, msg)
 		t.registerMsg(msg)
 	}
