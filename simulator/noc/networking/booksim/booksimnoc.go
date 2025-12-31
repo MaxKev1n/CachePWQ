@@ -1,113 +1,28 @@
 package noc
 
-/*
-#cgo linux LDFLAGS: -ldl
-#cgo darwin LDFLAGS: -ldl
-#include <stdlib.h>
-#include <dlfcn.h>
-
-// ---- 函数指针类型 ----
-typedef void* (*create_fn_t)(const char* cfg_path, int n_sms, int n_mems);
-typedef int   (*can_inject_fn_t)(void* net, int node, int n_flits);
-typedef void  (*inject_fn_t)(void* net, int src, int dst, unsigned long long pkt_id, int msg_type, int size_bytes);
-typedef void  (*cycle_fn_t)(void* net);
-typedef int   (*peek_fn_t)(void* net, int node, unsigned long long* pkt_id_out);
-typedef void  (*pop_fn_t)(void* net, int node);
-typedef int   (*busy_fn_t)(void* net);
-typedef void  (*destroy_fn_t)(void* net);
-
-// ---- 动态 API 表 ----
-typedef struct {
-    void* handle;
-    create_fn_t     create;
-    can_inject_fn_t can_inject;
-    inject_fn_t     inject;
-    cycle_fn_t      cycle;
-    peek_fn_t       peek;
-    pop_fn_t        pop;
-    busy_fn_t       busy;
-    destroy_fn_t    destroy;
-} intersim_api_t;
-
-// ---- 动态加载 ----
-static intersim_api_t* load_intersim(const char* path) {
-    intersim_api_t* api = (intersim_api_t*)calloc(1, sizeof(intersim_api_t));
-    if (!api) return NULL;
-
-#if defined(__linux__)
-    int flags = RTLD_NOW | RTLD_LOCAL | 0x00008; // RTLD_DEEPBIND (Linux only)
-#else
-    int flags = RTLD_NOW | RTLD_LOCAL;
-#endif
-
-    api->handle = dlopen(path, flags);
-    if (!api->handle) return NULL;
-
-    api->create     = (create_fn_t)     dlsym(api->handle, "booksim_create");
-    api->can_inject = (can_inject_fn_t) dlsym(api->handle, "booksim_can_inject");
-    api->inject     = (inject_fn_t)     dlsym(api->handle, "booksim_inject");
-    api->cycle      = (cycle_fn_t)      dlsym(api->handle, "booksim_cycle");
-    api->peek       = (peek_fn_t)       dlsym(api->handle, "booksim_peek");
-    api->pop        = (pop_fn_t)        dlsym(api->handle, "booksim_pop");
-    api->busy       = (busy_fn_t)       dlsym(api->handle, "booksim_busy");
-    api->destroy    = (destroy_fn_t)    dlsym(api->handle, "booksim_destroy");
-    return api;
-}
-
-static void unload_intersim(intersim_api_t* api) {
-    if (!api) return;
-    if (api->handle) dlclose(api->handle);
-    free(api);
-}
-
-// ---- C 层包装 ----
-static inline void* call_create(intersim_api_t* api, const char* cfg, int sms, int mems) {
-    return api->create(cfg, sms, mems);
-}
-static inline int call_caninject(intersim_api_t* api, void* net, int node, int n_flits) {
-    return api->can_inject(net, node, n_flits);
-}
-static inline void call_inject(intersim_api_t* api, void* net, int src, int dst, unsigned long long pkt_id, int msg_type, int size_bytes) {
-    api->inject(net, src, dst, pkt_id, msg_type, size_bytes);
-}
-static inline void call_cycle(intersim_api_t* api, void* net) {
-    api->cycle(net);
-}
-static inline int call_peek(intersim_api_t* api, void* net, int node, unsigned long long* pkt_id_out) {
-    return api->peek(net, node, pkt_id_out);
-}
-static inline void call_pop(intersim_api_t* api, void* net, int node) {
-    api->pop(net, node);
-}
-static inline int call_busy(intersim_api_t* api, void* net) {
-    return api->busy(net);
-}
-static inline void call_destroy(intersim_api_t* api, void* net) {
-    api->destroy(net);
-}
-*/
-import "C"
-
 import (
 	"fmt"
 	"log"
 	"reflect"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"unsafe"
 
 	"gitlab.com/akita/akita"
-	"gitlab.com/akita/mem"
-	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/util/tracing"
 )
 
-// BookSimNoC is an Akita component that:
+type BookSimNoC interface {
+	CreateNetwork(config string)
+	CreateNetworkWithLib(lib string, config string)
+	PlugInSMSide(p akita.Port, size int) akita.Port
+	PlugInMemSide(p akita.Port, size int) akita.Port
+}
+
+// BookSimNoCImpl is an Akita component that:
 //  1. Fetches messages from nocPorts and injects them into BookSim
 //  2. Advances the BookSim simulation each cycle
 //  3. Retrieves completed packets from BookSim and delivers them to destination nocPorts
-type BookSimNoC struct {
+type BookSimNoCImpl struct {
 	*akita.TickingComponent
 
 	mutex sync.Mutex
@@ -134,8 +49,8 @@ type BookSimNoC struct {
 func NewBookSimNoC(
 	name string,
 	engine akita.Engine,
-) *BookSimNoC {
-	noc := &BookSimNoC{
+) *BookSimNoCImpl {
+	noc := &BookSimNoCImpl{
 		inflightMsg: make(map[uint64]akita.Msg),
 		flitSize:    40,
 	}
@@ -147,19 +62,19 @@ func NewBookSimNoC(
 }
 
 // CreateNetwork initializes the BookSim network
-func (noc *BookSimNoC) CreateNetwork(
+func (noc *BookSimNoCImpl) CreateNetwork(
 	config string,
 ) {
 	noc.wrapper = NewNetworkWrapper(config, noc.MaxNumSMSidePort, noc.MaxNumMemSidePort)
 
 	noc.nocPorts = make([]akita.Port, noc.MaxNumSMSidePort+noc.MaxNumMemSidePort)
 	noc.outPorts = make([]akita.Port, noc.MaxNumSMSidePort+noc.MaxNumMemSidePort)
-	log.Printf("[BookSimNoC] Created BookSim network with %d SM side ports and %d Mem side ports\n",
+	log.Printf("[BookSimNoCImpl] Created BookSim network with %d SM side ports and %d Mem side ports\n",
 		noc.MaxNumSMSidePort, noc.MaxNumMemSidePort)
 }
 
 // CreateNetworkWithLib initializes the BookSim network
-func (noc *BookSimNoC) CreateNetworkWithLib(
+func (noc *BookSimNoCImpl) CreateNetworkWithLib(
 	lib string,
 	config string,
 ) {
@@ -167,12 +82,12 @@ func (noc *BookSimNoC) CreateNetworkWithLib(
 
 	noc.nocPorts = make([]akita.Port, noc.MaxNumSMSidePort+noc.MaxNumMemSidePort)
 	noc.outPorts = make([]akita.Port, noc.MaxNumSMSidePort+noc.MaxNumMemSidePort)
-	log.Printf("[BookSimNoC] Created BookSim network %s with %d SM side ports and %d Mem side ports\n",
+	log.Printf("[BookSimNoCImpl] Created BookSim network %s with %d SM side ports and %d Mem side ports\n",
 		noc.Name(), noc.MaxNumSMSidePort, noc.MaxNumMemSidePort)
 }
 
 // Close releases the underlying BookSim network
-func (noc *BookSimNoC) Close() {
+func (noc *BookSimNoCImpl) Close() {
 	noc.mutex.Lock()
 	defer noc.mutex.Unlock()
 
@@ -182,7 +97,7 @@ func (noc *BookSimNoC) Close() {
 }
 
 // PlugInSMSide connects an external port to a specific BookSim node
-func (noc *BookSimNoC) PlugInSMSide(p akita.Port, size int) {
+func (noc *BookSimNoCImpl) PlugInSMSide(p akita.Port, size int) akita.Port {
 	noc.mutex.Lock()
 	defer noc.mutex.Unlock()
 
@@ -190,12 +105,12 @@ func (noc *BookSimNoC) PlugInSMSide(p akita.Port, size int) {
 
 	for _, port := range noc.nocPorts {
 		if port == p {
-			panic(fmt.Sprintf("[BookSimNoC] duplicate mapping for node %d", nextID))
+			panic(fmt.Sprintf("[BookSimNoCImpl] duplicate mapping for node %d", nextID))
 		}
 	}
 
 	if nextID >= noc.MaxNumSMSidePort {
-		panic(fmt.Sprintf("[BookSimNoC] SMSide node %d out of range", nextID))
+		panic(fmt.Sprintf("[BookSimNoCImpl] SMSide node %d out of range", nextID))
 	}
 
 	nocPort := akita.NewLimitNumMsgPort(noc, size, fmt.Sprintf("%s.NocPort[%d]", noc.Name(), nextID))
@@ -208,13 +123,15 @@ func (noc *BookSimNoC) PlugInSMSide(p akita.Port, size int) {
 	conn.PlugIn(p, size)
 
 	if _, exists := noc.port2Node[p]; exists {
-		panic("BookSimNoC: duplicate port mapping")
+		panic("BookSimNoCImpl: duplicate port mapping")
 	}
 	noc.port2Node[p] = nextID
+
+	return nocPort
 }
 
 // PlugInSMSide connects an external port to a specific BookSim node
-func (noc *BookSimNoC) PlugInMagicSMSide(p akita.Port, size int) {
+func (noc *BookSimNoCImpl) PlugInMagicSMSide(p akita.Port, size int) akita.Port {
 	noc.mutex.Lock()
 	defer noc.mutex.Unlock()
 
@@ -222,12 +139,12 @@ func (noc *BookSimNoC) PlugInMagicSMSide(p akita.Port, size int) {
 
 	for _, port := range noc.nocPorts {
 		if port == p {
-			panic(fmt.Sprintf("[BookSimNoC] duplicate mapping for node %d", nextID))
+			panic(fmt.Sprintf("[BookSimNoCImpl] duplicate mapping for node %d", nextID))
 		}
 	}
 
 	if nextID >= noc.MaxNumSMSidePort {
-		panic(fmt.Sprintf("[BookSimNoC] SMSide node %d out of range", nextID))
+		panic(fmt.Sprintf("[BookSimNoCImpl] SMSide node %d out of range", nextID))
 	}
 
 	nocPort := akita.NewLimitNumMsgPort(noc, size, fmt.Sprintf("%s.NocPort[%d]", noc.Name(), nextID))
@@ -247,13 +164,15 @@ func (noc *BookSimNoC) PlugInMagicSMSide(p akita.Port, size int) {
 	conn.PlugIn(p, size)
 
 	if _, exists := noc.port2Node[p]; exists {
-		panic("BookSimNoC: duplicate port mapping")
+		panic("BookSimNoCImpl: duplicate port mapping")
 	}
 	noc.port2Node[p] = nextID
+
+	return nocPort
 }
 
 // PlugInMemSide connects an external port to a specific BookSim node
-func (noc *BookSimNoC) PlugInMemSide(p akita.Port, size int) {
+func (noc *BookSimNoCImpl) PlugInMemSide(p akita.Port, size int) akita.Port {
 	noc.mutex.Lock()
 	defer noc.mutex.Unlock()
 
@@ -261,12 +180,12 @@ func (noc *BookSimNoC) PlugInMemSide(p akita.Port, size int) {
 
 	for _, port := range noc.nocPorts {
 		if port == p {
-			panic(fmt.Sprintf("[BookSimNoC] duplicate mapping for node %d", nextID))
+			panic(fmt.Sprintf("[BookSimNoCImpl] duplicate mapping for node %d", nextID))
 		}
 	}
 
 	if nextID >= noc.MaxNumMemSidePort+noc.MaxNumSMSidePort {
-		panic(fmt.Sprintf("[BookSimNoC] MemSide node %d out of range", nextID))
+		panic(fmt.Sprintf("[BookSimNoCImpl] MemSide node %d out of range", nextID))
 	}
 
 	nocPort := akita.NewLimitNumMsgPort(noc, size, fmt.Sprintf("%s.NocPort[%d]", noc.Name(), nextID))
@@ -279,13 +198,15 @@ func (noc *BookSimNoC) PlugInMemSide(p akita.Port, size int) {
 	conn.PlugIn(p, size)
 
 	if _, exists := noc.port2Node[p]; exists {
-		panic("BookSimNoC: duplicate port mapping")
+		panic("BookSimNoCImpl: duplicate port mapping")
 	}
 	noc.port2Node[p] = nextID
+
+	return nocPort
 }
 
 // PlugInMemSide connects an external port to a specific BookSim node
-func (noc *BookSimNoC) PlugInMagicMemSide(p akita.Port, size int) {
+func (noc *BookSimNoCImpl) PlugInMagicMemSide(p akita.Port, size int) akita.Port {
 	noc.mutex.Lock()
 	defer noc.mutex.Unlock()
 
@@ -293,12 +214,12 @@ func (noc *BookSimNoC) PlugInMagicMemSide(p akita.Port, size int) {
 
 	for _, port := range noc.nocPorts {
 		if port == p {
-			panic(fmt.Sprintf("[BookSimNoC] duplicate mapping for node %d", nextID))
+			panic(fmt.Sprintf("[BookSimNoCImpl] duplicate mapping for node %d", nextID))
 		}
 	}
 
 	if nextID >= noc.MaxNumMemSidePort+noc.MaxNumSMSidePort {
-		panic(fmt.Sprintf("[BookSimNoC] MemSide node %d out of range", nextID))
+		panic(fmt.Sprintf("[BookSimNoCImpl] MemSide node %d out of range", nextID))
 	}
 
 	nocPort := akita.NewLimitNumMsgPort(noc, size, fmt.Sprintf("%s.NocPort[%d]", noc.Name(), nextID))
@@ -317,19 +238,21 @@ func (noc *BookSimNoC) PlugInMagicMemSide(p akita.Port, size int) {
 	conn.PlugIn(p, size)
 
 	if _, exists := noc.port2Node[p]; exists {
-		panic("BookSimNoC: duplicate port mapping")
+		panic("BookSimNoCImpl: duplicate port mapping")
 	}
 	noc.port2Node[p] = nextID
+
+	return nocPort
 }
 
 // ---- Tick Logic ----
 
 // Tick executes one simulation cycle: injection → advancement → ejection
-func (noc *BookSimNoC) Tick(now akita.VTimeInSec) bool {
+func (noc *BookSimNoCImpl) Tick(now akita.VTimeInSec) bool {
 	noc.mutex.Lock()
 	defer noc.mutex.Unlock()
 	if !noc.wrapper.Open() {
-		panic("[BookSimNoC] not opened yet")
+		panic("[BookSimNoCImpl] not opened yet")
 	}
 
 	madeProgress := false
@@ -351,7 +274,7 @@ func (noc *BookSimNoC) Tick(now akita.VTimeInSec) bool {
 
 			dstNode := noc.route(msg)
 			if dstNode < 0 {
-				panic("BookSimNoC: invalid routeFn result (<0)")
+				panic("BookSimNoCImpl: invalid routeFn result (<0)")
 			}
 
 			numFlits := noc.prepareFlits(msg)
@@ -366,7 +289,7 @@ func (noc *BookSimNoC) Tick(now akita.VTimeInSec) bool {
 			)
 
 			if _, found := noc.inflightMsg[packetID]; found {
-				panic("BookSimNoC: duplicate packet ID")
+				panic("BookSimNoCImpl: duplicate packet ID")
 			}
 			noc.inflightMsg[packetID] = msg
 
@@ -396,7 +319,7 @@ func (noc *BookSimNoC) Tick(now akita.VTimeInSec) bool {
 
 			msg, found := noc.inflightMsg[packetID]
 			if !found {
-				panic("BookSimNoC: unknown packet ID")
+				panic("BookSimNoCImpl: unknown packet ID")
 			}
 
 			msg.Meta().SendTime = now
@@ -425,10 +348,10 @@ func (noc *BookSimNoC) Tick(now akita.VTimeInSec) bool {
 
 // ---- Helper functions ----
 
-func (noc *BookSimNoC) prepareFlits(msg akita.Msg) int {
+func (noc *BookSimNoCImpl) prepareFlits(msg akita.Msg) int {
 	bytes := msg.Meta().TrafficBytes
 	if bytes <= 0 {
-		panic(fmt.Sprintf("BookSimNoC: %v with non-positive size", reflect.TypeOf(msg)))
+		panic(fmt.Sprintf("BookSimNoCImpl: %v with non-positive size", reflect.TypeOf(msg)))
 	}
 	flits := (bytes + noc.flitSize - 1) / noc.flitSize
 	if flits < 1 {
@@ -437,140 +360,9 @@ func (noc *BookSimNoC) prepareFlits(msg akita.Msg) int {
 	return flits
 }
 
-func (noc *BookSimNoC) route(m akita.Msg) int {
+func (noc *BookSimNoCImpl) route(m akita.Msg) int {
 	if node, exists := noc.port2Node[m.Meta().Dst]; exists {
 		return node
 	}
-	panic("BookSimNoC: dst port not mapped to node")
-}
-
-// ---- Wrapper ----
-
-type NetworkWrapper struct {
-	net       unsafe.Pointer
-	api       *C.intersim_api_t
-	generator BookSimIDGenerator
-}
-
-type BookSimIDGenerator struct {
-	nextID uint64
-}
-
-func (g *BookSimIDGenerator) Generate() uint64 {
-	idNumber := atomic.AddUint64(&g.nextID, 1)
-	return idNumber
-}
-
-func NewNetworkWrapper(
-	config string,
-	numCUs int,
-	numMems int,
-) *NetworkWrapper {
-	return NewNetworkWrapperWithLib("/Users/chenzihang/codes/CachePWQ/simulator/noc/networking/booksim/native/libintersim.dylib", config, numCUs, numMems)
-}
-
-func NewNetworkWrapperWithLib(
-	libPath string,
-	config string,
-	nSMS int,
-	nMems int,
-) *NetworkWrapper {
-	if libPath == "" || config == "" {
-		panic("BookSimNoC: libPath/config required")
-	}
-
-	cLib := C.CString(libPath)
-	defer C.free(unsafe.Pointer(cLib))
-	api := C.load_intersim(cLib)
-	if api == nil {
-		panic(fmt.Sprintf("[BookSimNoC] dlopen failed for %s", libPath))
-	}
-
-	cCfg := C.CString(config)
-	defer C.free(unsafe.Pointer(cCfg))
-	net := C.call_create(api, cCfg, C.int(nSMS), C.int(nMems))
-	if net == nil {
-		C.unload_intersim(api)
-		panic(fmt.Sprintf("[BookSimNoC] booksim_create failed for %s", libPath))
-	}
-
-	return &NetworkWrapper{net: net, api: api}
-}
-
-func (wrapper *NetworkWrapper) CanInject(
-	node int,
-	numFlits int,
-) bool {
-	return C.call_caninject(wrapper.api, wrapper.net, C.int(node), C.int(numFlits)) != 0
-}
-
-func (wrapper *NetworkWrapper) Send(
-	srcNode int,
-	dstNode int,
-	msg akita.Msg,
-) uint64 {
-	packetID := wrapper.generator.Generate()
-
-	var msgType int
-
-	switch msg.(type) {
-	case *device.TranslationRsp:
-		msgType = 1
-	case *mem.DataReadyRsp:
-		msgType = 1
-	case *mem.WriteReq:
-		msgType = 2
-	case *mem.WriteDoneRsp:
-		msgType = 3
-	default:
-		msgType = 0
-	}
-
-	C.call_inject(
-		wrapper.api,
-		wrapper.net,
-		C.int(srcNode),
-		C.int(dstNode),
-		C.ulonglong(packetID),
-		C.int(msgType),
-		C.int(msg.Meta().TrafficBytes),
-	)
-
-	return packetID
-}
-
-func (wrapper *NetworkWrapper) Tick() {
-	C.call_cycle(wrapper.api, wrapper.net)
-}
-
-func (wrapper *NetworkWrapper) Pop(
-	node int,
-) {
-	C.call_pop(wrapper.api, wrapper.net, C.int(node))
-}
-
-func (wrapper *NetworkWrapper) Peek(
-	node int,
-) (bool, uint64) {
-	var packetID C.ulonglong
-	ok := C.call_peek(wrapper.api, wrapper.net, C.int(node), &packetID)
-	if ok == 0 {
-		return false, 0
-	}
-	return true, uint64(packetID)
-}
-
-func (wrapper *NetworkWrapper) Busy() bool {
-	return C.call_busy(wrapper.api, wrapper.net) != 0
-}
-
-func (wrapper *NetworkWrapper) Open() bool {
-	return wrapper.net != nil
-}
-
-func (wrapper *NetworkWrapper) Close() {
-	if wrapper.net != nil {
-		C.call_destroy(wrapper.api, wrapper.net)
-		wrapper.net = nil
-	}
+	panic("BookSimNoCImpl: dst port not mapped to node")
 }

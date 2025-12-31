@@ -132,6 +132,8 @@ var customHSL = flag.Uint64("custom-hsl", 1,
 	"Specify the value of custom HSL directly to the builder")
 var yamlConfigFile = flag.String("yaml-config-file", "",
 	"Specify the path to a yaml config file to override default config values.")
+var GlobalNoCConfigFile = flag.String("global-noc-config-file", "",
+	"Specify the path to a booksim config file to configure the Global NoC.")
 var MemoryConfigFile = flag.String("memory-noc-config-file", "",
 	"Specify the path to a booksim config file to configure the Memory NoC.")
 var TLBConfigFile = flag.String("tlb-noc-config-file", "",
@@ -1076,6 +1078,51 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithLog2PageSize(*log2PageSize)
 		b.WithBookSimMemoryNoC(*MemoryConfigFile)
 		b.WithBookSimTLBNoC(*TLBConfigFile)
+		b.WithBookSimDir(*booksimDir)
+		r.Engine, r.GPUDriver = b.Build()
+	case "hierarchicalMemSide":
+		b := platform.MakeHierarchicalMemSidePlatformBuilder()
+		if r.Parallel {
+			b.WithParallelEngine()
+		}
+
+		if *isaDebug {
+			b.WithISADebugging()
+		}
+
+		if *visTracing {
+			b.WithVisTracing()
+		}
+
+		if *memTracing {
+			b.WithMemTracing()
+		}
+
+		if *tlbTracing {
+			b.WithTLBTracing()
+		}
+
+		if *disableProgressBar {
+			b.WithoutProgressBar()
+		}
+
+		if *tipFlag {
+			b.UseTimeInstProfiling()
+		}
+
+		if *teaFlag {
+			if !*tipFlag {
+				log.Panic("TEA requires TIP to be enabled.")
+			}
+
+			b.UseTimeEventAnalysis()
+		}
+
+		b.WithAlg(*schedulingAlg)
+		b.WithSchedulingPartition(*schedulingPartition)
+		b.WithMemAllocatorType(*memAllocatorType)
+		b.WithLog2PageSize(*log2PageSize)
+		b.WithBookSimGlobal(*GlobalNoCConfigFile)
 		b.WithBookSimDir(*booksimDir)
 		r.Engine, r.GPUDriver = b.Build()
 	case "monolithicCaPWQ":
@@ -2228,7 +2275,7 @@ func (r *Runner) addBookSimTracer() {
 	for _, gpu := range r.GPUDriver.GPUs {
 		for _, noc := range gpu.NoCs {
 			t := BookSimAccessTracer{}
-			t.noc = noc
+			t.noc = noc.(tracing.NamedHookable)
 
 			tracer := tracing.NewStepCountTracer(
 				func(task tracing.Task) bool { /*return true*/
@@ -2242,7 +2289,7 @@ func (r *Runner) addBookSimTracer() {
 
 		for _, noc := range gpu.NoCs {
 			t := BookSimLatencyTracer{}
-			t.noc = noc
+			t.noc = noc.(tracing.NamedHookable)
 
 			tracer := tracing.NewNocTracer(
 				func(task tracing.Task) bool { /*return true*/

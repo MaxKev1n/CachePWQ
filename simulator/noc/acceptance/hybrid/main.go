@@ -8,6 +8,7 @@ import (
 	"github.com/tebeka/atexit"
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/noc/acceptance"
+	noc "gitlab.com/akita/noc/networking/booksim"
 	"gitlab.com/akita/noc/networking/multiplexer"
 )
 
@@ -38,9 +39,15 @@ func createNetwork(engine akita.Engine, test *acceptance.Test) {
 		agents = append(agents, agent)
 	}
 
+	booksim := noc.NewHybridBookSimNoC("HybridBookSim-TestNet", engine)
+
+	booksim.MaxNumSMSidePort = 2
+	booksim.MaxNumMemSidePort = 1
+
+	booksim.CreateNetwork("/Users/chenzihang/codes/CachePWQ/simulator/noc/networking/booksim/native/config_hierarchicalmemside.icnt")
+
 	routingTableA := multiplexer.NewMapRoutingTable()
 	routingTableB := multiplexer.NewMapRoutingTable()
-	routingTableC := multiplexer.NewMapRoutingTable()
 
 	builder := multiplexer.MakeMultiplexerBuilder().
 		WithEngine(engine).
@@ -61,16 +68,6 @@ func createNetwork(engine akita.Engine, test *acceptance.Test) {
 		WithBufferSizeInNumFlit(16)
 
 	connectorB := builder.Build("MultiplexerB")
-
-	builder = multiplexer.MakeMultiplexerBuilder().
-		WithEngine(engine).
-		WithFreq(freq).
-		WithNumReqPerCycle(4).
-		WithSwitchLatency(15).
-		WithRoutingTable(routingTableC).
-		WithBufferSizeInNumFlit(64)
-
-	connectorC := builder.Build("MultiplexerC")
 
 	for i := 0; i < 2; i++ {
 		ep := multiplexer.MakeEndPointBuilder().
@@ -102,32 +99,38 @@ func createNetwork(engine akita.Engine, test *acceptance.Test) {
 		}
 	}
 
-	ep := multiplexer.MakeEndPointBuilder().
+	epA := multiplexer.MakeHybridEndPointBuilder().
 		WithEngine(engine).
 		WithFreq(freq).
-		WithDevicePorts(agents[4].Ports).
 		WithFlitByteSize(32).
-		Build(fmt.Sprintf("EndPoint%d", 4))
+		WithFlitAssemblingBufferSize(128).
+		WithNetworkPortBufferSize(64).
+		Build("ToNoCFromA")
 
-	local := connectorC.SetHighSideEndPoint(ep)
-	for _, port := range ep.DevicePorts {
-		connectorC.AddRoute(port, local)
+	epB := multiplexer.MakeHybridEndPointBuilder().
+		WithEngine(engine).
+		WithFreq(freq).
+		WithFlitByteSize(32).
+		WithFlitAssemblingBufferSize(128).
+		WithNetworkPortBufferSize(64).
+		Build("ToNoCFromB")
+
+	connectorA.SetHighSideHybridEndPoint(epA)
+	connectorB.SetHighSideHybridEndPoint(epB)
+
+	nocAPort := booksim.PlugInSMSide(epA.NetworkPort, 32)
+	for _, port := range connectorA.RoutingTable.GetAllSrcPorts() {
+		booksim.AddRoute(port, epA.NetworkPort)
 	}
+	epA.PlugIn(nocAPort, 32)
 
-	// Connect multiplexers
-	multiplexer.ConnectMultiplexers(
-		engine,
-		connectorA,
-		connectorC,
-		freq,
-	)
+	nocBPort := booksim.PlugInSMSide(epB.NetworkPort, 32)
+	for _, port := range connectorB.RoutingTable.GetAllSrcPorts() {
+		booksim.AddRoute(port, epB.NetworkPort)
+	}
+	epB.PlugIn(nocBPort, 32)
 
-	multiplexer.ConnectMultiplexers(
-		engine,
-		connectorB,
-		connectorC,
-		freq,
-	)
+	booksim.PlugInMemSide(agents[4].Ports[0], 64)
 
 	test.RegisterAgent(agents[0])
 	test.RegisterAgent(agents[1])

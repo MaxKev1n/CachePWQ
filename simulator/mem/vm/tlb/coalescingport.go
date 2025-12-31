@@ -30,6 +30,11 @@ func (p *CoalescingPort) SetConnection(conn akita.Connection) {
 	p.conn = conn
 }
 
+// GetConnection gets the connection plugged in to this port.
+func (p *CoalescingPort) GetConnection() akita.Connection {
+	return p.conn
+}
+
 // Component returns the owner component of the port.
 func (p *CoalescingPort) Component() akita.Component {
 	return p.comp

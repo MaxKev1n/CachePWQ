@@ -56,7 +56,7 @@ type Multiplexer struct {
 	switchLatency       int
 	bufferSizeInNumFlit int
 
-	routingTable RoutingTable
+	RoutingTable RoutingTable
 }
 
 func (m *Multiplexer) Tick(now akita.VTimeInSec) bool {
@@ -155,10 +155,25 @@ func (m *Multiplexer) forward(now akita.VTimeInSec) bool {
 			madeProgress = true
 		}
 	}
+
+	// process high-side port separately
+	highSideComplex := m.portToComplexMapping[m.HighSidePort]
+	highSideBuf := highSideComplex.forwardBuffer
+	item := highSideBuf.Peek()
+	if item == nil {
+		return madeProgress
+	}
+
+	flit := item.(*noc.Flit)
+	if flit.OutputBuf.CanPush() {
+		flit.OutputBuf.Push(flit)
+		highSideBuf.Pop()
+		madeProgress = true
+	}
+
 	return madeProgress
 }
 
-// 其他辅助方法...
 func (m *Multiplexer) movePipeline(now akita.VTimeInSec) bool {
 	madeProgress := false
 	for _, complex := range m.portToComplexMapping {
@@ -192,7 +207,7 @@ func (m *Multiplexer) sendOut(now akita.VTimeInSec) bool {
 func (m *Multiplexer) assignDownlinkOutputBuf(f *noc.Flit) {
 	finalDestination := f.Msg.Meta().Dst
 
-	outPort, ok := m.routingTable.Find(finalDestination)
+	outPort, ok := m.RoutingTable.Find(finalDestination)
 	if !ok {
 		panic(fmt.Sprintf("No route found for destination %s in Multiplexer %s",
 			finalDestination.Name(), m.Name()))
@@ -233,7 +248,7 @@ func (m *Multiplexer) createPortComplex(
 // AddLowSidePort set the Multiplexer low-side port (usually multiple).
 func (m *Multiplexer) AddLowSidePort(
 	ep *EndPoint,
-) {
+) akita.Port {
 	local := akita.NewLimitNumMsgPort(m, m.bufferSizeInNumFlit,
 		fmt.Sprintf("%s.LowSidePort.%d", m.Name(), len(m.LowSidePorts)))
 
@@ -254,12 +269,14 @@ func (m *Multiplexer) AddLowSidePort(
 	m.uplinkArbiter.AddBuffer(complex.forwardBuffer)
 
 	ep.DefaultSwitchDst = local
+
+	return local
 }
 
-// SetHighSidePort sets the Multiplexer high-side port (usually single).
-func (m *Multiplexer) SetHighSidePort(
+// SetHighSideEndPoint sets the Multiplexer high-side endpoint (usually single).
+func (m *Multiplexer) SetHighSideEndPoint(
 	ep *EndPoint,
-) {
+) akita.Port {
 	local := akita.NewLimitNumMsgPort(m, m.bufferSizeInNumFlit,
 		fmt.Sprintf("%s.HighSidePort", m.Name()))
 
@@ -278,6 +295,104 @@ func (m *Multiplexer) SetHighSidePort(
 	m.portToComplexMapping[local] = complex
 
 	ep.DefaultSwitchDst = local
+
+	return local
+}
+
+// SetHighSideHybridEndPoint sets the Multiplexer high-side endpoint (usually single).
+func (m *Multiplexer) SetHighSideHybridEndPoint(
+	ep *HybridEndPoint,
+) akita.Port {
+	local := akita.NewLimitNumMsgPort(m, m.bufferSizeInNumFlit,
+		fmt.Sprintf("%s.HighSidePort", m.Name()))
+
+	conn := akita.NewDirectConnection(
+		fmt.Sprintf("%s-%s", ep.NetworkPort.Name(), local.Name()),
+		m.Engine,
+		m.Freq,
+	)
+
+	conn.PlugIn(local, 2*m.numReqPerCycle)
+	conn.PlugIn(ep.NetworkPort, 2*m.numReqPerCycle)
+
+	complex := m.createPortComplex(local, ep.NetworkPort)
+
+	m.HighSidePort = local
+	m.portToComplexMapping[local] = complex
+
+	ep.DefaultSwitchDst = local
+
+	return local
+}
+
+// SetHighSidePort sets the Multiplexer high-side port (usually single).
+func (m *Multiplexer) SetHighSidePort(
+	remote akita.Port,
+) akita.Port {
+	local := akita.NewLimitNumMsgPort(m, m.bufferSizeInNumFlit,
+		fmt.Sprintf("%s.HighSidePort", m.Name()))
+
+	conn := akita.NewDirectConnection(
+		fmt.Sprintf("%s-%s", remote.Name(), local.Name()),
+		m.Engine,
+		m.Freq,
+	)
+
+	conn.PlugIn(local, 2*m.numReqPerCycle)
+	conn.PlugIn(remote, 2*m.numReqPerCycle)
+
+	complex := m.createPortComplex(local, remote)
+
+	m.HighSidePort = local
+	m.portToComplexMapping[local] = complex
+
+	return local
+}
+
+// AddRoute adds a routing entry to the Multiplexer's routing table.
+func (m *Multiplexer) AddRoute(
+	srcPort akita.Port,
+	dstPort akita.Port,
+) {
+	m.RoutingTable.AddRoute(srcPort, dstPort)
+}
+
+// ConnectSwitches connect two switches together.
+func ConnectMultiplexers(
+	engine akita.Engine,
+	a, b *Multiplexer,
+	freq akita.Freq,
+) (portOnA, portOnB akita.Port) {
+	portA := akita.NewLimitNumMsgPort(a, a.bufferSizeInNumFlit,
+		fmt.Sprintf("%s.Port%d", a.Name(), len(a.LowSidePorts)+1))
+	portB := akita.NewLimitNumMsgPort(b, b.bufferSizeInNumFlit,
+		fmt.Sprintf("%s.Port%d", b.Name(), len(b.LowSidePorts)+1))
+
+	conn := akita.NewDirectConnection(
+		fmt.Sprintf("%s-%s", portA.Name(), portB.Name()),
+		engine, freq)
+	conn.PlugIn(portA, 2*a.numReqPerCycle)
+	conn.PlugIn(portB, 2*b.numReqPerCycle)
+
+	portComplexA := a.createPortComplex(portA, portB)
+	portComplexB := b.createPortComplex(portB, portA)
+
+	if a.HighSidePort != nil {
+		panic("multiplexer A already has high-side port set")
+	}
+
+	a.HighSidePort = portA
+	a.portToComplexMapping[portComplexA.localPort] = portComplexA
+
+	b.LowSidePorts = append(b.LowSidePorts, portComplexB.localPort)
+	b.portToComplexMapping[portComplexB.localPort] = portComplexB
+	b.uplinkArbiter.AddBuffer(portComplexB.forwardBuffer)
+
+	for _, srcPort := range a.RoutingTable.GetAllSrcPorts() {
+		b.RoutingTable.AddRoute(srcPort, portB)
+	}
+
+	return portA, portB
 }
 
 // MultiplexerBuilder helps building a Multiplexer.
@@ -352,7 +467,7 @@ func (b MultiplexerBuilder) Build(name string) *Multiplexer {
 		panic("Routing table must be provided to build a Multiplexer")
 	}
 
-	m.routingTable = b.routingTable
+	m.RoutingTable = b.routingTable
 	m.uplinkArbiter = NewRRArbiter()
 
 	m.numReqPerCycle = b.numReqPerCycle

@@ -117,6 +117,7 @@ type CommonBuilder struct {
 	useCoalescingTLBPort bool
 	useCoalescingRTU     bool
 
+	booksimGlobal string
 	booksimMemory string
 	booksimTLB    string
 	booksimDir    string
@@ -268,6 +269,11 @@ func (b *CommonBuilder) UseCoalescingRTU(u bool) {
 	b.useCoalescingRTU = u
 }
 
+// WithBooksimGlobal sets the path to booksim config file
+func (b *CommonBuilder) WithBooksimGlobal(config string) {
+	b.booksimGlobal = config
+}
+
 // WithBookSimMemory sets the path to booksim config file
 func (b *CommonBuilder) WithBookSimMemory(config string) {
 	b.booksimMemory = config
@@ -356,7 +362,6 @@ func (b *CommonBuilder) BuildSAs(chiplet *Chiplet) {
 	saBuilder.withLog2PageSize(b.log2PageSize)
 	saBuilder.withNumCU(b.numCUPerShaderArray)
 	saBuilder.withPageTable(b.pageTable)
-	saBuilder.withConfig("CaPWQ")
 
 	if b.enableVisTracing {
 		saBuilder.withVisTracer(b.visTracer)
@@ -994,9 +999,6 @@ func (b *CommonBuilder) connectL2ToDRAM(chiplet *Chiplet) {
 		lowModuleFinder.LowModules = append(lowModuleFinder.LowModules,
 			dram.ToTop)
 	}
-
-	// b.dmaEngine.SetLocalDataSource(lowModuleFinder)
-	// chiplet.L2ToDramConnection.PlugIn(b.dmaEngine.ToMem, 64)
 
 	b.pageMigrationController.MemCtrlFinder = lowModuleFinder
 	chiplet.L2ToDramConnection.PlugIn(b.pageMigrationController.LocalMemPort, 16)

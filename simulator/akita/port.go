@@ -14,6 +14,7 @@ type Port interface {
 	Hookable
 
 	SetConnection(conn Connection)
+	GetConnection() Connection
 	Component() Component
 
 	// For connection
@@ -71,6 +72,11 @@ var HookPosPortMsgRetrieve = &HookPos{Name: "Port Msg  Retrieve"}
 // SetConnection sets which connection plugged in to this port.
 func (p *LimitNumMsgPort) SetConnection(conn Connection) {
 	p.conn = conn
+}
+
+// GetConnection gets the connection plugged in to this port.
+func (p *LimitNumMsgPort) GetConnection() Connection {
+	return p.conn
 }
 
 // Component returns the owner component of the port.

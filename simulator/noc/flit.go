@@ -66,6 +66,7 @@ func (b FlitBuilder) WithMsg(msg akita.Msg) FlitBuilder {
 // Build creates a new flit.
 func (b FlitBuilder) Build() *Flit {
 	f := &Flit{}
+	f.ID = akita.GetIDGenerator().Generate()
 	f.SendTime = b.sendTime
 	f.Src = b.src
 	f.Dst = b.dst

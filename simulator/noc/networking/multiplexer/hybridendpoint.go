@@ -8,12 +8,12 @@ import (
 	"gitlab.com/akita/noc"
 )
 
-// EndPoint is an akita component that deligates sending and receiving actions
+// HybridEndPoint is an akita component that deligates sending and receiving actions
 // of a few ports.
-type EndPoint struct {
+type HybridEndPoint struct {
 	*akita.TickingComponent
 
-	DevicePorts      []akita.Port
+	NoCPort          akita.Port
 	NetworkPort      akita.Port
 	DefaultSwitchDst akita.Port
 
@@ -31,7 +31,7 @@ type EndPoint struct {
 }
 
 // Send sends a message.
-func (ep *EndPoint) Send(msg akita.Msg) *akita.SendError {
+func (ep *HybridEndPoint) Send(msg akita.Msg) *akita.SendError {
 	ep.Lock()
 	defer ep.Unlock()
 
@@ -47,24 +47,28 @@ func (ep *EndPoint) Send(msg akita.Msg) *akita.SendError {
 }
 
 // PlugIn connects a port to the endpoint.
-func (ep *EndPoint) PlugIn(port akita.Port, srcBufCap int) {
+func (ep *HybridEndPoint) PlugIn(port akita.Port, srcBufCap int) {
+	if ep.NoCPort != nil {
+		panic(fmt.Sprintf("HybridEndPoint %s: only one device port is allowed", ep.Name()))
+	}
+
 	port.SetConnection(ep)
-	ep.DevicePorts = append(ep.DevicePorts, port)
+	ep.NoCPort = port
 	ep.msgOutBufSize = srcBufCap
 }
 
 // NotifyAvailable triggers the endpoint to continue to tick.
-func (ep *EndPoint) NotifyAvailable(now akita.VTimeInSec, port akita.Port) {
+func (ep *HybridEndPoint) NotifyAvailable(now akita.VTimeInSec, port akita.Port) {
 	ep.TickLater(now)
 }
 
 // Unplug removes the association of a port and an endpoint.
-func (ep *EndPoint) Unplug(port akita.Port) {
+func (ep *HybridEndPoint) Unplug(port akita.Port) {
 	panic("not implemented")
 }
 
 // Tick update the endpoint state.
-func (ep *EndPoint) Tick(now akita.VTimeInSec) bool {
+func (ep *HybridEndPoint) Tick(now akita.VTimeInSec) bool {
 	ep.Lock()
 	defer ep.Unlock()
 
@@ -81,7 +85,7 @@ func (ep *EndPoint) Tick(now akita.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (ep *EndPoint) sendFlitOut(now akita.VTimeInSec) bool {
+func (ep *HybridEndPoint) sendFlitOut(now akita.VTimeInSec) bool {
 	if len(ep.flitsToSend) == 0 {
 		return false
 	}
@@ -91,16 +95,14 @@ func (ep *EndPoint) sendFlitOut(now akita.VTimeInSec) bool {
 	if err == nil {
 		ep.flitsToSend = ep.flitsToSend[1:]
 		if len(ep.flitsToSend) == 0 {
-			for _, p := range ep.DevicePorts {
-				p.NotifyAvailable(now)
-			}
+			ep.NoCPort.NotifyAvailable(now)
 		}
 		return true
 	}
 	return false
 }
 
-func (ep *EndPoint) prepareFlits(now akita.VTimeInSec) bool {
+func (ep *HybridEndPoint) prepareFlits(now akita.VTimeInSec) bool {
 	if len(ep.flitsToSend) > 0 {
 		return false
 	}
@@ -118,7 +120,7 @@ func (ep *EndPoint) prepareFlits(now akita.VTimeInSec) bool {
 	return true
 }
 
-func (ep *EndPoint) recv(now akita.VTimeInSec) bool {
+func (ep *HybridEndPoint) recv(now akita.VTimeInSec) bool {
 	recved := ep.NetworkPort.Peek()
 	if recved == nil {
 		return false
@@ -147,7 +149,7 @@ func (ep *EndPoint) recv(now akita.VTimeInSec) bool {
 	return true
 }
 
-func (ep *EndPoint) assemble(now akita.VTimeInSec) bool {
+func (ep *HybridEndPoint) assemble(now akita.VTimeInSec) bool {
 	madeProgress := false
 	newFlits := make([]*noc.Flit, 0)
 	for _, f := range ep.flitsToAssemble {
@@ -167,7 +169,7 @@ func (ep *EndPoint) assemble(now akita.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (ep *EndPoint) tryDeliver(now akita.VTimeInSec) bool {
+func (ep *HybridEndPoint) tryDeliver(now akita.VTimeInSec) bool {
 	if ep.assemblingMsg == nil {
 		return false
 	}
@@ -177,7 +179,7 @@ func (ep *EndPoint) tryDeliver(now akita.VTimeInSec) bool {
 	}
 
 	ep.assemblingMsg.Meta().RecvTime = now
-	err := ep.assemblingMsg.Meta().Dst.Recv(ep.assemblingMsg)
+	err := ep.NoCPort.Recv(ep.assemblingMsg)
 	if err == nil {
 		// log.Printf("%.12f, EP %s, msg %s assembled and deliverd\n",
 		// 	now, ep.Name(), ep.assemblingMsg.Meta().ID)
@@ -189,7 +191,7 @@ func (ep *EndPoint) tryDeliver(now akita.VTimeInSec) bool {
 	return false
 }
 
-func (ep *EndPoint) msgToFlits(msg akita.Msg) []*noc.Flit {
+func (ep *HybridEndPoint) msgToFlits(msg akita.Msg) []*noc.Flit {
 	numFlit := 1
 	if msg.Meta().TrafficBytes > 0 {
 		trafficByte := msg.Meta().TrafficBytes
@@ -211,8 +213,8 @@ func (ep *EndPoint) msgToFlits(msg akita.Msg) []*noc.Flit {
 	return flits
 }
 
-// EndPointBuilder can build End Points.
-type EndPointBuilder struct {
+// HybridEndPointBuilder can build End Points.
+type HybridEndPointBuilder struct {
 	engine                   akita.Engine
 	freq                     akita.Freq
 	flitByteSize             int
@@ -223,10 +225,10 @@ type EndPointBuilder struct {
 	numReqPerCycle           int
 }
 
-// MakeEndPointBuilder creates a new EndPointBuilder with default
+// MakeHybridEndPointBuilder creates a new HybridEndPointBuilder with default
 // configureations.
-func MakeEndPointBuilder() EndPointBuilder {
-	return EndPointBuilder{
+func MakeHybridEndPointBuilder() HybridEndPointBuilder {
+	return HybridEndPointBuilder{
 		flitByteSize:             32,
 		flitAssemblingBufferSize: 64,
 		networkPortBufferSize:    4,
@@ -236,55 +238,54 @@ func MakeEndPointBuilder() EndPointBuilder {
 }
 
 // WithEngine sets the engine of the End Point to build.
-func (b EndPointBuilder) WithEngine(e akita.Engine) EndPointBuilder {
+func (b HybridEndPointBuilder) WithEngine(e akita.Engine) HybridEndPointBuilder {
 	b.engine = e
 	return b
 }
 
 // WithFreq sets the frequency of the End Point to built.
-func (b EndPointBuilder) WithFreq(freq akita.Freq) EndPointBuilder {
+func (b HybridEndPointBuilder) WithFreq(freq akita.Freq) HybridEndPointBuilder {
 	b.freq = freq
 	return b
 }
 
 // WithFlitByteSize sets the flit byte size that the End Point supports.
-func (b EndPointBuilder) WithFlitByteSize(n int) EndPointBuilder {
+func (b HybridEndPointBuilder) WithFlitByteSize(n int) HybridEndPointBuilder {
 	b.flitByteSize = n
 	return b
 }
 
 // WithFreq sets the frequency of the End Point to built.
-func (b EndPointBuilder) WithNumReqPerCycle(numReqPerCycle int) EndPointBuilder {
+func (b HybridEndPointBuilder) WithNumReqPerCycle(numReqPerCycle int) HybridEndPointBuilder {
 	b.numReqPerCycle = numReqPerCycle
 	return b
 }
 
 // WithEncodingOverhead sets the encoding overhead.
-func (b EndPointBuilder) WithEncodingOverhead(o float64) EndPointBuilder {
+func (b HybridEndPointBuilder) WithEncodingOverhead(o float64) HybridEndPointBuilder {
 	b.encodingOverhead = o
 	return b
 }
 
 // WithNetworkPortBufferSize sets the network port buffer size of the end point.
-func (b EndPointBuilder) WithNetworkPortBufferSize(n int) EndPointBuilder {
+func (b HybridEndPointBuilder) WithNetworkPortBufferSize(n int) HybridEndPointBuilder {
 	b.networkPortBufferSize = n
 	return b
 }
 
-// WithDevicePorts sets a list of ports that communicate directly through the
-// End Point.
-func (b EndPointBuilder) WithDevicePorts(ports []akita.Port) EndPointBuilder {
-	b.devicePorts = ports
+// WithFlitAssemblingBufferSize sets the flit assembling buffer size.
+func (b HybridEndPointBuilder) WithFlitAssemblingBufferSize(n int) HybridEndPointBuilder {
+	b.flitAssemblingBufferSize = n
 	return b
 }
 
 // Build creates a new End Point.
-func (b EndPointBuilder) Build(name string) *EndPoint {
+func (b HybridEndPointBuilder) Build(name string) *HybridEndPoint {
 	b.engineMustBeGiven()
 	b.freqMustBeGiven()
 	b.flitByteSizeMustBeGiven()
 
-	ep := &EndPoint{}
+	ep := &HybridEndPoint{}
 	ep.TickingComponent = akita.NewTickingComponent(
 		name, b.engine, b.freq, ep)
 	ep.flitByteSize = b.flitByteSize
@@ -301,19 +302,19 @@ func (b EndPointBuilder) Build(name string) *EndPoint {
 	return ep
 }
 
-func (b EndPointBuilder) engineMustBeGiven() {
+func (b HybridEndPointBuilder) engineMustBeGiven() {
 	if b.engine == nil {
 		panic("engine is not given")
 	}
 }
 
-func (b EndPointBuilder) freqMustBeGiven() {
+func (b HybridEndPointBuilder) freqMustBeGiven() {
 	if b.freq == 0 {
 		panic("freq must be given")
 	}
 }
 
-func (b EndPointBuilder) flitByteSizeMustBeGiven() {
+func (b HybridEndPointBuilder) flitByteSizeMustBeGiven() {
 	if b.flitByteSize == 0 {
 		panic("flit byte size must be given")
 	}

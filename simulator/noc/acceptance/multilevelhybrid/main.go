@@ -8,6 +8,7 @@ import (
 	"github.com/tebeka/atexit"
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/noc/acceptance"
+	noc "gitlab.com/akita/noc/networking/booksim"
 	"gitlab.com/akita/noc/networking/multiplexer"
 )
 
@@ -19,7 +20,7 @@ func main() {
 	t := acceptance.NewTest()
 
 	createNetwork(engine, t)
-	t.GenerateMsgs(1024)
+	t.GenerateMsgs(4096)
 
 	engine.Run()
 
@@ -37,6 +38,13 @@ func createNetwork(engine akita.Engine, test *acceptance.Test) {
 		agent.TickLater(0)
 		agents = append(agents, agent)
 	}
+
+	booksim := noc.NewHybridBookSimNoC("MultiLevelHybridBookSim-TestNet", engine)
+
+	booksim.MaxNumSMSidePort = 1
+	booksim.MaxNumMemSidePort = 1
+
+	booksim.CreateNetwork("/Users/chenzihang/codes/CachePWQ/simulator/noc/networking/booksim/native/config_hierarchicalmemside.icnt")
 
 	routingTableA := multiplexer.NewMapRoutingTable()
 	routingTableB := multiplexer.NewMapRoutingTable()
@@ -102,18 +110,6 @@ func createNetwork(engine akita.Engine, test *acceptance.Test) {
 		}
 	}
 
-	ep := multiplexer.MakeEndPointBuilder().
-		WithEngine(engine).
-		WithFreq(freq).
-		WithDevicePorts(agents[4].Ports).
-		WithFlitByteSize(32).
-		Build(fmt.Sprintf("EndPoint%d", 4))
-
-	local := connectorC.SetHighSideEndPoint(ep)
-	for _, port := range ep.DevicePorts {
-		connectorC.AddRoute(port, local)
-	}
-
 	// Connect multiplexers
 	multiplexer.ConnectMultiplexers(
 		engine,
@@ -128,6 +124,24 @@ func createNetwork(engine akita.Engine, test *acceptance.Test) {
 		connectorC,
 		freq,
 	)
+
+	ep := multiplexer.MakeHybridEndPointBuilder().
+		WithEngine(engine).
+		WithFreq(freq).
+		WithFlitByteSize(32).
+		WithFlitAssemblingBufferSize(128).
+		WithNetworkPortBufferSize(64).
+		Build("HybridEndPoint")
+
+	connectorC.SetHighSideHybridEndPoint(ep)
+
+	nocPort := booksim.PlugInSMSide(ep.NetworkPort, 64)
+	for _, port := range connectorC.RoutingTable.GetAllSrcPorts() {
+		booksim.AddRoute(port, ep.NetworkPort)
+	}
+	ep.PlugIn(nocPort, 64)
+
+	booksim.PlugInMemSide(agents[4].Ports[0], 64)
 
 	test.RegisterAgent(agents[0])
 	test.RegisterAgent(agents[1])
