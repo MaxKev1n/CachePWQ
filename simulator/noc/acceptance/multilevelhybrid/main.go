@@ -53,7 +53,7 @@ func createNetwork(engine akita.Engine, test *acceptance.Test) {
 	builder := multiplexer.MakeMultiplexerBuilder().
 		WithEngine(engine).
 		WithFreq(freq).
-		WithNumReqPerCycle(1).
+		WithNumReqPerCycle(2).
 		WithSwitchLatency(2).
 		WithRoutingTable(routingTableA).
 		WithBufferSizeInNumFlit(16)
@@ -63,7 +63,7 @@ func createNetwork(engine akita.Engine, test *acceptance.Test) {
 	builder = multiplexer.MakeMultiplexerBuilder().
 		WithEngine(engine).
 		WithFreq(freq).
-		WithNumReqPerCycle(1).
+		WithNumReqPerCycle(2).
 		WithSwitchLatency(2).
 		WithRoutingTable(routingTableB).
 		WithBufferSizeInNumFlit(16)
@@ -73,7 +73,7 @@ func createNetwork(engine akita.Engine, test *acceptance.Test) {
 	builder = multiplexer.MakeMultiplexerBuilder().
 		WithEngine(engine).
 		WithFreq(freq).
-		WithNumReqPerCycle(4).
+		WithNumReqPerCycle(7).
 		WithSwitchLatency(15).
 		WithRoutingTable(routingTableC).
 		WithBufferSizeInNumFlit(64)
@@ -86,6 +86,7 @@ func createNetwork(engine akita.Engine, test *acceptance.Test) {
 			WithFreq(freq).
 			WithDevicePorts(agents[i].Ports).
 			WithFlitByteSize(32).
+			WithNumReqPerCycle(1).
 			Build(fmt.Sprintf("EndPoint%d", i))
 
 		local := connectorA.AddLowSidePort(ep)
@@ -101,6 +102,7 @@ func createNetwork(engine akita.Engine, test *acceptance.Test) {
 			WithFreq(freq).
 			WithDevicePorts(agents[i].Ports).
 			WithFlitByteSize(32).
+			WithNumReqPerCycle(1).
 			Build(fmt.Sprintf("EndPoint%d", i))
 
 		local := connectorB.AddLowSidePort(ep)
@@ -131,6 +133,7 @@ func createNetwork(engine akita.Engine, test *acceptance.Test) {
 		WithFlitByteSize(32).
 		WithFlitAssemblingBufferSize(128).
 		WithNetworkPortBufferSize(64).
+		WithNumReqPerCycle(7).
 		Build("HybridEndPoint")
 
 	connectorC.SetHighSideHybridEndPoint(ep)
