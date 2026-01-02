@@ -13,8 +13,6 @@ import (
 	"gitlab.com/akita/mem/vm/addresstranslator"
 	"gitlab.com/akita/mem/vm/mmu"
 
-	// "gitlab.com/akita/mem/vm/mmu"
-	"gitlab.com/akita/mem/vm/idealtlb"
 	"gitlab.com/akita/mem/vm/tlb"
 	// "gitlab.com/akita/mgpusim"
 	// "gitlab.com/akita/mgpusim/pagemigrationcontroller"
@@ -37,10 +35,10 @@ type Chiplet struct {
 	L1SCaches         []*l1v.Cache
 	L2Caches          []*writeback.Cache
 	L2CacheFinder     cache.LowModuleFinder
-	L2TLBs            []tlb.L2TLB
-	L1VTLBs           []*idealtlb.IdealTLB
-	L1STLBs           []*idealtlb.IdealTLB
-	L1ITLBs           []*idealtlb.IdealTLB
+	L2TLBs            []tlb.TLB
+	L1VTLBs           []tlb.TLB
+	L1STLBs           []tlb.TLB
+	L1ITLBs           []tlb.TLB
 	L1VROBs           []*rob.ReorderBuffer
 	L1IROBs           []*rob.ReorderBuffer
 	L1SROBs           []*rob.ReorderBuffer

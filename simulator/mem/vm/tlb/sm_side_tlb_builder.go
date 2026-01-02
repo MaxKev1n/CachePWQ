@@ -114,7 +114,7 @@ func (b SMSideTLBBuilder) UseCoalescingTLBPort() SMSideTLBBuilder {
 }
 
 // Build creates a new SMSideTLB
-func (b SMSideTLBBuilder) Build(name string) L2TLB {
+func (b SMSideTLBBuilder) Build(name string) TLB {
 	tlb := &SMSideTLB{}
 	tlb.TickingComponent =
 		akita.NewTickingComponent(name, b.engine, b.freq, tlb)

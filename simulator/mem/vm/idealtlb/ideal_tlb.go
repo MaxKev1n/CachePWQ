@@ -2,7 +2,9 @@ package idealtlb
 
 import (
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/device"
+	"gitlab.com/akita/util/pipelining"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -18,6 +20,61 @@ type IdealTLB struct {
 	numReqPerCycle int
 
 	isPaused bool
+}
+
+func (tlb *IdealTLB) GetNumSets() int {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (tlb *IdealTLB) GetNumWays() int {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (tlb *IdealTLB) GetTopPort() akita.Port {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (tlb *IdealTLB) GetBottomPort() akita.Port {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (tlb *IdealTLB) GetControlPort() akita.Port {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (tlb *IdealTLB) SetLowModuleFinder(finder cache.LowModuleFinder) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (tlb *IdealTLB) GetLowModuleFinder() cache.LowModuleFinder {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (tlb *IdealTLB) GetPipeline() pipelining.Pipeline {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (tlb *IdealTLB) GetFrontQueueLength() int {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (tlb *IdealTLB) SetCommandProcessor(port akita.Port) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (tlb *IdealTLB) SetTLBFinder(finder cache.LowModuleFinder) {
+	//TODO implement me
+	panic("implement me")
 }
 
 // Tick defines how TLB update states at each cycle

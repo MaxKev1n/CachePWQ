@@ -8,10 +8,10 @@ import (
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/cache/writeback"
 	"gitlab.com/akita/mem/device"
+	"gitlab.com/akita/mem/vm/tlb"
 
 	"gitlab.com/akita/mem/idealmemcontroller"
 	"gitlab.com/akita/mem/vm/addresstranslator"
-	"gitlab.com/akita/mem/vm/idealtlb"
 	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/pagemigrationcontroller"
@@ -66,10 +66,10 @@ type IdealVMGPUBuilder struct {
 	l1vAddrTrans            []addresstranslator.AddressTranslator
 	l1sAddrTrans            []addresstranslator.AddressTranslator
 	l1iAddrTrans            []addresstranslator.AddressTranslator
-	l1vTLBs                 []*idealtlb.IdealTLB
-	l1sTLBs                 []*idealtlb.IdealTLB
-	l1iTLBs                 []*idealtlb.IdealTLB
-	l2TLBs                  []*idealtlb.IdealTLB
+	l1vTLBs                 []tlb.TLB
+	l1sTLBs                 []tlb.TLB
+	l1iTLBs                 []tlb.TLB
+	l2TLBs                  []tlb.TLB
 	drams                   []*idealmemcontroller.Comp
 	lowModuleFinderForL1    *cache.InterleavedLowModuleFinder
 	lowModuleFinderForL2    *cache.InterleavedLowModuleFinder
@@ -554,18 +554,18 @@ func (b *IdealVMGPUBuilder) connectCPWithTLBs() {
 		// }
 
 		for _, tlb := range chiplet.L1VTLBs {
-			b.cp.TLBs = append(b.cp.TLBs, tlb.ControlPort)
-			b.internalConn.PlugIn(tlb.ControlPort, 1)
+			b.cp.TLBs = append(b.cp.TLBs, tlb.GetControlPort())
+			b.internalConn.PlugIn(tlb.GetControlPort(), 1)
 		}
 
 		for _, tlb := range chiplet.L1STLBs {
-			b.cp.TLBs = append(b.cp.TLBs, tlb.ControlPort)
-			b.internalConn.PlugIn(tlb.ControlPort, 1)
+			b.cp.TLBs = append(b.cp.TLBs, tlb.GetControlPort())
+			b.internalConn.PlugIn(tlb.GetControlPort(), 1)
 		}
 
 		for _, tlb := range chiplet.L1ITLBs {
-			b.cp.TLBs = append(b.cp.TLBs, tlb.ControlPort)
-			b.internalConn.PlugIn(tlb.ControlPort, 1)
+			b.cp.TLBs = append(b.cp.TLBs, tlb.GetControlPort())
+			b.internalConn.PlugIn(tlb.GetControlPort(), 1)
 		}
 	}
 }

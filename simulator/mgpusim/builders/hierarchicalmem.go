@@ -3,14 +3,17 @@ package builders
 import (
 	"fmt"
 	"log"
+	"math"
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem/cache"
+	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/tip"
 	noc "gitlab.com/akita/noc/networking/booksim"
 	"gitlab.com/akita/noc/networking/chipnetwork"
 	"gitlab.com/akita/noc/networking/multiplexer"
+	"gitlab.com/akita/util/tracing"
 )
 
 type HierarchicalMemSideGPUBuilder struct {
@@ -438,6 +441,88 @@ func (b *HierarchicalMemSideGPUBuilder) establishL1TLBToL2TLBRoutingPath(chiplet
 
 func (b *HierarchicalMemSideGPUBuilder) connectMMUToGlobalNoC(chiplet *Chiplet) {
 	chiplet.MMU.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
+}
+
+//func (b *HierarchicalMemSideGPUBuilder) buildL2TLB(chiplet *Chiplet) {
+//	maxCUsPerGPC := 16 // same as NVIDIA A100
+//	numGPCs := ((len(chiplet.CUs) - 1) / maxCUsPerGPC) + 1
+//
+//	builder := tlb.MakeBuilder().
+//		WithEngine(b.engine).
+//		WithFreq(b.freq).
+//		WithNumMSHREntry(8).
+//		WithNumSets(128).
+//		WithNumWays(8).
+//		WithNumReqPerCycle(2).
+//		WithPageSize(1 << b.log2PageSize).
+//		WithLatency(20)
+//
+//	for i := 0; i < numGPCs; i++ {
+//		name := fmt.Sprintf("%s.L2TLB%02d", chiplet.name, i)
+//		tlb := builder.Build(name)
+//		tlb.GlobalIndex = b.saID*b.numCU + i
+//		sa.l1vTLBs = append(sa.l1vTLBs, tlb)
+//
+//		if b.visTracer != nil {
+//			tracing.CollectTrace(tlb, b.visTracer)
+//		}
+//	}
+//}
+
+func (b *HierarchicalMemSideGPUBuilder) buildL3TLB(chiplet *Chiplet) {
+	numSets := 256 // 128 // 256 // changed this here
+	numWays := 8   // 8 // changed this here
+	log2NumSets := int(math.Log2(float64(numSets)))
+
+	tlbIndexBitsStart := int(math.Log2(float64(b.remoteTLBInterleavingSize))) + int(b.log2PageSize) + 1
+	tlbIndexBitsEnd := tlbIndexBitsStart + int(math.Log2(float64(b.numChiplet))) - 1
+
+	mask := uint64(0)
+	t := uint64(1) << b.log2PageSize
+	numBitsSet := 0
+	for i := int(b.log2PageSize) + 1; i <= 64; i++ {
+		if i < tlbIndexBitsStart || i > tlbIndexBitsEnd {
+			mask = mask | t
+			numBitsSet++
+			if numBitsSet == log2NumSets {
+				break
+			}
+		}
+		t = t << 1
+	}
+	//fmt.Println(mask)
+	builder := tlb.MakeLatTLBBuilder().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithNumWays(numWays).
+		WithNumSets(numSets).
+		WithNumMSHREntry(256).
+		WithNumReqPerCycle(4).
+		WithLog2PageSize(b.log2PageSize).
+		WithLowModule(chiplet.MMU.ToTopPort()).
+		WithIndexingMask(mask).
+		WithLatency(40)
+	fmt.Println("num TLB sets:", numSets)
+	fmt.Println("num TLB ways:", numWays)
+	if b.useCoalescingTLBPort {
+		builder = builder.UseCoalescingTLBPort()
+	}
+	l2TLB := builder.Build(fmt.Sprintf("%s.L2TLB", chiplet.name))
+	l2TLB.SetLowModuleFinder(&cache.SingleLowModuleFinder{
+		LowModule: chiplet.MMU.ToTopPort(),
+	})
+
+	b.l2TLBs = append(b.l2TLBs, l2TLB)
+	b.gpu.L2TLBs = append(b.gpu.L2TLBs, l2TLB)
+	chiplet.L2TLBs = append(chiplet.L2TLBs, l2TLB)
+
+	if b.enableVisTracing {
+		tracing.CollectTrace(l2TLB, b.visTracer)
+	}
+
+	if b.useTimeEventAnalysis {
+		b.TipEngine.L2TLB = l2TLB.(*tlb.LatTLB)
+	}
 }
 
 func (b *HierarchicalMemSideGPUBuilder) setupInterchipNetwork() {

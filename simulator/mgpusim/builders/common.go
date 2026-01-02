@@ -96,10 +96,11 @@ type CommonBuilder struct {
 	l1vAddrTrans            []addresstranslator.AddressTranslator
 	l1sAddrTrans            []addresstranslator.AddressTranslator
 	l1iAddrTrans            []addresstranslator.AddressTranslator
-	l1vTLBs                 []tlb.L1TLB
-	l1sTLBs                 []tlb.L1TLB
-	l1iTLBs                 []tlb.L1TLB
-	l2TLBs                  []tlb.L2TLB
+	l1vTLBs                 []tlb.TLB
+	l1sTLBs                 []tlb.TLB
+	l1iTLBs                 []tlb.TLB
+	l2TLBs                  []tlb.TLB
+	l3TLBs                  []tlb.TLB
 	drams                   []*idealmemcontroller.Comp
 	lowModuleFinderForL1    cache.LowModuleFinder
 	lowModuleFinderForL2    *cache.InterleavedLowModuleFinder
@@ -399,7 +400,7 @@ func (b *CommonBuilder) collectSAComponents(
 				core.VectorMemUnit.(*cu.VectorMemoryUnit),
 				sa.l1vROBs[index],
 				sa.l1vATs[index].(*addresstranslator.DefaultAddressTranslator),
-				sa.l1vTLBs[index].(*tlb.TLB),
+				sa.l1vTLBs[index].(*tlb.TLBImpl),
 				sa.l1vCaches[index].(*l1v.Cache),
 				core.Scheduler.(*cu.SchedulerImpl),
 			)

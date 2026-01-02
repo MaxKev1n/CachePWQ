@@ -77,6 +77,26 @@ func (tlb *SMSideL1TLB) GetBottomPort() akita.Port {
 	panic("SMSideL1TLB does not have BottomPort")
 }
 
+func (tlb *SMSideL1TLB) GetControlPort() akita.Port {
+	return tlb.ControlPort
+}
+
+func (tlb *SMSideL1TLB) GetPipeline() pipelining.Pipeline {
+	panic("not implemented")
+}
+
+func (tlb *SMSideL1TLB) GetFrontQueueLength() int {
+	panic("not implemented")
+}
+
+func (tlb *SMSideL1TLB) SetCommandProcessor(port akita.Port) {
+	panic("not implemented")
+}
+
+func (tlb *SMSideL1TLB) SetTLBFinder(lmf cache.LowModuleFinder) {
+	panic("not implemented")
+}
+
 // Reset sets all the entries int he SMSideL1TLB to be invalid
 func (tlb *SMSideL1TLB) reset() {
 	tlb.Sets = make([]internal.Set, tlb.numSets)

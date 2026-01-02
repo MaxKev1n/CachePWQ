@@ -273,7 +273,7 @@ type rtuTransactionCountTracer struct {
 
 type TLBQueueImbalanceTracer struct {
 	tracer *tlb.GlobalTLBQueueingTracer
-	tlb    tlb.L2TLB
+	tlb    tlb.TLB
 }
 
 type PageWalkerImbalanceTracer struct {
@@ -283,7 +283,7 @@ type PageWalkerImbalanceTracer struct {
 
 type EntropyTracer struct {
 	tracer *tlb.EntropyTracer
-	tlb    tlb.L2TLB
+	tlb    tlb.TLB
 }
 
 type RemoteReferenceCountTracer struct {
@@ -293,17 +293,17 @@ type RemoteReferenceCountTracer struct {
 
 type TLBSetMissTracer struct {
 	tracer *tracing.ReferenceTracer
-	tlb    tlb.L2TLB
+	tlb    tlb.TLB
 }
 
 type TLBMSHRStallTracer struct {
 	tracer *tracing.TotalTimeTracer
-	tlb    tlb.L2TLB
+	tlb    tlb.TLB
 }
 
 type TLBReqStallTracer struct {
 	tracer *tracing.StepCountTracer
-	tlb    tlb.L2TLB
+	tlb    tlb.TLB
 }
 
 // Runner is a class that helps running the benchmarks in the official samples.
@@ -1836,7 +1836,7 @@ func (r *Runner) addTLBLatencyTracer() {
 		}
 
 		numL1VTLBs := len(gpu.L1VTLBs) // + len(gpu.L1STLBs) + len(gpu.L1ITLBs)
-		allL1TLBs := make([]tlb.L1TLB, numL1VTLBs)
+		allL1TLBs := make([]tlb.TLB, numL1VTLBs)
 		_ = copy(allL1TLBs, gpu.L1VTLBs)
 		allL1TLBs = append(allL1TLBs, gpu.L1STLBs...)
 		allL1TLBs = append(allL1TLBs, gpu.L1ITLBs...)

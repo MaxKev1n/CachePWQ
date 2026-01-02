@@ -59,6 +59,18 @@ func (tlb *IdealLatTLB) SetLowModuleFinder(lmf cache.LowModuleFinder) {
 	panic("idealLatTlb has no low module!")
 }
 
+func (tlb *IdealLatTLB) GetNumSets() int {
+	panic("not implemented")
+}
+
+func (tlb *IdealLatTLB) GetNumWays() int {
+	panic("not implemented")
+}
+
+func (tlb *IdealLatTLB) GetLowModuleFinder() cache.LowModuleFinder {
+	panic("not implemented")
+}
+
 // Tick defines how LatTLB update states at each cycle
 func (tlb *IdealLatTLB) Tick(now akita.VTimeInSec) bool {
 	madeProgress := false
@@ -109,7 +121,7 @@ func (tlb *IdealLatTLB) Tick(now akita.VTimeInSec) bool {
 
 func (tlb *IdealLatTLB) parseFromTop(now akita.VTimeInSec) bool {
 	msg := tlb.TopPort.Peek()
-	collectCoalescingStat(tlb, now)
+
 	if msg == nil {
 		return false
 	}

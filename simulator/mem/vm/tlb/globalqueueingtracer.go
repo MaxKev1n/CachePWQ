@@ -9,8 +9,8 @@ import (
 type GlobalTLBQueueingTracer struct {
 	filter           tracing.TaskFilter
 	lock             sync.Mutex
-	this             L2TLB
-	all_tlbs         []L2TLB
+	this             TLB
+	all_tlbs         []TLB
 	averageImbalance float64
 	imbalanceBuckets []uint64
 	count            int
@@ -26,17 +26,17 @@ func NewGlobalTLBQueueingTracer(filter tracing.TaskFilter) *GlobalTLBQueueingTra
 		threshold:        32,
 		imbalanceBuckets: make([]uint64, 11),
 	}
-	t.all_tlbs = make([]L2TLB, 0)
+	t.all_tlbs = make([]TLB, 0)
 	return t
 }
 
 // the TLB  corrosponding to this tracer
-func (t *GlobalTLBQueueingTracer) AddThis(tlb L2TLB) {
+func (t *GlobalTLBQueueingTracer) AddThis(tlb TLB) {
 	t.this = tlb
 }
 
 // list of all TLBs
-func (t *GlobalTLBQueueingTracer) AddTLB(tlb L2TLB) {
+func (t *GlobalTLBQueueingTracer) AddTLB(tlb TLB) {
 	t.all_tlbs = append(t.all_tlbs, tlb)
 }
 

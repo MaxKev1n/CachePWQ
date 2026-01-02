@@ -29,9 +29,9 @@ type shaderArray struct {
 	l1sCache  *l1v.Cache
 	l1iCache  *l1v.Cache
 
-	l1vTLBs []*tlb.TLB
-	l1sTLB  *tlb.TLB
-	l1iTLB  *tlb.TLB
+	l1vTLBs []tlb.TLB
+	l1sTLB  tlb.TLB
+	l1iTLB  tlb.TLB
 }
 
 type shaderArrayBuilder struct {
@@ -166,8 +166,8 @@ func (b *shaderArrayBuilder) connectVectorMem(sa *shaderArray) {
 		rob.BottomUnit = at.GetTopPort()
 		b.connectWithDirectConnection(rob.BottomPort, at.GetTopPort(), 8)
 
-		at.SetTranslationProvider(tlb.TopPort)
-		b.connectWithDirectConnection(at.GetTranslationPort(), tlb.TopPort, 8)
+		at.SetTranslationProvider(tlb.GetTopPort())
+		b.connectWithDirectConnection(at.GetTranslationPort(), tlb.GetTopPort(), 8)
 
 		at.SetLowModuleFinder(&cache.SingleLowModuleFinder{
 			LowModule: l1v.TopPort,
@@ -185,8 +185,8 @@ func (b *shaderArrayBuilder) connectScalarMem(sa *shaderArray) {
 	rob.BottomUnit = at.GetTopPort()
 	b.connectWithDirectConnection(rob.BottomPort, at.GetTopPort(), 8)
 
-	at.SetTranslationProvider(tlb.TopPort)
-	b.connectWithDirectConnection(at.GetTranslationPort(), tlb.TopPort, 8)
+	at.SetTranslationProvider(tlb.GetTopPort())
+	b.connectWithDirectConnection(at.GetTranslationPort(), tlb.GetTopPort(), 8)
 
 	at.SetLowModuleFinder(&cache.SingleLowModuleFinder{
 		LowModule: l1s.TopPort,
@@ -216,8 +216,8 @@ func (b *shaderArrayBuilder) connectInstMem(sa *shaderArray) {
 	})
 	b.connectWithDirectConnection(l1i.BottomPort, at.GetTopPort(), 8)
 
-	at.SetTranslationProvider(tlb.TopPort)
-	b.connectWithDirectConnection(at.GetTranslationPort(), tlb.TopPort, 8)
+	at.SetTranslationProvider(tlb.GetTopPort())
+	b.connectWithDirectConnection(at.GetTranslationPort(), tlb.GetTopPort(), 8)
 
 	conn := akita.NewDirectConnection(b.name, b.engine, b.freq)
 	conn.PlugIn(rob.TopPort, 8)

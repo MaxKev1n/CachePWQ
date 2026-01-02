@@ -29,19 +29,6 @@ func (t tlbPipelineItem) TaskID() string {
 	return t.taskID
 }
 
-type L2TLB interface {
-	tracing.NamedHookable
-	GetTopPort() akita.Port
-	GetBottomPort() akita.Port
-	GetControlPort() akita.Port
-	SetLowModuleFinder(cache.LowModuleFinder)
-	GetPipeline() pipelining.Pipeline
-	GetFrontQueueLength() int
-
-	SetCommandProcessor(akita.Port)
-	SetTLBFinder(cache.LowModuleFinder)
-}
-
 type TLBStats struct {
 	numAccess                uint64
 	lastChecked              uint64
@@ -158,6 +145,10 @@ func (tlb *LatTLB) SetLowModuleFinder(lmf cache.LowModuleFinder) {
 	tlb.LowModuleFinder = lmf
 }
 
+func (tlb *LatTLB) GetLowModuleFinder() cache.LowModuleFinder {
+	return tlb.LowModuleFinder
+}
+
 func (tlb *LatTLB) SetCommandProcessor(cp akita.Port) {
 	tlb.CommandProcessor = cp
 }
@@ -270,7 +261,7 @@ func (tlb *LatTLB) respondMSHREntry(now akita.VTimeInSec) bool {
 	return true
 }
 
-func collectCoalescingStat(tlb L2TLB, now akita.VTimeInSec) {
+func collectCoalescingStat(tlb TLB, now akita.VTimeInSec) {
 	bufContainer := tlb.GetTopPort().(akita.MsgBufferContainer) //.(*akita.LimitNumMsgPort)
 	buf := bufContainer.GetBuffer()
 	coalMine := make(map[uint64]int)

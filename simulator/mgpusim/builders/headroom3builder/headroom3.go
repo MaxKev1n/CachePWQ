@@ -68,10 +68,10 @@ type Headroom3Builder struct {
 	l1vAddrTrans            []addresstranslator.AddressTranslator
 	l1sAddrTrans            []addresstranslator.AddressTranslator
 	l1iAddrTrans            []addresstranslator.AddressTranslator
-	l1vTLBs                 []*tlb.TLB
-	l1sTLBs                 []*tlb.TLB
-	l1iTLBs                 []*tlb.TLB
-	l2TLBs                  []tlb.L2TLB
+	l1vTLBs                 []tlb.TLB
+	l1sTLBs                 []tlb.TLB
+	l1iTLBs                 []tlb.TLB
+	l2TLBs                  []tlb.TLB
 	drams                   []*idealmemcontroller.Comp
 	lowModuleFinderForL1    *cache.InterleavedLowModuleFinder
 	lowModuleFinderForL2    *cache.InterleavedLowModuleFinder
@@ -693,18 +693,18 @@ func (b *Headroom3Builder) connectCPWithTLBs() {
 		}
 
 		for _, tlb := range chiplet.L1VTLBs {
-			b.cp.TLBs = append(b.cp.TLBs, tlb.ControlPort)
-			b.internalConn.PlugIn(tlb.ControlPort, 1)
+			b.cp.TLBs = append(b.cp.TLBs, tlb.GetControlPort())
+			b.internalConn.PlugIn(tlb.GetControlPort(), 1)
 		}
 
 		for _, tlb := range chiplet.L1STLBs {
-			b.cp.TLBs = append(b.cp.TLBs, tlb.ControlPort)
-			b.internalConn.PlugIn(tlb.ControlPort, 1)
+			b.cp.TLBs = append(b.cp.TLBs, tlb.GetControlPort())
+			b.internalConn.PlugIn(tlb.GetControlPort(), 1)
 		}
 
 		for _, tlb := range chiplet.L1ITLBs {
-			b.cp.TLBs = append(b.cp.TLBs, tlb.ControlPort)
-			b.internalConn.PlugIn(tlb.ControlPort, 1)
+			b.cp.TLBs = append(b.cp.TLBs, tlb.GetControlPort())
+			b.internalConn.PlugIn(tlb.GetControlPort(), 1)
 		}
 	}
 }

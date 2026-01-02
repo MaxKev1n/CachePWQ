@@ -34,9 +34,9 @@ type shaderArray struct {
 	l1sCache  l1cache.Cache
 	l1iCache  l1cache.Cache
 
-	l1vTLBs []tlb.L1TLB
-	l1sTLB  tlb.L1TLB
-	l1iTLB  tlb.L1TLB
+	l1vTLBs []tlb.TLB
+	l1sTLB  tlb.TLB
+	l1iTLB  tlb.TLB
 }
 
 type shaderArrayBuilder struct {
@@ -233,7 +233,7 @@ func (b *shaderArrayBuilder) connectComponents(sa *shaderArray) {
 	b.connectVM(sa)
 }
 
-func (b *shaderArrayBuilder) connectATToL1TLB(at addresstranslator.AddressTranslator, tlb tlb.L1TLB) {
+func (b *shaderArrayBuilder) connectATToL1TLB(at addresstranslator.AddressTranslator, tlb tlb.TLB) {
 	at.SetTranslationProvider(tlb.GetTopPort())
 	b.connectWithDirectConnection(at.GetTranslationPort(), tlb.GetTopPort(), 2)
 }

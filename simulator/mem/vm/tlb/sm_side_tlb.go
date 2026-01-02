@@ -64,6 +64,10 @@ type SMSideTLB struct {
 	ID int
 }
 
+func (tlb *SMSideTLB) GetLowModuleFinder() cache.LowModuleFinder {
+	return tlb.LowModuleFinder
+}
+
 // GetPipeline gets the pipeline in the SMSideTLB
 func (tlb *SMSideTLB) GetPipeline() pipelining.Pipeline {
 	return tlb.pipeline

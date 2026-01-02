@@ -91,8 +91,8 @@ func (b Builder) WithNumMSHREntry(num int) Builder {
 }
 
 // Build creates a new TLB
-func (b Builder) Build(name string) *TLB {
-	tlb := &TLB{}
+func (b Builder) Build(name string) *TLBImpl {
+	tlb := &TLBImpl{}
 	tlb.TickingComponent =
 		akita.NewTickingComponent(name, b.engine, b.freq, tlb)
 

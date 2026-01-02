@@ -114,7 +114,7 @@ func (b LatTLBBuilder) UseCoalescingTLBPort() LatTLBBuilder {
 }
 
 // Build creates a new LatTLB
-func (b LatTLBBuilder) Build(name string) L2TLB {
+func (b LatTLBBuilder) Build(name string) TLB {
 	tlb := &LatTLB{}
 	tlb.TickingComponent =
 		akita.NewTickingComponent(name, b.engine, b.freq, tlb)

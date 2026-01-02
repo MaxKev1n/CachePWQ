@@ -9,6 +9,7 @@ import (
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mem/vm/addresstranslator"
 	"gitlab.com/akita/mem/vm/idealtlb"
+	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim/timing/caches/l1v"
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
 	"gitlab.com/akita/mgpusim/timing/cu"
@@ -30,9 +31,9 @@ type shaderArray struct {
 	l1sCache  *l1v.Cache
 	l1iCache  *l1v.Cache
 
-	l1vTLBs []*idealtlb.IdealTLB
-	l1sTLB  *idealtlb.IdealTLB
-	l1iTLB  *idealtlb.IdealTLB
+	l1vTLBs []tlb.TLB
+	l1sTLB  tlb.TLB
+	l1iTLB  tlb.TLB
 }
 
 type shaderArrayBuilder struct {
@@ -159,8 +160,8 @@ func (b *shaderArrayBuilder) connectVectorMem(sa *shaderArray) {
 		rob.BottomUnit = at.GetTopPort()
 		b.connectWithDirectConnection(rob.BottomPort, at.GetTopPort(), 8)
 
-		at.SetTranslationProvider(tlb.TopPort)
-		b.connectWithDirectConnection(at.GetTranslationPort(), tlb.TopPort, 8)
+		at.SetTranslationProvider(tlb.GetTopPort())
+		b.connectWithDirectConnection(at.GetTranslationPort(), tlb.GetTopPort(), 8)
 
 		at.SetLowModuleFinder(&cache.SingleLowModuleFinder{
 			LowModule: l1v.TopPort,
@@ -178,8 +179,8 @@ func (b *shaderArrayBuilder) connectScalarMem(sa *shaderArray) {
 	rob.BottomUnit = at.GetTopPort()
 	b.connectWithDirectConnection(rob.BottomPort, at.GetTopPort(), 8)
 
-	at.SetTranslationProvider(tlb.TopPort)
-	b.connectWithDirectConnection(at.GetTranslationPort(), tlb.TopPort, 8)
+	at.SetTranslationProvider(tlb.GetTopPort())
+	b.connectWithDirectConnection(at.GetTranslationPort(), tlb.GetTopPort(), 8)
 
 	at.SetLowModuleFinder(&cache.SingleLowModuleFinder{
 		LowModule: l1s.TopPort,
@@ -209,8 +210,8 @@ func (b *shaderArrayBuilder) connectInstMem(sa *shaderArray) {
 	})
 	b.connectWithDirectConnection(l1i.BottomPort, at.GetTopPort(), 8)
 
-	at.SetTranslationProvider(tlb.TopPort)
-	b.connectWithDirectConnection(at.GetTranslationPort(), tlb.TopPort, 8)
+	at.SetTranslationProvider(tlb.GetTopPort())
+	b.connectWithDirectConnection(at.GetTranslationPort(), tlb.GetTopPort(), 8)
 
 	conn := akita.NewDirectConnection(b.name, b.engine, b.freq)
 	conn.PlugIn(rob.TopPort, 8)
@@ -316,9 +317,9 @@ func (b *shaderArrayBuilder) buildL1VCaches(sa *shaderArray) {
 		WithNumMSHREntry(32).
 		WithTotalByteSize(64 * mem.KB).
 		WithNumReqsPerCycle(2)
-		// WithWayAssocitivity(4).
-		// WithNumMSHREntry(16).
-		// WithTotalByteSize(16 * mem.KB)
+	// WithWayAssocitivity(4).
+	// WithNumMSHREntry(16).
+	// WithTotalByteSize(16 * mem.KB)
 
 	if b.visTracer != nil {
 		builder = builder.WithVisTracer(b.visTracer)
@@ -390,9 +391,9 @@ func (b *shaderArrayBuilder) buildL1SCache(sa *shaderArray) {
 		WithNumMSHREntry(32).
 		WithTotalByteSize(64 * mem.KB).
 		WithNumReqsPerCycle(4)
-		// WithWayAssocitivity(4).
-		// WithNumMSHREntry(16).
-		// WithTotalByteSize(16 * mem.KB)
+	// WithWayAssocitivity(4).
+	// WithNumMSHREntry(16).
+	// WithTotalByteSize(16 * mem.KB)
 
 	name := fmt.Sprintf("%s.L1SCache", b.name)
 	cache := builder.Build(name)
@@ -462,10 +463,10 @@ func (b *shaderArrayBuilder) buildL1ICache(sa *shaderArray) {
 		WithNumMSHREntry(32).
 		WithTotalByteSize(64 * mem.KB).
 		WithNumReqsPerCycle(4)
-		// WithWayAssocitivity(4).
-		// WithNumMSHREntry(16).
-		// WithTotalByteSize(32 * mem.KB).
-		// WithNumReqsPerCycle(4)
+	// WithWayAssocitivity(4).
+	// WithNumMSHREntry(16).
+	// WithTotalByteSize(32 * mem.KB).
+	// WithNumReqsPerCycle(4)
 
 	name := fmt.Sprintf("%s.L1ICache", b.name)
 	cache := builder.Build(name)
