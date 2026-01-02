@@ -13,6 +13,7 @@ import (
 type HybridEndPoint struct {
 	*akita.TickingComponent
 
+	DevicePorts      []akita.Port
 	NoCPort          akita.Port
 	NetworkPort      akita.Port
 	DefaultSwitchDst akita.Port
@@ -28,6 +29,8 @@ type HybridEndPoint struct {
 	numFlitReqired           int
 	numFlitArrived           int
 	numReqPerCycle           int
+
+	devicePorts map[akita.Port]struct{}
 }
 
 // Send sends a message.
@@ -48,6 +51,19 @@ func (ep *HybridEndPoint) Send(msg akita.Msg) *akita.SendError {
 
 // PlugIn connects a port to the endpoint.
 func (ep *HybridEndPoint) PlugIn(port akita.Port, srcBufCap int) {
+	if _, exists := ep.devicePorts[port]; exists {
+		panic(fmt.Sprintf("HybridEndPoint %s: port %s is already plugged in",
+			ep.Name(), port.Name()))
+	}
+
+	port.SetConnection(ep)
+	ep.DevicePorts = append(ep.DevicePorts, port)
+	ep.devicePorts[port] = struct{}{}
+	ep.msgOutBufSize = srcBufCap
+}
+
+// PlugInNoCPort connects a port to the endpoint.
+func (ep *HybridEndPoint) PlugInNoCPort(port akita.Port, srcBufCap int) {
 	if ep.NoCPort != nil {
 		panic(fmt.Sprintf("HybridEndPoint %s: only one device port is allowed", ep.Name()))
 	}
@@ -96,6 +112,10 @@ func (ep *HybridEndPoint) sendFlitOut(now akita.VTimeInSec) bool {
 		ep.flitsToSend = ep.flitsToSend[1:]
 		if len(ep.flitsToSend) == 0 {
 			ep.NoCPort.NotifyAvailable(now)
+
+			for _, p := range ep.DevicePorts {
+				p.NotifyAvailable(now)
+			}
 		}
 		return true
 	}
@@ -179,7 +199,13 @@ func (ep *HybridEndPoint) tryDeliver(now akita.VTimeInSec) bool {
 	}
 
 	ep.assemblingMsg.Meta().RecvTime = now
-	err := ep.NoCPort.Recv(ep.assemblingMsg)
+
+	dst := ep.NoCPort
+	if _, exists := ep.devicePorts[ep.assemblingMsg.Meta().Dst]; exists {
+		dst = ep.assemblingMsg.Meta().Dst
+	}
+
+	err := dst.Recv(ep.assemblingMsg)
 	if err == nil {
 		// log.Printf("%.12f, EP %s, msg %s assembled and deliverd\n",
 		// 	now, ep.Name(), ep.assemblingMsg.Meta().ID)
@@ -279,6 +305,13 @@ func (b HybridEndPointBuilder) WithFlitAssemblingBufferSize(n int) HybridEndPoin
 	return b
 }
 
+// WithDevicePorts sets a list of ports that communicate directly through the
+// End Point.
+func (b HybridEndPointBuilder) WithDevicePorts(ports []akita.Port) HybridEndPointBuilder {
+	b.devicePorts = ports
+	return b
+}
+
 // Build creates a new End Point.
 func (b HybridEndPointBuilder) Build(name string) *HybridEndPoint {
 	b.engineMustBeGiven()
@@ -294,6 +327,7 @@ func (b HybridEndPointBuilder) Build(name string) *HybridEndPoint {
 	ep.NetworkPort = akita.NewLimitNumMsgPort(
 		ep, b.networkPortBufferSize,
 		fmt.Sprintf("%s.NetworkPort", ep.Name()))
+	ep.devicePorts = make(map[akita.Port]struct{})
 
 	for _, dp := range b.devicePorts {
 		ep.PlugIn(dp, 2*b.numReqPerCycle)

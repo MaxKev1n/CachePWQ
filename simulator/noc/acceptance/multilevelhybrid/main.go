@@ -32,7 +32,7 @@ func main() {
 func createNetwork(engine akita.Engine, test *acceptance.Test) {
 	freq := 1.0 * akita.GHz
 	var agents []*acceptance.Agent
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 6; i++ {
 		agent := acceptance.NewAgent(
 			engine, freq, fmt.Sprintf("Agent%d", i), 1, test)
 		agent.TickLater(0)
@@ -133,6 +133,7 @@ func createNetwork(engine akita.Engine, test *acceptance.Test) {
 		WithFlitByteSize(32).
 		WithFlitAssemblingBufferSize(128).
 		WithNetworkPortBufferSize(64).
+		WithDevicePorts(agents[4].Ports).
 		WithNumReqPerCycle(7).
 		Build("HybridEndPoint")
 
@@ -142,14 +143,19 @@ func createNetwork(engine akita.Engine, test *acceptance.Test) {
 	for _, port := range connectorC.RoutingTable.GetAllSrcPorts() {
 		booksim.AddRoute(port, ep.NetworkPort)
 	}
-	ep.PlugIn(nocPort, 64)
+	ep.PlugInNoCPort(nocPort, 64)
 
-	booksim.PlugInMemSide(agents[4].Ports[0], 64)
+	booksim.PlugInMemSide(agents[5].Ports[0], 64)
+
+	for _, port := range ep.DevicePorts {
+		booksim.AddRoute(port, ep.NetworkPort)
+	}
 
 	test.RegisterAgent(agents[0])
 	test.RegisterAgent(agents[1])
 	test.RegisterAgent(agents[2])
 	test.RegisterAgent(agents[3])
 	test.RegisterAgent(agents[4])
+	test.RegisterAgent(agents[5])
 
 }
