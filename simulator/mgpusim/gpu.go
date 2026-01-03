@@ -33,6 +33,7 @@ type GPU struct {
 	L1SCaches          []l1cache.Cache
 	L2Caches           []*writeback.Cache
 	L2CacheFinder      cache.LowModuleFinder
+	L3TLBs             []tlb.TLB
 	L2TLBs             []tlb.TLB
 	L1VTLBs            []tlb.TLB
 	L1STLBs            []tlb.TLB

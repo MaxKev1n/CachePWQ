@@ -877,7 +877,7 @@ func (b *CommonBuilder) connectCPWithAddressTranslators() {
 
 func (b *CommonBuilder) connectCPWithTLBs() {
 	for _, chiplet := range b.chiplets {
-		for _, tlb := range chiplet.L2TLBs {
+		for _, tlb := range chiplet.L3TLBs {
 			b.cp.TLBs = append(b.cp.TLBs, tlb.GetControlPort())
 			b.internalConn.PlugIn(tlb.GetControlPort(), 10)
 			// added to setup reverse comm from L2 TLB to CP

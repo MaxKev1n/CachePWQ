@@ -370,15 +370,6 @@ func (tlb *SMSideL1TLB) fetchBottom(now akita.VTimeInSec, req *device.Translatio
 	return true
 }
 
-func (tlb *SMSideL1TLB) getRemoteVLocal(rspSrc string) (str string) {
-	if getChipletNum(tlb.Name()) != getChipletNum(rspSrc) {
-		str = "remote"
-	} else {
-		str = "local"
-	}
-	return
-}
-
 func (tlb *SMSideL1TLB) parseFromTop(now akita.VTimeInSec) bool {
 	msg := tlb.TopPort.Peek()
 	if msg == nil {
@@ -469,20 +460,6 @@ func (tlb *SMSideL1TLB) parseBottom(now akita.VTimeInSec) bool {
 		)
 	}
 
-	//fmt.Println("here")
-	taskStepRemoteVLocal := getTaskStep(tlb.getRemoteVLocal(rsp.SrcL2TLB), rsp.HitOrMiss)
-	taskStepSrcL2TLB := getTaskStep(getChipletNum(rsp.SrcL2TLB), rsp.HitOrMiss)
-	//fmt.Println(tlb.Name())
-	tracing.AddTaskStep(
-		mshrEntry.reqToBottom.Meta().ID+"_L2TLB_stats",
-		now, tlb,
-		taskStepRemoteVLocal,
-	)
-	tracing.AddTaskStep(
-		mshrEntry.reqToBottom.Meta().ID+"_L2TLB_stats",
-		now, tlb,
-		taskStepSrcL2TLB,
-	)
 	tracing.EndTask(
 		mshrEntry.reqToBottom.Meta().ID+"_L2TLB_stats",
 		now,

@@ -385,15 +385,15 @@ type Runner struct {
 	ReportRTUCoalesce               bool
 	ReportTLBHitRate                bool
 	ReportPWCHitRate                bool
-	ReportL2TLBMSHRLen              bool
+	ReportL3TLBMSHRLen              bool
 	ReportDRAMTransactionCount      bool
 	ReportRDMATransactionCount      bool
 	ReportCDMATransactionCount      bool
 	ReportBookSimNoc                bool
 	ReportRTUTransactionCount       bool
 	ReportActiveWalkerCount         bool
-	L2TLBSQLTracing                 bool
-	ReportL2TLBQueueImbalance       bool
+	L3TLBSQLTracing                 bool
+	ReportL3TLBQueueImbalance       bool
 	ReportPageWalkerImbalance       bool
 	ReportEntropy                   bool
 	ReportReferenceTracing          bool
@@ -518,11 +518,11 @@ func (r *Runner) ParseFlag() *Runner {
 	}
 
 	if *l2tlbsqlTracingFlag {
-		r.L2TLBSQLTracing = true
+		r.L3TLBSQLTracing = true
 	}
 
 	if *l2tlbQueueingImbalanceFlag {
-		r.ReportL2TLBQueueImbalance = true
+		r.ReportL3TLBQueueImbalance = true
 	}
 
 	if *pageWalkerImbalanceFlag {
@@ -560,8 +560,8 @@ func (r *Runner) ParseFlag() *Runner {
 		r.ReportTranslationReqLatency = true
 		r.ReportMMUCacheReqLatency = true
 		r.ReportAddressTranslatorLatency = true
-		r.ReportL2TLBMSHRLen = true
-		r.ReportL2TLBQueueImbalance = true
+		r.ReportL3TLBMSHRLen = true
+		r.ReportL3TLBQueueImbalance = true
 		r.ReportPageWalkerImbalance = true
 		r.ReportEntropy = true
 		r.ReportReferenceTracing = true
@@ -659,14 +659,14 @@ func (r *Runner) Init() *Runner {
 	r.addBookSimTracer()
 	r.addRTUTracer()
 	r.addActiveWalkerTracer()
-	r.addL2TLBQueueingImbalanceTracer()
-	r.addL2TLBEntropyTracer()
+	r.addL3TLBQueueingImbalanceTracer()
+	r.addL3TLBEntropyTracer()
 	r.addRemoteReferenceTracer()
 	r.addTLBSetMissTracer()
 	r.addTLBMSHRStallTracer()
 	r.addTLBReqStallTracer()
 	r.addPageWalkerImbalanceTracker()
-	r.addL2TLBSQLTracer()
+	r.addL3TLBSQLTracer()
 	r.addMMUCacheReqTracer()
 	if *platformType != "ideal" {
 		r.addTranslationReqTracer()
@@ -1824,7 +1824,17 @@ func (r *Runner) addTLBLatencyTracer() {
 			tracing.CollectTrace(tlb, tracer)
 		}
 
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
+			tracer := tracing.NewAverageTimeTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "req_in"
+				})
+			r.TLBLatencyTracers = append(r.TLBLatencyTracers,
+				TLBLatencyTracer{tracer: tracer, tlb: tlb})
+			tracing.CollectTrace(tlb, tracer)
+		}
+
+		for _, tlb := range gpu.L3TLBs {
 			pipeline := tlb.GetPipeline()
 			tracer := tracing.NewAverageTimeTracer(
 				func(task tracing.Task) bool {
@@ -1880,6 +1890,15 @@ func (r *Runner) addTLBLatencyTracer() {
 			tracing.CollectTrace(tlb, tracer)
 		}
 
+		for _, tlb := range gpu.L3TLBs {
+			tracer := tracing.NewAverageTimeTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "req_out"
+				})
+			r.DownTLBLatencyTracers = append(r.DownTLBLatencyTracers,
+				TLBLatencyTracer{tracer: tracer, tlb: tlb})
+			tracing.CollectTrace(tlb, tracer)
+		}
 	}
 }
 
@@ -1889,7 +1908,7 @@ func (r *Runner) addTLBCoalesceTracer() {
 	}
 
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "buflen"
@@ -1897,7 +1916,7 @@ func (r *Runner) addTLBCoalesceTracer() {
 			r.L2TLBBufLenTracers = append(r.L2TLBBufLenTracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "bufleng0"
@@ -1905,7 +1924,7 @@ func (r *Runner) addTLBCoalesceTracer() {
 			r.L2TLBBufLenG0Tracers = append(r.L2TLBBufLenG0Tracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "coalesceaddr"
@@ -1913,7 +1932,7 @@ func (r *Runner) addTLBCoalesceTracer() {
 			r.L2TLBCoalesceAddrTracers = append(r.L2TLBCoalesceAddrTracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "coalesce"
@@ -1925,12 +1944,12 @@ func (r *Runner) addTLBCoalesceTracer() {
 }
 
 func (r *Runner) addL2TLBMSHRLenTracer() {
-	if !r.ReportL2TLBMSHRLen {
+	if !r.ReportL3TLBMSHRLen {
 		return
 	}
 
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRlen"
@@ -1938,7 +1957,7 @@ func (r *Runner) addL2TLBMSHRLenTracer() {
 			r.L2TLBMSHRLenTracers = append(r.L2TLBMSHRLenTracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRlen_g0"
@@ -1946,7 +1965,7 @@ func (r *Runner) addL2TLBMSHRLenTracer() {
 			r.L2TLBMSHRLenG0Tracers = append(r.L2TLBMSHRLenG0Tracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRuniq"
@@ -1954,7 +1973,7 @@ func (r *Runner) addL2TLBMSHRLenTracer() {
 			r.L2TLBMSHRUniqLenTracers = append(r.L2TLBMSHRUniqLenTracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRuniq_g0"
@@ -2220,6 +2239,15 @@ func (r *Runner) addTLBHitRateTracer() {
 			tracing.CollectTrace(tlb, tracer)
 		}
 
+		for _, tlb := range gpu.L3TLBs {
+			tracer := tracing.NewStepCountTracer(
+				func(task tracing.Task) bool { /*return true })*/
+					return task.Kind == "req_in"
+				})
+			r.TLBHitRateTracers = append(r.TLBHitRateTracers,
+				TLBHitRateTracer{tracer: tracer, tlb: tlb})
+			tracing.CollectTrace(tlb, tracer)
+		}
 	}
 }
 
@@ -2584,12 +2612,17 @@ func (r *Runner) addDRAMTracer() {
 	}
 }
 
-func (r *Runner) addL2TLBSQLTracer() {
-	if !r.L2TLBSQLTracing {
+func (r *Runner) addL3TLBSQLTracer() {
+	if !r.L3TLBSQLTracing {
 		return
 	}
 	tracer := tracing.NewMySQLTracer()
 	tracer.Init()
+	for _, gpu := range r.GPUDriver.GPUs {
+		for _, l3tlb := range gpu.L3TLBs {
+			tracing.CollectTrace(l3tlb, tracer)
+		}
+	}
 	for _, gpu := range r.GPUDriver.GPUs {
 		for _, l2tlb := range gpu.L2TLBs {
 			tracing.CollectTrace(l2tlb, tracer)
@@ -2624,6 +2657,11 @@ func (r *Runner) addTranslationReqTracer() {
 			return false
 		})
 	r.TranslationReqTracer = tracer
+	for _, gpu := range r.GPUDriver.GPUs {
+		for _, l3tlb := range gpu.L3TLBs {
+			tracing.CollectTrace(l3tlb, tracer)
+		}
+	}
 	for _, gpu := range r.GPUDriver.GPUs {
 		for _, l2tlb := range gpu.L2TLBs {
 			tracing.CollectTrace(l2tlb, tracer)
@@ -2689,12 +2727,12 @@ func (r *Runner) addMMUCacheReqTracer() {
 	}
 }
 
-func (r *Runner) addL2TLBQueueingImbalanceTracer() {
-	if !r.ReportL2TLBQueueImbalance {
+func (r *Runner) addL3TLBQueueingImbalanceTracer() {
+	if !r.ReportL3TLBQueueImbalance {
 		return
 	}
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, this := range gpu.L2TLBs {
+		for _, this := range gpu.L3TLBs {
 			tracer := tlb.NewGlobalTLBQueueingTracer(
 				func(task tracing.Task) bool {
 					if task.Kind == "imbalance" {
@@ -2703,7 +2741,7 @@ func (r *Runner) addL2TLBQueueingImbalanceTracer() {
 					return false
 				})
 			tracer.AddThis(this)
-			for _, tlb := range gpu.L2TLBs {
+			for _, tlb := range gpu.L3TLBs {
 				tracer.AddTLB(tlb)
 			}
 			tracing.CollectTrace(this, tracer)
@@ -2714,12 +2752,12 @@ func (r *Runner) addL2TLBQueueingImbalanceTracer() {
 	return
 }
 
-func (r *Runner) addL2TLBEntropyTracer() {
+func (r *Runner) addL3TLBEntropyTracer() {
 	if !r.ReportEntropy {
 		return
 	}
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, this := range gpu.L2TLBs {
+		for _, this := range gpu.L3TLBs {
 			tracer := tlb.NewEntropyTracer(
 				func(task tracing.Task) bool {
 					if task.Kind == "entropy" {
@@ -2761,7 +2799,7 @@ func (r *Runner) addTLBSetMissTracer() {
 		return
 	}
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewReferenceTracer(
 				func(task tracing.Task) bool {
 					if task.Kind == "set_miss_tracing" {
@@ -2782,7 +2820,7 @@ func (r *Runner) addTLBMSHRStallTracer() {
 		return
 	}
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewTotalTimeTracer(
 				func(task tracing.Task) bool {
 					if task.Kind == "mshr_stall" {
@@ -2803,7 +2841,7 @@ func (r *Runner) addTLBReqStallTracer() {
 		return
 	}
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewStepCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "stalled-l2-tlb-req-count" || task.Kind == "l2-tlb-req-count"

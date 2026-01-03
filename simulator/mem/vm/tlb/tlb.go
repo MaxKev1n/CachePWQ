@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"reflect"
-	"strings"
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem/cache"
@@ -400,20 +399,6 @@ func (tlb *TLBImpl) fetchBottom(now akita.VTimeInSec, req *device.TranslationReq
 	return true
 }
 
-func (tlb *TLBImpl) getRemoteVLocal(rspSrc string) (str string) {
-	if getChipletNum(tlb.Name()) != getChipletNum(rspSrc) {
-		str = "remote"
-	} else {
-		str = "local"
-	}
-	return
-}
-
-func getChipletNum(srcL2TLB string) (i string) {
-	i = "chiplet-" + strings.Split(srcL2TLB, "_")[1][1:2]
-	return
-}
-
 func getTaskStep(origin string, accessResult device.AccessResult) (step string) {
 	step = origin + "-"
 	switch accessResult {
@@ -490,20 +475,7 @@ func (tlb *TLBImpl) parseBottom(now akita.VTimeInSec) bool {
 
 	tracing.StopTracingNetworkReq(rsp, now, tlb)
 	tracing.TraceReqFinalize(mshrEntry.reqToBottom, now, tlb)
-	//fmt.Println("here")
-	taskStepRemoteVLocal := getTaskStep(tlb.getRemoteVLocal(rsp.SrcL2TLB), rsp.HitOrMiss)
-	taskStepSrcL2TLB := getTaskStep(getChipletNum(rsp.SrcL2TLB), rsp.HitOrMiss)
-	//fmt.Println(tlb.Name())
-	tracing.AddTaskStep(
-		mshrEntry.reqToBottom.Meta().ID+"_L2TLB_stats",
-		now, tlb,
-		taskStepRemoteVLocal,
-	)
-	tracing.AddTaskStep(
-		mshrEntry.reqToBottom.Meta().ID+"_L2TLB_stats",
-		now, tlb,
-		taskStepSrcL2TLB,
-	)
+
 	tracing.EndTask(
 		mshrEntry.reqToBottom.Meta().ID+"_L2TLB_stats",
 		now,
