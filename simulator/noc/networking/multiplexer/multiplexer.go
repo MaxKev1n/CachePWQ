@@ -371,7 +371,7 @@ func ConnectMultiplexers(
 	conn := akita.NewDirectConnection(
 		fmt.Sprintf("%s-%s", portA.Name(), portB.Name()),
 		engine, freq)
-	conn.PlugIn(portA, 2*a.numReqPerCycle)
+	conn.PlugIn(portA, 2*b.numReqPerCycle)
 	conn.PlugIn(portB, 2*b.numReqPerCycle)
 
 	portComplexA := a.createPortComplex(portA, portB)

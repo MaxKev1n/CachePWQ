@@ -239,23 +239,23 @@ func (b *MagicSMSideGPUBuilder) connectL1ToL2NoC(chiplet *Chiplet) {
 
 	for _, l1v := range chiplet.L1VCaches {
 		l1v.SetLowModuleFinder(lowModuleFinder)
-		chiplet.L1ToL2NoC.PlugInSMSide(l1v.GetBottomPort(), 16)
+		chiplet.L1ToL2NoC.PlugInSMSide(l1v.GetBottomPort(), 16, 1)
 	}
 
 	for _, l1s := range chiplet.L1SCaches {
 		l1s.SetLowModuleFinder(lowModuleFinder)
-		chiplet.L1ToL2NoC.PlugInSMSide(l1s.GetBottomPort(), 16)
+		chiplet.L1ToL2NoC.PlugInSMSide(l1s.GetBottomPort(), 16, 1)
 	}
 
 	for _, l1iAT := range chiplet.L1IAddrTranslator {
 		l1iAT.SetLowModuleFinder(lowModuleFinder)
-		chiplet.L1ToL2NoC.PlugInSMSide(l1iAT.GetBottomPort(), 16)
+		chiplet.L1ToL2NoC.PlugInSMSide(l1iAT.GetBottomPort(), 16, 1)
 	}
 
 	for _, l2 := range chiplet.L2Caches {
 		lowModuleFinder.LowModules = append(lowModuleFinder.LowModules,
 			l2.TopPort)
-		chiplet.L1ToL2NoC.PlugInMemSide(l2.TopPort, 64)
+		chiplet.L1ToL2NoC.PlugInMemSide(l2.TopPort, 64, 1)
 	}
 	chiplet.lowModuleFinderForL1 = lowModuleFinder
 }
@@ -496,7 +496,7 @@ func (b *MagicSMSideGPUBuilder) connectL2TLBTOMMU(chiplet *Chiplet) {
 func (b *MagicSMSideGPUBuilder) connectMMUToL2NoC(chiplet *Chiplet) {
 	for _, mmu := range b.MMUs {
 		mmu.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
-		chiplet.L1ToL2NoC.PlugInSMSide(mmu.TranslationPortPort(), 64)
+		chiplet.L1ToL2NoC.PlugInSMSide(mmu.TranslationPortPort(), 64, 1)
 	}
 }
 

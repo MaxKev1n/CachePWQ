@@ -14,8 +14,8 @@ import (
 type BookSimNoC interface {
 	CreateNetwork(config string)
 	CreateNetworkWithLib(lib string, config string)
-	PlugInSMSide(p akita.Port, size int) akita.Port
-	PlugInMemSide(p akita.Port, size int) akita.Port
+	PlugInSMSide(p akita.Port, size int, numPhysicalPort int) akita.Port
+	PlugInMemSide(p akita.Port, size int, numPhysicalPort int) akita.Port
 }
 
 // BookSimNoCImpl is an Akita component that:
@@ -97,7 +97,7 @@ func (noc *BookSimNoCImpl) Close() {
 }
 
 // PlugInSMSide connects an external port to a specific BookSim node
-func (noc *BookSimNoCImpl) PlugInSMSide(p akita.Port, size int) akita.Port {
+func (noc *BookSimNoCImpl) PlugInSMSide(p akita.Port, size int, numPhysicalPort int) akita.Port {
 	noc.mutex.Lock()
 	defer noc.mutex.Unlock()
 
@@ -131,7 +131,7 @@ func (noc *BookSimNoCImpl) PlugInSMSide(p akita.Port, size int) akita.Port {
 }
 
 // PlugInSMSide connects an external port to a specific BookSim node
-func (noc *BookSimNoCImpl) PlugInMagicSMSide(p akita.Port, size int) akita.Port {
+func (noc *BookSimNoCImpl) PlugInMagicSMSide(p akita.Port, size int, numPhysicalPort int) akita.Port {
 	noc.mutex.Lock()
 	defer noc.mutex.Unlock()
 
@@ -172,7 +172,7 @@ func (noc *BookSimNoCImpl) PlugInMagicSMSide(p akita.Port, size int) akita.Port 
 }
 
 // PlugInMemSide connects an external port to a specific BookSim node
-func (noc *BookSimNoCImpl) PlugInMemSide(p akita.Port, size int) akita.Port {
+func (noc *BookSimNoCImpl) PlugInMemSide(p akita.Port, size int, numPhysicalPort int) akita.Port {
 	noc.mutex.Lock()
 	defer noc.mutex.Unlock()
 
@@ -206,7 +206,7 @@ func (noc *BookSimNoCImpl) PlugInMemSide(p akita.Port, size int) akita.Port {
 }
 
 // PlugInMemSide connects an external port to a specific BookSim node
-func (noc *BookSimNoCImpl) PlugInMagicMemSide(p akita.Port, size int) akita.Port {
+func (noc *BookSimNoCImpl) PlugInMagicMemSide(p akita.Port, size int, numPhysicalPort int) akita.Port {
 	noc.mutex.Lock()
 	defer noc.mutex.Unlock()
 

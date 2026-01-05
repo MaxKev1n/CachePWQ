@@ -274,23 +274,23 @@ func (b *FullSMSideGPUBuilder) connectL1ToL2NoC(chiplet *Chiplet) {
 
 	for _, l1v := range chiplet.L1VCaches {
 		l1v.SetLowModuleFinder(lowModuleFinder)
-		chiplet.L1ToL2NoC.PlugInSMSide(l1v.GetBottomPort(), 16)
+		chiplet.L1ToL2NoC.PlugInSMSide(l1v.GetBottomPort(), 16, 1)
 	}
 
 	for _, l1s := range chiplet.L1SCaches {
 		l1s.SetLowModuleFinder(lowModuleFinder)
-		chiplet.L1ToL2NoC.PlugInSMSide(l1s.GetBottomPort(), 16)
+		chiplet.L1ToL2NoC.PlugInSMSide(l1s.GetBottomPort(), 16, 1)
 	}
 
 	for _, l1iAT := range chiplet.L1IAddrTranslator {
 		l1iAT.SetLowModuleFinder(lowModuleFinder)
-		chiplet.L1ToL2NoC.PlugInSMSide(l1iAT.GetBottomPort(), 16)
+		chiplet.L1ToL2NoC.PlugInSMSide(l1iAT.GetBottomPort(), 16, 1)
 	}
 
 	for _, l2 := range chiplet.L2Caches {
 		lowModuleFinder.LowModules = append(lowModuleFinder.LowModules,
 			l2.TopPort)
-		chiplet.L1ToL2NoC.PlugInMemSide(l2.TopPort, 64)
+		chiplet.L1ToL2NoC.PlugInMemSide(l2.TopPort, 64, 1)
 	}
 	chiplet.lowModuleFinderForL1 = lowModuleFinder
 }
@@ -319,6 +319,7 @@ func (b *FullSMSideGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 		chiplet.L1TLBToL2TLBNoC.PlugInMemSide(
 			chiplet.L2TLBs[i].(*tlb.SMSideTLB).RemoteTopPort,
 			64,
+			1,
 		)
 
 		connections[i] = akita.NewDirectConnection(
@@ -338,7 +339,7 @@ func (b *FullSMSideGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 
 	for i, l1vTLB := range chiplet.L1VTLBs {
 		l1vTLB.(*tlb.SMSideL1TLB).SetPartitionedXORLowModuleFinder(xorLowModuleFinder)
-		chiplet.L1TLBToL2TLBNoC.PlugInSMSide(l1vTLB.(*tlb.SMSideL1TLB).RemotePort, 16)
+		chiplet.L1TLBToL2TLBNoC.PlugInSMSide(l1vTLB.(*tlb.SMSideL1TLB).RemotePort, 16, 1)
 
 		l1vTLB.(*tlb.SMSideL1TLB).PartitionIndex = uint64(i) / uint64(numL1VTLBPerPartition)
 
@@ -350,7 +351,7 @@ func (b *FullSMSideGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 
 	for i, l1iTLB := range chiplet.L1ITLBs {
 		l1iTLB.(*tlb.SMSideL1TLB).SetPartitionedXORLowModuleFinder(xorLowModuleFinder)
-		chiplet.L1TLBToL2TLBNoC.PlugInSMSide(l1iTLB.(*tlb.SMSideL1TLB).RemotePort, 16)
+		chiplet.L1TLBToL2TLBNoC.PlugInSMSide(l1iTLB.(*tlb.SMSideL1TLB).RemotePort, 16, 1)
 
 		l1iTLB.(*tlb.SMSideL1TLB).PartitionIndex = uint64(i) / uint64(numL1ITLBPerPartition)
 
@@ -362,7 +363,7 @@ func (b *FullSMSideGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 
 	for i, l1sTLB := range chiplet.L1STLBs {
 		l1sTLB.(*tlb.SMSideL1TLB).SetPartitionedXORLowModuleFinder(xorLowModuleFinder)
-		chiplet.L1TLBToL2TLBNoC.PlugInSMSide(l1sTLB.(*tlb.SMSideL1TLB).RemotePort, 16)
+		chiplet.L1TLBToL2TLBNoC.PlugInSMSide(l1sTLB.(*tlb.SMSideL1TLB).RemotePort, 16, 1)
 
 		l1sTLB.(*tlb.SMSideL1TLB).PartitionIndex = uint64(i) / uint64(numL1STLBPerPartition)
 

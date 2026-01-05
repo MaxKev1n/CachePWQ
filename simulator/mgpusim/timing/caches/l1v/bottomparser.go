@@ -4,6 +4,7 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
+	"gitlab.com/akita/mem/cache/writeback"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/tracing"
 )
@@ -55,6 +56,8 @@ func (p *bottomParser) processDataReady(
 	now akita.VTimeInSec,
 	dr *mem.DataReadyRsp,
 ) bool {
+	writeback.AgentImpl.Recv(dr.GetRespondTo())
+
 	trans := p.findTransactionByReadToBottomID(dr.GetRespondTo())
 	if trans == nil {
 		p.cache.BottomPort.Retrieve(now)

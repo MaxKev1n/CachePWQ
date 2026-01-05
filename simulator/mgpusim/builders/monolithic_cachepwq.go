@@ -221,23 +221,23 @@ func (b *MonolithicCaPWQGPUBuilder) connectL1ToL2NoC(chiplet *Chiplet) {
 
 	for _, l1v := range chiplet.L1VCaches {
 		l1v.SetLowModuleFinder(lowModuleFinder)
-		chiplet.L1ToL2NoC.PlugInSMSide(l1v.GetBottomPort(), 16)
+		chiplet.L1ToL2NoC.PlugInSMSide(l1v.GetBottomPort(), 16, 1)
 	}
 
 	for _, l1s := range chiplet.L1SCaches {
 		l1s.SetLowModuleFinder(lowModuleFinder)
-		chiplet.L1ToL2NoC.PlugInSMSide(l1s.GetBottomPort(), 16)
+		chiplet.L1ToL2NoC.PlugInSMSide(l1s.GetBottomPort(), 16, 1)
 	}
 
 	for _, l1iAT := range chiplet.L1IAddrTranslator {
 		l1iAT.SetLowModuleFinder(lowModuleFinder)
-		chiplet.L1ToL2NoC.PlugInSMSide(l1iAT.GetBottomPort(), 16)
+		chiplet.L1ToL2NoC.PlugInSMSide(l1iAT.GetBottomPort(), 16, 1)
 	}
 
 	for _, l2 := range chiplet.L2Caches {
 		lowModuleFinder.LowModules = append(lowModuleFinder.LowModules,
 			l2.TopPort)
-		chiplet.L1ToL2NoC.PlugInMemSide(l2.TopPort, 64)
+		chiplet.L1ToL2NoC.PlugInMemSide(l2.TopPort, 64, 1)
 	}
 	chiplet.lowModuleFinderForL1 = lowModuleFinder
 }
@@ -254,26 +254,26 @@ func (b *MonolithicCaPWQGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 
 	for _, l1vTLB := range chiplet.L1VTLBs {
 		l1vTLB.SetLowModuleFinder(lowModuleFinder)
-		chiplet.L1TLBToL2TLBNoC.PlugInSMSide(l1vTLB.GetBottomPort(), 16)
+		chiplet.L1TLBToL2TLBNoC.PlugInSMSide(l1vTLB.GetBottomPort(), 16, 1)
 	}
 
 	for _, l1iTLB := range chiplet.L1ITLBs {
 		l1iTLB.SetLowModuleFinder(lowModuleFinder)
-		chiplet.L1TLBToL2TLBNoC.PlugInSMSide(l1iTLB.GetBottomPort(), 16)
+		chiplet.L1TLBToL2TLBNoC.PlugInSMSide(l1iTLB.GetBottomPort(), 16, 1)
 	}
 
 	for _, l1sTLB := range chiplet.L1STLBs {
 		l1sTLB.SetLowModuleFinder(lowModuleFinder)
-		chiplet.L1TLBToL2TLBNoC.PlugInSMSide(l1sTLB.GetBottomPort(), 16)
+		chiplet.L1TLBToL2TLBNoC.PlugInSMSide(l1sTLB.GetBottomPort(), 16, 1)
 	}
 
-	chiplet.L1TLBToL2TLBNoC.PlugInMemSide(chiplet.L2TLBs[0].GetTopPort(), 64)
+	chiplet.L1TLBToL2TLBNoC.PlugInMemSide(chiplet.L2TLBs[0].GetTopPort(), 64, 1)
 }
 
 func (b *MonolithicCaPWQGPUBuilder) connectMMUToL2NoC(chiplet *Chiplet) {
 	chiplet.MMU.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
-	chiplet.L1ToL2NoC.PlugInSMSide(chiplet.MMU.TranslationPortPort(), 64)
-	chiplet.L1ToL2NoC.PlugInMemSide(chiplet.MMU.(*mmu.CaPWQMMU).ToCache, 64)
+	chiplet.L1ToL2NoC.PlugInSMSide(chiplet.MMU.TranslationPortPort(), 64, 1)
+	chiplet.L1ToL2NoC.PlugInMemSide(chiplet.MMU.(*mmu.CaPWQMMU).ToCache, 64, 1)
 
 	lowModuleFinder := cache.NewXORLowModuleFinder(
 		len(chiplet.L1SCaches),

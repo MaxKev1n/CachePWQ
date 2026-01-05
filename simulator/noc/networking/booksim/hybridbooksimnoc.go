@@ -8,9 +8,54 @@ import (
 	"sync"
 
 	"gitlab.com/akita/akita"
-	"gitlab.com/akita/noc"
 	"gitlab.com/akita/util/tracing"
 )
+
+type BookSimEndPoint struct {
+	nodeID  int
+	nocPort akita.Port
+	outPort akita.Port
+
+	numPhysicalPorts int
+
+	srcRRPtr int
+	dstRRPtr int
+}
+
+func NewBookSimEndPoint(
+	NoC *HybridBookSimNoC,
+	nodeID int,
+	outPort akita.Port,
+	size int,
+	numPhysicalPorts int,
+) *BookSimEndPoint {
+	nocPort := akita.NewLimitNumMsgPort(NoC, size, fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nodeID))
+
+	ep := &BookSimEndPoint{
+		nodeID:           nodeID,
+		nocPort:          nocPort,
+		outPort:          outPort,
+		numPhysicalPorts: numPhysicalPorts,
+		srcRRPtr:         0,
+		dstRRPtr:         0,
+	}
+
+	return ep
+}
+
+func (e *BookSimEndPoint) GetSrcNodeID() int {
+	// Round-robin selection among physical ports
+	srcNodeID := e.srcRRPtr
+	e.srcRRPtr = (e.srcRRPtr + 1) % e.numPhysicalPorts
+	return e.nodeID + srcNodeID
+}
+
+func (e *BookSimEndPoint) GetDstNodeID() int {
+	// Round-robin selection among physical ports
+	dstNodeID := e.dstRRPtr
+	e.dstRRPtr = (e.dstRRPtr + 1) % e.numPhysicalPorts
+	return e.nodeID + dstNodeID
+}
 
 // HybridBookSimNoC is an Akita component that:
 //  1. Fetches messages from nocPorts and injects them into BookSim
@@ -21,18 +66,18 @@ type HybridBookSimNoC struct {
 
 	mutex sync.Mutex
 
+	lib     string
+	config  string
 	wrapper *NetworkWrapper
 
-	inflightMsg map[uint64]akita.Msg
-	nocPorts    []akita.Port
-	outPorts    []akita.Port
-	port2Node   map[akita.Port]int
+	inflightMsg   map[uint64]akita.Msg
+	endpoints     []*BookSimEndPoint
+	port2EndPoint map[akita.Port]*BookSimEndPoint
 
 	MaxNumSMSidePort  int
 	MaxNumMemSidePort int
-
-	SMSidePorts  []akita.Port
-	MemSidePorts []akita.Port
+	MaxNumSMSideNode  int
+	MaxNumMemSideNode int
 
 	flitSize int
 }
@@ -46,11 +91,11 @@ func NewHybridBookSimNoC(
 ) *HybridBookSimNoC {
 	NoC := &HybridBookSimNoC{
 		inflightMsg: make(map[uint64]akita.Msg),
-		flitSize:    40,
+		flitSize:    64,
 	}
 
 	NoC.TickingComponent = akita.NewTickingComponent(name, engine, 1*akita.GHz, NoC)
-	NoC.port2Node = make(map[akita.Port]int)
+	NoC.port2EndPoint = make(map[akita.Port]*BookSimEndPoint)
 
 	return NoC
 }
@@ -59,12 +104,10 @@ func NewHybridBookSimNoC(
 func (NoC *HybridBookSimNoC) CreateNetwork(
 	config string,
 ) {
-	NoC.wrapper = NewNetworkWrapper(config, NoC.MaxNumSMSidePort, NoC.MaxNumMemSidePort)
-
-	NoC.nocPorts = make([]akita.Port, NoC.MaxNumSMSidePort+NoC.MaxNumMemSidePort)
-	NoC.outPorts = make([]akita.Port, NoC.MaxNumSMSidePort+NoC.MaxNumMemSidePort)
-	log.Printf("[HybridBookSimNoC] Created BookSim network with %d SM side ports and %d Mem side ports\n",
-		NoC.MaxNumSMSidePort, NoC.MaxNumMemSidePort)
+	NoC.config = config
+	NoC.endpoints = make([]*BookSimEndPoint, NoC.MaxNumSMSidePort+NoC.MaxNumMemSidePort)
+	log.Printf("[HybridBookSimNoC] Created BookSim network %s with %d SM side ports and %d Mem side ports\n",
+		NoC.Name(), NoC.MaxNumSMSidePort, NoC.MaxNumMemSidePort)
 }
 
 // CreateNetworkWithLib initializes the BookSim network
@@ -72,12 +115,40 @@ func (NoC *HybridBookSimNoC) CreateNetworkWithLib(
 	lib string,
 	config string,
 ) {
-	NoC.wrapper = NewNetworkWrapperWithLib(lib, config, NoC.MaxNumSMSidePort, NoC.MaxNumMemSidePort)
-
-	NoC.nocPorts = make([]akita.Port, NoC.MaxNumSMSidePort+NoC.MaxNumMemSidePort)
-	NoC.outPorts = make([]akita.Port, NoC.MaxNumSMSidePort+NoC.MaxNumMemSidePort)
+	NoC.lib = lib
+	NoC.config = config
+	NoC.endpoints = make([]*BookSimEndPoint, NoC.MaxNumSMSidePort+NoC.MaxNumMemSidePort)
 	log.Printf("[HybridBookSimNoC] Created BookSim network %s with %d SM side ports and %d Mem side ports\n",
 		NoC.Name(), NoC.MaxNumSMSidePort, NoC.MaxNumMemSidePort)
+}
+
+// Establish makes the BookSim network ready for operation
+func (NoC *HybridBookSimNoC) Establish() {
+	NoC.mutex.Lock()
+	defer NoC.mutex.Unlock()
+
+	numSMSideNodes := 0
+	numMemSideNodes := 0
+
+	for i := 0; i < NoC.MaxNumSMSidePort; i++ {
+		numSMSideNodes += NoC.endpoints[i].numPhysicalPorts
+	}
+
+	for i := 0; i < NoC.MaxNumMemSidePort; i++ {
+		numMemSideNodes += NoC.endpoints[NoC.MaxNumSMSidePort+i].numPhysicalPorts
+	}
+
+	if numSMSideNodes != NoC.MaxNumSMSideNode || numMemSideNodes != NoC.MaxNumMemSideNode {
+		panic(fmt.Sprintf("[HybridBookSimNoC] number of nodes mismatch: expected (%d, %d), got (%d, %d)",
+			NoC.MaxNumSMSideNode, NoC.MaxNumMemSideNode, numSMSideNodes, numMemSideNodes))
+	}
+
+	if NoC.lib == "" {
+		NoC.wrapper = NewNetworkWrapper(NoC.config, numSMSideNodes, numMemSideNodes)
+	} else {
+		NoC.wrapper = NewNetworkWrapperWithLib(NoC.lib, NoC.config, numSMSideNodes, numMemSideNodes)
+	}
+	log.Printf("[HybridBookSimNoC] Established BookSim network %s (%d %d)\n", NoC.Name(), numSMSideNodes, numMemSideNodes)
 }
 
 // Close releases the underlying BookSim network
@@ -91,75 +162,89 @@ func (NoC *HybridBookSimNoC) Close() {
 }
 
 // PlugInSMSide connects an external port to a specific BookSim node
-func (NoC *HybridBookSimNoC) PlugInSMSide(p akita.Port, size int) akita.Port {
+func (NoC *HybridBookSimNoC) PlugInSMSide(
+	p akita.Port,
+	size int,
+	numPhysicalPort int,
+) akita.Port {
 	NoC.mutex.Lock()
 	defer NoC.mutex.Unlock()
 
-	nextID := len(NoC.SMSidePorts)
+	nextID := 0
+	nextEndpointID := 0
+	for i := 0; i < NoC.MaxNumSMSidePort; i++ {
+		if NoC.endpoints[i] == nil {
+			break
+		}
 
-	for _, port := range NoC.outPorts {
-		if port == p {
+		nextID += NoC.endpoints[i].numPhysicalPorts
+		nextEndpointID++
+	}
+
+	for _, ep := range NoC.endpoints {
+		if ep != nil && ep.outPort == p {
 			panic(fmt.Sprintf("[HybridBookSimNoC] duplicate mapping for node %d", nextID))
 		}
 	}
 
-	if nextID >= NoC.MaxNumSMSidePort {
-		panic(fmt.Sprintf("[HybridBookSimNoC] SMSide node %d out of range", nextID))
-	}
-
-	nocPort := akita.NewLimitNumMsgPort(NoC, size, fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nextID))
-	NoC.nocPorts[nextID] = nocPort
-	NoC.outPorts[nextID] = p
-	NoC.SMSidePorts = append(NoC.SMSidePorts, p)
+	ep := NewBookSimEndPoint(NoC, nextID, p, size, numPhysicalPort)
+	NoC.endpoints[nextEndpointID] = ep
 
 	if p.GetConnection() == nil {
-		conn := NewBookSimConnection(fmt.Sprintf("BookSimSMSideConn[%d]", nextID), NoC.Engine, 1*akita.GHz)
-		conn.PlugIn(nocPort, size)
+		conn := NewBookSimConnection(fmt.Sprintf("BookSimSMSideConn[%d]", nextEndpointID), NoC.Engine, NoC.Freq)
+		conn.PlugIn(ep.nocPort, size)
 		conn.PlugIn(p, size)
 	}
 
-	if _, exists := NoC.port2Node[p]; exists {
+	if _, exists := NoC.port2EndPoint[p]; exists {
 		panic("HybridBookSimNoC: duplicate port mapping")
 	}
-	NoC.port2Node[p] = nextID
+	NoC.port2EndPoint[p] = ep
 
-	return nocPort
+	return ep.nocPort
 }
 
 // PlugInMemSide connects an external port to a specific BookSim node
-func (NoC *HybridBookSimNoC) PlugInMemSide(p akita.Port, size int) akita.Port {
+func (NoC *HybridBookSimNoC) PlugInMemSide(
+	p akita.Port,
+	size int,
+	numPhysicalPort int,
+) akita.Port {
 	NoC.mutex.Lock()
 	defer NoC.mutex.Unlock()
 
-	nextID := len(NoC.MemSidePorts) + NoC.MaxNumSMSidePort
+	nextID := NoC.MaxNumSMSideNode
+	nextEndpointID := NoC.MaxNumSMSidePort
+	for i := NoC.MaxNumSMSidePort; i < NoC.MaxNumSMSidePort+NoC.MaxNumMemSidePort; i++ {
+		if NoC.endpoints[i] == nil {
+			break
+		}
 
-	for _, port := range NoC.outPorts {
-		if port == p {
+		nextID += NoC.endpoints[i].numPhysicalPorts
+		nextEndpointID++
+	}
+
+	for _, ep := range NoC.endpoints {
+		if ep != nil && ep.outPort == p {
 			panic(fmt.Sprintf("[HybridBookSimNoC] duplicate mapping for node %d", nextID))
 		}
 	}
 
-	if nextID >= NoC.MaxNumMemSidePort+NoC.MaxNumSMSidePort {
-		panic(fmt.Sprintf("[HybridBookSimNoC] MemSide node %d out of range", nextID))
-	}
-
-	nocPort := akita.NewLimitNumMsgPort(NoC, size, fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nextID))
-	NoC.nocPorts[nextID] = nocPort
-	NoC.outPorts[nextID] = p
-	NoC.MemSidePorts = append(NoC.MemSidePorts, p)
+	ep := NewBookSimEndPoint(NoC, nextID, p, size, numPhysicalPort)
+	NoC.endpoints[nextEndpointID] = ep
 
 	if p.GetConnection() == nil {
-		conn := NewBookSimConnection(fmt.Sprintf("BookSimMemSideConn[%d]", nextID), NoC.Engine, 1*akita.GHz)
-		conn.PlugIn(nocPort, size)
+		conn := NewBookSimConnection(fmt.Sprintf("BookSimMemSideConn[%d]", nextEndpointID), NoC.Engine, NoC.Freq)
+		conn.PlugIn(ep.nocPort, size)
 		conn.PlugIn(p, size)
 	}
 
-	if _, exists := NoC.port2Node[p]; exists {
+	if _, exists := NoC.port2EndPoint[p]; exists {
 		panic("HybridBookSimNoC: duplicate port mapping")
 	}
-	NoC.port2Node[p] = nextID
+	NoC.port2EndPoint[p] = ep
 
-	return nocPort
+	return ep.nocPort
 }
 
 // ---- Tick Logic ----
@@ -175,9 +260,9 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 	madeProgress := false
 
 	// Injection phase
-	for srcNode, in := range NoC.nocPorts {
+	for _, ep := range NoC.endpoints {
 		for {
-			msg := in.Peek()
+			msg := ep.nocPort.Peek()
 			if msg == nil {
 				break
 			}
@@ -189,35 +274,50 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 				tracing.MsgIDAtReceiver(msg, NoC),
 			)
 
-			dstNode := NoC.route(msg)
-			if dstNode < 0 {
-				panic("HybridBookSimNoC: invalid routeFn result (<0)")
-			}
+			issued := false
+			for i := 0; i < ep.numPhysicalPorts; i++ {
+				srcNode := ep.GetSrcNodeID()
 
-			numFlits := NoC.prepareFlits(msg)
-			if !NoC.wrapper.CanInject(srcNode, numFlits) {
+				dstEp := NoC.route(msg)
+				if dstEp == nil {
+					panic("HybridBookSimNoC: invalid routeFn result (nil)")
+				}
+
+				numFlits := NoC.prepareFlits(msg)
+				if !NoC.wrapper.CanInject(srcNode, numFlits) {
+					continue
+				}
+
+				dstNode := dstEp.GetDstNodeID()
+
+				packetID := NoC.wrapper.Send(
+					srcNode,
+					dstNode,
+					msg,
+				)
+
+				if _, found := NoC.inflightMsg[packetID]; found {
+					panic("HybridBookSimNoC: duplicate packet ID")
+				}
+				NoC.inflightMsg[packetID] = msg
+
+				tracing.AddTaskStep(
+					tracing.MsgIDAtReceiver(msg, NoC),
+					now,
+					NoC,
+					fmt.Sprintf("%d:%s:%d", srcNode, NoC.Name(), dstNode),
+				)
+
+				ep.nocPort.Retrieve(now)
+
+				issued = true
+
 				break
 			}
 
-			packetID := NoC.wrapper.Send(
-				srcNode,
-				dstNode,
-				msg,
-			)
-
-			if _, found := NoC.inflightMsg[packetID]; found {
-				panic("HybridBookSimNoC: duplicate packet ID")
+			if !issued {
+				break
 			}
-			NoC.inflightMsg[packetID] = msg
-
-			tracing.AddTaskStep(
-				tracing.MsgIDAtReceiver(msg, NoC),
-				now,
-				NoC,
-				fmt.Sprintf("%d:%s:%d", srcNode, NoC.Name(), dstNode),
-			)
-
-			in.Retrieve(now)
 
 			madeProgress = true
 		}
@@ -227,32 +327,36 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 	NoC.wrapper.Tick()
 
 	// Ejection phase
-	for node, out := range NoC.nocPorts {
-		for {
-			ok, packetID := NoC.wrapper.Peek(node)
-			if !ok {
-				break
+	for _, ep := range NoC.endpoints {
+		for i := 0; i < ep.numPhysicalPorts; i++ {
+			node := ep.nodeID + i
+
+			for {
+				ok, packetID := NoC.wrapper.Peek(node)
+				if !ok {
+					break
+				}
+
+				msg, found := NoC.inflightMsg[packetID]
+				if !found {
+					panic("HybridBookSimNoC: unknown packet ID")
+				}
+
+				msg.Meta().SendTime = now
+
+				err := ep.nocPort.Send(msg)
+				if err != nil {
+					break
+				}
+
+				tracing.TraceReqFinalize(msg, now, NoC)
+
+				NoC.wrapper.Pop(node)
+
+				delete(NoC.inflightMsg, packetID)
+
+				madeProgress = true
 			}
-
-			msg, found := NoC.inflightMsg[packetID]
-			if !found {
-				panic("HybridBookSimNoC: unknown packet ID")
-			}
-
-			msg.Meta().SendTime = now
-
-			err := out.Send(msg)
-			if err != nil {
-				break
-			}
-
-			tracing.TraceReqFinalize(msg, now, NoC)
-
-			NoC.wrapper.Pop(node)
-
-			delete(NoC.inflightMsg, packetID)
-
-			madeProgress = true
 		}
 	}
 
@@ -266,10 +370,6 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 // ---- Helper functions ----
 
 func (NoC *HybridBookSimNoC) prepareFlits(msg akita.Msg) int {
-	if _, ok := msg.(*noc.Flit); ok {
-		return 1
-	}
-
 	bytes := msg.Meta().TrafficBytes
 	if bytes <= 0 {
 		panic(fmt.Sprintf("HybridBookSimNoC: %v with non-positive size", reflect.TypeOf(msg)))
@@ -281,21 +381,21 @@ func (NoC *HybridBookSimNoC) prepareFlits(msg akita.Msg) int {
 	return flits
 }
 
-func (NoC *HybridBookSimNoC) route(m akita.Msg) int {
-	if node, exists := NoC.port2Node[m.Meta().Dst]; exists {
-		return node
+func (NoC *HybridBookSimNoC) route(m akita.Msg) *BookSimEndPoint {
+	if ep, exists := NoC.port2EndPoint[m.Meta().Dst]; exists {
+		return ep
 	}
 	panic("HybridBookSimNoC: dst port not mapped to node")
 }
 
 func (NoC *HybridBookSimNoC) AddRoute(src akita.Port, dst akita.Port) {
-	if _, exists := NoC.port2Node[src]; exists {
+	if _, exists := NoC.port2EndPoint[src]; exists {
 		panic("HybridBookSimNoC: duplicate port mapping")
 	}
 
-	if _, exists := NoC.port2Node[dst]; !exists {
+	if _, exists := NoC.port2EndPoint[dst]; !exists {
 		panic("HybridBookSimNoC: destination port not mapped to node")
 	}
 
-	NoC.port2Node[src] = NoC.port2Node[dst]
+	NoC.port2EndPoint[src] = NoC.port2EndPoint[dst]
 }
