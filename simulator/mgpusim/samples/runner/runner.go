@@ -617,7 +617,7 @@ func (r *Runner) Init() *Runner {
 
 	r.ParseFlag()
 
-	log.SetFlags(log.Llongfile | log.Ldate | log.Ltime)
+	log.SetFlags(log.Lshortfile | log.Ldate | log.Ltime)
 
 	if *yamlConfigFile != "" {
 		err := yamlconfig.LoadYAMLFile(*yamlConfigFile)

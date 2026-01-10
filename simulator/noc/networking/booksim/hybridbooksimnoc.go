@@ -91,10 +91,10 @@ func NewHybridBookSimNoC(
 ) *HybridBookSimNoC {
 	NoC := &HybridBookSimNoC{
 		inflightMsg: make(map[uint64]akita.Msg),
-		flitSize:    64,
+		flitSize:    40,
 	}
 
-	NoC.TickingComponent = akita.NewTickingComponent(name, engine, 1*akita.GHz, NoC)
+	NoC.TickingComponent = akita.NewTickingComponent(name, engine, 2*akita.GHz, NoC)
 	NoC.port2EndPoint = make(map[akita.Port]*BookSimEndPoint)
 
 	return NoC
@@ -329,7 +329,7 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 	// Ejection phase
 	for _, ep := range NoC.endpoints {
 		for i := 0; i < ep.numPhysicalPorts; i++ {
-			node := ep.nodeID + i
+			node := ep.GetSrcNodeID()
 
 			for {
 				ok, packetID := NoC.wrapper.Peek(node)

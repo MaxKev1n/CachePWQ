@@ -191,33 +191,23 @@ func (b *HierarchicalMemSideGPUBuilder) establishL1ToL2RoutingPath(chiplet *Chip
 	chiplet.lowModuleFinderForL1 = lowModuleFinder
 
 	srcPorts := make([]akita.Port, 0)
-	dstPorts := make([]akita.Port, 0)
-	for i := 0; i < len(chiplet.L2Caches); i++ {
-		l2 := chiplet.L2Caches[i]
-
-		if len(dstPorts) == 32 {
-			break
-		}
-
-		dstPorts = append(dstPorts, l2.TopPort)
-	}
 	for i := 0; i < len(chiplet.L1VCaches); i++ {
 		l1v := chiplet.L1VCaches[i]
 
-		if len(srcPorts) == 16 {
-			break
-		}
-
 		srcPorts = append(srcPorts, l1v.GetBottomPort())
 	}
+	for i := 0; i < len(chiplet.L2Caches); i++ {
+		l2 := chiplet.L2Caches[i]
 
-	writeback.AgentImpl = writeback.NewAgent(
-		b.engine,
-		b.freq,
-		srcPorts,
-		dstPorts,
-		16384*2,
-	)
+		writeback.NewAgent(
+			b.engine,
+			b.freq,
+			srcPorts,
+			l2.TopPort,
+			0x84001000+uint64(i)*0x1000,
+			1024,
+		)
+	}
 }
 
 func (b *HierarchicalMemSideGPUBuilder) establishTPC(chiplet *Chiplet) {
@@ -249,6 +239,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishTPC(chiplet *Chiplet) {
 			WithFreq(b.freq).
 			WithDevicePorts([]akita.Port{l1v.GetBottomPort()}).
 			WithNumReqPerCycle(1).
+			WithNetworkPortBufferSize(1).
 			WithFlitByteSize(32).
 			Build(fmt.Sprintf("%s.L1VCache[%d]", chiplet.name, i))
 
@@ -265,6 +256,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishTPC(chiplet *Chiplet) {
 			WithFreq(b.freq).
 			WithDevicePorts([]akita.Port{l1vtlb.GetBottomPort()}).
 			WithNumReqPerCycle(1).
+			WithNetworkPortBufferSize(1).
 			WithFlitByteSize(32).
 			Build(fmt.Sprintf("%s.L1VTLB[%d]", chiplet.name, i))
 
@@ -319,6 +311,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 			WithDevicePorts([]akita.Port{l1s.GetBottomPort()}).
 			WithFlitByteSize(32).
 			WithNumReqPerCycle(1).
+			WithNetworkPortBufferSize(1).
 			Build(fmt.Sprintf("%s.L1SCache[%d]", chiplet.name, i))
 
 		gpcID := i / numSAPerGPC
@@ -335,6 +328,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 			WithDevicePorts([]akita.Port{l1stlb.GetBottomPort()}).
 			WithFlitByteSize(32).
 			WithNumReqPerCycle(1).
+			WithNetworkPortBufferSize(1).
 			Build(fmt.Sprintf("%s.L1STLB[%d]", chiplet.name, i))
 
 		gpcID := i / numSAPerGPC
@@ -351,6 +345,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 			WithDevicePorts([]akita.Port{l1i.GetBottomPort()}).
 			WithFlitByteSize(32).
 			WithNumReqPerCycle(1).
+			WithNetworkPortBufferSize(1).
 			Build(fmt.Sprintf("%s.L1ICache[%d]", chiplet.name, i))
 
 		gpcID := i / numSAPerGPC
@@ -367,6 +362,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 			WithDevicePorts([]akita.Port{l1itlb.GetBottomPort()}).
 			WithFlitByteSize(32).
 			WithNumReqPerCycle(1).
+			WithNetworkPortBufferSize(1).
 			Build(fmt.Sprintf("%s.L1ITLB[%d]", chiplet.name, i))
 
 		gpcID := i / numSAPerGPC
@@ -403,6 +399,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishL2Partition(chiplet *Chiplet) {
 			WithDevicePorts([]akita.Port{l2.TopPort}).
 			WithFlitByteSize(32).
 			WithNumReqPerCycle(4).
+			WithNetworkPortBufferSize(4).
 			Build(fmt.Sprintf("%s.L2Cache[%d]", chiplet.name, i))
 
 		muxID := i / 8
@@ -421,6 +418,7 @@ func (b *HierarchicalMemSideGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 			WithFlitByteSize(32).
 			WithFlitAssemblingBufferSize(128).
 			WithNumReqPerCycle(64).
+			WithNetworkPortBufferSize(64).
 			WithDevicePorts([]akita.Port{chiplet.L2TLBs[i].GetTopPort()}).
 			Build(fmt.Sprintf("%s.GPCHighSideEndPoint[%d]", chiplet.name, i))
 
@@ -442,6 +440,7 @@ func (b *HierarchicalMemSideGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 			WithFreq(b.freq).
 			WithFlitByteSize(32).
 			WithFlitAssemblingBufferSize(128).
+			WithNetworkPortBufferSize(64).
 			WithNumReqPerCycle(64).
 			Build(fmt.Sprintf("%s.L2HighSideEndPoint[%d]", chiplet.name, i))
 

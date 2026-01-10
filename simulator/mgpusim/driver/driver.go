@@ -520,7 +520,9 @@ func (d *Driver) processLaunchKernelCommand(
 		return d.processUnifiedMultiGPULaunchKernelCommand(now, cmd, queue)
 	}
 
-	writeback.AgentImpl.TickLater(now)
+	for _, a := range writeback.AgentImpls {
+		a.TickLater(now)
+	}
 
 	return true
 

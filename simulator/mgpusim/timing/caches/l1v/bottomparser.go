@@ -56,7 +56,7 @@ func (p *bottomParser) processDataReady(
 	now akita.VTimeInSec,
 	dr *mem.DataReadyRsp,
 ) bool {
-	writeback.AgentImpl.Recv(dr.GetRespondTo())
+	writeback.Recv(dr.GetRespondTo(), now)
 
 	trans := p.findTransactionByReadToBottomID(dr.GetRespondTo())
 	if trans == nil {
