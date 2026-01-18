@@ -283,9 +283,6 @@ void* InterconnectInterface::Get(unsigned deviceID)
     turn++;
     if (turn == _vcs) turn = 0;
   }
-  if (data) {
-    _round_robin_turn[subnet][icntID] = turn;
-  }
 
   return data;
 
@@ -623,7 +620,10 @@ void* InterconnectInterface::_BoundaryBufferItem::TopPacket() const
   std::queue<void*> buffer_copy = _buffer;
   std::queue<bool> tail_copy = _tail_flag;
 
+  void * flit_data = buffer_copy.front();
+
   while (data == NULL) {
+    assert(flit_data == _buffer.front()); //all flits must belong to the same packet
     if (tail_copy.front()) {
       data = buffer_copy.front();
     }

@@ -120,7 +120,7 @@ func NewNetworkWrapper(
 	numCUs int,
 	numMems int,
 ) *NetworkWrapper {
-	return NewNetworkWrapperWithLib("/Users/chenzihang/codes/CachePWQ/simulator/noc/networking/booksim/native/libintersim.dylib", config, numCUs, numMems)
+	return NewNetworkWrapperWithLib("/Users/chenzihang/Develop/CachePWQ/simulator/noc/networking/booksim/native/libintersim.dylib", config, numCUs, numMems)
 }
 
 func NewNetworkWrapperWithLib(

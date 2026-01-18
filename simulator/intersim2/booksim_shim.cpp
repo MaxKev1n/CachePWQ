@@ -63,6 +63,6 @@ void booksim_pop(booksim_net_t net, int node) {
     auto wrap = reinterpret_cast<booksim_net_wrap*>(net);
     auto data = wrap->iface->Pop(node);
 
-    assert(data == nullptr);
+    assert(data != nullptr);
     send_counter++;
 }

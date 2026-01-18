@@ -84,6 +84,8 @@ func (b HierarchicalMemSideGPUBuilder) Build(name string, id uint64) *mgpusim.GP
 	b.connectCP()
 	b.setupInterchipNetwork()
 
+	chiplet.GlobalNoC.Establish()
+
 	return b.gpu
 }
 
