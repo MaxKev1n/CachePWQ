@@ -137,23 +137,26 @@ func (b *HierarchicalMemSideGPUBuilder) createGlobalNoC(chiplet *Chiplet) {
 	maxCUsPerGPC := 16     // same as NVIDIA A100
 	maxL2PerPartition := 8 // same as NVIDIA V100
 
-	numSMSidePorts := ((len(chiplet.CUs) - 1) / maxCUsPerGPC) + 1
-	numMemorySidePorts := ((len(chiplet.L2Caches) - 1) / maxL2PerPartition) + 1
+	chiplet.GlobalNoC.MaxNumSMSidePort = ((len(chiplet.CUs) - 1) / maxCUsPerGPC) + 1
+	chiplet.GlobalNoC.MaxNumSMSideNode = chiplet.GlobalNoC.MaxNumSMSidePort * 4
+
+	chiplet.GlobalNoC.MaxNumMemSidePort = ((len(chiplet.L2Caches) - 1) / maxL2PerPartition) + 1
+	chiplet.GlobalNoC.MaxNumMemSideNode = chiplet.GlobalNoC.MaxNumMemSidePort * 8
 
 	// Monolithic MMU
-	numSMSidePorts++
+	chiplet.GlobalNoC.MaxNumSMSidePort++
+	chiplet.GlobalNoC.MaxNumSMSideNode++
 
 	// GPC L2TLB
-	numSMSidePorts += len(chiplet.L2TLBs)
+	chiplet.GlobalNoC.MaxNumSMSidePort += len(chiplet.L2TLBs)
+	chiplet.GlobalNoC.MaxNumSMSideNode += len(chiplet.L2TLBs)
 
 	// monolithic L3TLB
-	numMemorySidePorts++
-
-	chiplet.GlobalNoC.MaxNumSMSidePort = numSMSidePorts
-	chiplet.GlobalNoC.MaxNumMemSidePort = numMemorySidePorts
+	chiplet.GlobalNoC.MaxNumMemSidePort++
+	chiplet.GlobalNoC.MaxNumMemSideNode++
 
 	log.Printf("%s has %d SM side components and %d Mem side components\n",
-		chiplet.GlobalNoC.Name(), numSMSidePorts, numMemorySidePorts)
+		chiplet.GlobalNoC.Name(), chiplet.GlobalNoC.MaxNumSMSidePort, chiplet.GlobalNoC.MaxNumMemSidePort)
 
 	chiplet.GlobalNoC.CreateNetworkWithLib(
 		b.booksimDir+"libintersim.dylib", b.booksimGlobal,
@@ -199,7 +202,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishTPC(chiplet *Chiplet) {
 		mux := multiplexer.MakeMultiplexerBuilder().
 			WithEngine(b.engine).
 			WithFreq(b.freq).
-			WithNumReqPerCycle(4).
+			WithNumReqPerCycle(2).
 			WithSwitchLatency(2).
 			WithBufferSizeInNumFlit(16).
 			WithRoutingTable(routingTable).
@@ -214,6 +217,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishTPC(chiplet *Chiplet) {
 			WithFreq(b.freq).
 			WithDevicePorts([]akita.Port{l1v.GetBottomPort()}).
 			WithNumReqPerCycle(1).
+			WithNetworkPortBufferSize(1).
 			WithFlitByteSize(32).
 			Build(fmt.Sprintf("%s.L1VCache[%d]", chiplet.name, i))
 
@@ -284,6 +288,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 			WithDevicePorts([]akita.Port{l1s.GetBottomPort()}).
 			WithFlitByteSize(32).
 			WithNumReqPerCycle(1).
+			WithNetworkPortBufferSize(1).
 			Build(fmt.Sprintf("%s.L1SCache[%d]", chiplet.name, i))
 
 		gpcID := i / numSAPerGPC
@@ -300,6 +305,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 			WithDevicePorts([]akita.Port{l1stlb.GetBottomPort()}).
 			WithFlitByteSize(32).
 			WithNumReqPerCycle(1).
+			WithNetworkPortBufferSize(1).
 			Build(fmt.Sprintf("%s.L1STLB[%d]", chiplet.name, i))
 
 		gpcID := i / numSAPerGPC
@@ -316,6 +322,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 			WithDevicePorts([]akita.Port{l1i.GetBottomPort()}).
 			WithFlitByteSize(32).
 			WithNumReqPerCycle(1).
+			WithNetworkPortBufferSize(1).
 			Build(fmt.Sprintf("%s.L1ICache[%d]", chiplet.name, i))
 
 		gpcID := i / numSAPerGPC
@@ -332,6 +339,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 			WithDevicePorts([]akita.Port{l1itlb.GetBottomPort()}).
 			WithFlitByteSize(32).
 			WithNumReqPerCycle(1).
+			WithNetworkPortBufferSize(1).
 			Build(fmt.Sprintf("%s.L1ITLB[%d]", chiplet.name, i))
 
 		gpcID := i / numSAPerGPC
@@ -352,7 +360,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishL2Partition(chiplet *Chiplet) {
 		mux := multiplexer.MakeMultiplexerBuilder().
 			WithEngine(b.engine).
 			WithFreq(b.freq).
-			WithNumReqPerCycle(16).
+			WithNumReqPerCycle(32).
 			WithSwitchLatency(15).
 			WithBufferSizeInNumFlit(128).
 			WithRoutingTable(routingTable).
@@ -367,7 +375,8 @@ func (b *HierarchicalMemSideGPUBuilder) establishL2Partition(chiplet *Chiplet) {
 			WithFreq(b.freq).
 			WithDevicePorts([]akita.Port{l2.TopPort}).
 			WithFlitByteSize(32).
-			WithNumReqPerCycle(2).
+			WithNumReqPerCycle(4).
+			WithNetworkPortBufferSize(4).
 			Build(fmt.Sprintf("%s.L2Cache[%d]", chiplet.name, i))
 
 		muxID := i / 8
@@ -386,19 +395,20 @@ func (b *HierarchicalMemSideGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 			WithFlitByteSize(32).
 			WithFlitAssemblingBufferSize(128).
 			WithNumReqPerCycle(64).
+			WithNetworkPortBufferSize(64).
 			WithDevicePorts([]akita.Port{chiplet.L2TLBs[i].GetTopPort()}).
 			Build(fmt.Sprintf("%s.GPCHighSideEndPoint[%d]", chiplet.name, i))
 
 		mux.SetHighSideHybridEndPoint(ep)
 
-		nocPort := chiplet.GlobalNoC.PlugInSMSide(ep.NetworkPort, 64)
+		nocPort := chiplet.GlobalNoC.PlugInSMSideMultiPort(ep.NetworkPort, 64, 4)
 		for _, port := range mux.RoutingTable.GetAllSrcPorts() {
 			chiplet.GlobalNoC.AddRoute(port, ep.NetworkPort)
 		}
 		ep.PlugInNoCPort(nocPort, 64)
 
 		chiplet.GlobalNoC.AddRoute(chiplet.L2TLBs[i].GetTopPort(), ep.NetworkPort)
-		chiplet.GlobalNoC.PlugInSMSide(chiplet.L2TLBs[i].GetBottomPort(), 64)
+		chiplet.GlobalNoC.PlugInSMSideMultiPort(chiplet.L2TLBs[i].GetBottomPort(), 64, 1)
 	}
 
 	for i, mux := range chiplet.l2Mux {
@@ -408,19 +418,20 @@ func (b *HierarchicalMemSideGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 			WithFlitByteSize(32).
 			WithFlitAssemblingBufferSize(128).
 			WithNumReqPerCycle(64).
+			WithNetworkPortBufferSize(64).
 			Build(fmt.Sprintf("%s.L2HighSideEndPoint[%d]", chiplet.name, i))
 
 		mux.SetHighSideHybridEndPoint(ep)
 
-		nocPort := chiplet.GlobalNoC.PlugInMemSide(ep.NetworkPort, 64)
+		nocPort := chiplet.GlobalNoC.PlugInMemSideMultiPort(ep.NetworkPort, 64, 8)
 		for _, port := range mux.RoutingTable.GetAllSrcPorts() {
 			chiplet.GlobalNoC.AddRoute(port, ep.NetworkPort)
 		}
 		ep.PlugInNoCPort(nocPort, 64)
 	}
 
-	chiplet.GlobalNoC.PlugInMemSide(chiplet.L3TLBs[0].GetTopPort(), 64)
-	chiplet.GlobalNoC.PlugInSMSide(chiplet.MMU.TranslationPortPort(), 64)
+	chiplet.GlobalNoC.PlugInMemSideMultiPort(chiplet.L3TLBs[0].GetTopPort(), 64, 1)
+	chiplet.GlobalNoC.PlugInSMSideMultiPort(chiplet.MMU.TranslationPortPort(), 64, 1)
 }
 
 func (b *HierarchicalMemSideGPUBuilder) establishL1TLBToL2TLBRoutingPath(chiplet *Chiplet) {

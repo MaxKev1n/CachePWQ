@@ -1,13 +1,13 @@
 //21*1 fly with 32 flits per packet under gpgpusim injection mode
 use_map = 0;
-flit_size = 64;
+flit_size = 40;
 
 // currently we do not use this, see subnets below
 network_count = 2;
 
 // Topology
 topology = fly;
-k = 22;
+k = 74;
 n = 1;
 
 // Routing

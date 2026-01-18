@@ -16,6 +16,8 @@ type BookSimNoC interface {
 	CreateNetworkWithLib(lib string, config string)
 	PlugInSMSide(p akita.Port, size int) akita.Port
 	PlugInMemSide(p akita.Port, size int) akita.Port
+	PlugInSMSideMultiPort(p akita.Port, size int, numPort int) akita.Port
+	PlugInMemSideMultiPort(p akita.Port, size int, numPort int) akita.Port
 }
 
 // BookSimNoCImpl is an Akita component that:
@@ -41,6 +43,16 @@ type BookSimNoCImpl struct {
 	MemSidePorts []akita.Port
 
 	flitSize int
+}
+
+func (noc *BookSimNoCImpl) PlugInSMSideMultiPort(p akita.Port, size int, numPort int) akita.Port {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (noc *BookSimNoCImpl) PlugInMemSideMultiPort(p akita.Port, size int, numPort int) akita.Port {
+	//TODO implement me
+	panic("implement me")
 }
 
 // NewBookSimNoC creates a BookSim network wrapper.
