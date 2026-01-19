@@ -119,12 +119,6 @@ func (ds *directoryStage) handleReadHit(
 		return false
 	}
 
-	tracing.AddTaskStep(
-		tracing.MsgIDAtReceiver(trans.read, ds.cache),
-		now, ds.cache,
-		"read-hit",
-	)
-
 	if trans.read.Info != nil {
 		readReqInfo := trans.read.Info.(*mem.ReadReqInfo)
 		if readReqInfo.ReturnAccessInfo {
@@ -132,7 +126,7 @@ func (ds *directoryStage) handleReadHit(
 		}
 	}
 
-	return ds.readFromBank(trans, block)
+	return ds.readFromBank(now, trans, block)
 }
 
 func (ds *directoryStage) handleReadMiss(
@@ -308,6 +302,7 @@ func (ds *directoryStage) writePartialLineMiss(
 }
 
 func (ds *directoryStage) readFromBank(
+	now akita.VTimeInSec,
 	trans *transaction,
 	block *cache.Block,
 ) bool {
@@ -318,6 +313,12 @@ func (ds *directoryStage) readFromBank(
 	if !bankBuf.CanPush() {
 		return false
 	}
+
+	tracing.AddTaskStep(
+		tracing.MsgIDAtReceiver(trans.read, ds.cache),
+		now, ds.cache,
+		"read-hit",
+	)
 
 	ds.cache.directory.Visit(block)
 	block.ReadCount++
