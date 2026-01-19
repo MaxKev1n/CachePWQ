@@ -224,7 +224,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishTPC(chiplet *Chiplet) {
 		mux := multiplexer.MakeMultiplexerBuilder().
 			WithEngine(b.engine).
 			WithFreq(b.freq).
-			WithNumReqPerCycle(2).
+			WithNumReqPerCycle(4).
 			WithSwitchLatency(2).
 			WithBufferSizeInNumFlit(16).
 			WithRoutingTable(routingTable).
@@ -238,8 +238,8 @@ func (b *HierarchicalMemSideGPUBuilder) establishTPC(chiplet *Chiplet) {
 			WithEngine(b.engine).
 			WithFreq(b.freq).
 			WithDevicePorts([]akita.Port{l1v.GetBottomPort()}).
-			WithNumReqPerCycle(1).
-			WithNetworkPortBufferSize(1).
+			WithNumReqPerCycle(2).
+			WithNetworkPortBufferSize(2).
 			WithFlitByteSize(32).
 			Build(fmt.Sprintf("%s.L1VCache[%d]", chiplet.name, i))
 
@@ -398,8 +398,8 @@ func (b *HierarchicalMemSideGPUBuilder) establishL2Partition(chiplet *Chiplet) {
 			WithFreq(b.freq).
 			WithDevicePorts([]akita.Port{l2.TopPort}).
 			WithFlitByteSize(32).
-			WithNumReqPerCycle(4).
-			WithNetworkPortBufferSize(4).
+			WithNumReqPerCycle(6).
+			WithNetworkPortBufferSize(6).
 			Build(fmt.Sprintf("%s.L2Cache[%d]", chiplet.name, i))
 
 		muxID := i / 8

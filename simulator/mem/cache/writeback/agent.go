@@ -49,7 +49,7 @@ func NewAgent(
 		msg := mem.ReadReqBuilder{}.
 			WithSrc(srcPorts[srcPortID]).
 			WithDst(dstPort).
-			WithByteSize(128).
+			WithByteSize(64).
 			WithAddress(addr).
 			Build()
 		a.MsgsToSend = append(a.MsgsToSend, msg)
