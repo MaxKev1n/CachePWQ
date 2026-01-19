@@ -135,7 +135,7 @@ func (b *CommonBuilder) SetDefaultCommonBuilderParams() {
 	b.numShaderArrayPerChiplet = 16
 	b.numCUPerShaderArray = 4
 	b.numMemoryBankPerChiplet = 8
-	b.log2CacheLineSize = 6
+	b.log2CacheLineSize = 7
 	b.log2PageSize = 12
 	b.log2MemoryBankInterleavingSize = 12
 
