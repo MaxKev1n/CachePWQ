@@ -8,18 +8,36 @@ import (
 	"sync"
 
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/util"
+	"gitlab.com/akita/util/pipelining"
 	"gitlab.com/akita/util/tracing"
 )
+
+type BookSimPipelineItem struct {
+	taskID string
+	msg    akita.Msg
+}
+
+func (t BookSimPipelineItem) TaskID() string {
+	return t.taskID
+}
 
 type BookSimEndPoint struct {
 	nodeID  int
 	nocPort akita.Port
 	outPort akita.Port
 
+	inPipeline      pipelining.Pipeline
+	inLookupBuffer  util.Buffer
+	outPipeline     pipelining.Pipeline
+	outLookupBuffer util.Buffer
+
 	numPhysicalPorts int
 
 	srcRRPtr int
 	dstRRPtr int
+
+	noc *HybridBookSimNoC
 }
 
 func NewBookSimEndPoint(
@@ -38,9 +56,93 @@ func NewBookSimEndPoint(
 		numPhysicalPorts: numPhysicalPorts,
 		srcRRPtr:         0,
 		dstRRPtr:         0,
+		noc:              NoC,
 	}
 
+	ep.inLookupBuffer = util.NewBuffer(2 * ep.numPhysicalPorts)
+	ep.inPipeline = pipelining.MakeBuilder().
+		WithPipelineWidth(ep.numPhysicalPorts).
+		WithNumStage(80).
+		WithCyclePerStage(1).
+		WithPostPipelineBuffer(ep.inLookupBuffer).
+		Build(fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nodeID) + "_in_pipeline")
+
+	ep.outLookupBuffer = util.NewBuffer(2 * ep.numPhysicalPorts)
+	ep.outPipeline = pipelining.MakeBuilder().
+		WithPipelineWidth(ep.numPhysicalPorts).
+		WithNumStage(80).
+		WithCyclePerStage(1).
+		WithPostPipelineBuffer(ep.outLookupBuffer).
+		Build(fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nodeID) + "_out_pipeline")
+
 	return ep
+}
+
+func (e *BookSimEndPoint) Run(now akita.VTimeInSec) bool {
+	madeProgess := false
+
+	madeProgess = e.parseFromDevice(now) || madeProgess
+	madeProgess = e.inPipeline.Tick(now) || madeProgess
+	madeProgess = e.parseFromNoC(now) || madeProgess
+	madeProgess = e.outPipeline.Tick(now) || madeProgess
+
+	return madeProgess
+}
+
+func (e *BookSimEndPoint) parseFromDevice(now akita.VTimeInSec) bool {
+	madeProgess := false
+
+	for {
+		item := e.nocPort.Peek()
+		if item == nil {
+			return madeProgess
+		}
+
+		tracing.TraceReqInitiate(
+			item,
+			now,
+			e.noc,
+			tracing.MsgIDAtReceiver(item, e.noc),
+		)
+
+		if !e.inPipeline.CanAccept() {
+			return madeProgess
+		}
+
+		pipelineItem := BookSimPipelineItem{
+			taskID: akita.GetIDGenerator().Generate(),
+			msg:    item,
+		}
+		e.inPipeline.Accept(now, pipelineItem)
+
+		e.nocPort.Retrieve(now)
+		madeProgess = true
+	}
+}
+
+func (e *BookSimEndPoint) parseFromNoC(now akita.VTimeInSec) bool {
+	madeProgess := false
+
+	for {
+		item := e.outLookupBuffer.Peek()
+		if item == nil {
+			return madeProgess
+		}
+
+		msg := item.(BookSimPipelineItem).msg
+
+		msg.Meta().SendTime = now
+
+		err := e.nocPort.Send(msg)
+		if err != nil {
+			return madeProgess
+		}
+
+		tracing.TraceReqFinalize(msg, now, e.noc)
+
+		e.outLookupBuffer.Pop()
+		madeProgess = true
+	}
 }
 
 func (e *BookSimEndPoint) GetSrcNodeID() int {
@@ -262,17 +364,12 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 	// Injection phase
 	for _, ep := range NoC.endpoints {
 		for {
-			msg := ep.nocPort.Peek()
-			if msg == nil {
+			item := ep.inLookupBuffer.Peek()
+			if item == nil {
 				break
 			}
 
-			tracing.TraceReqInitiate(
-				msg,
-				now,
-				NoC,
-				tracing.MsgIDAtReceiver(msg, NoC),
-			)
+			msg := item.(BookSimPipelineItem).msg
 
 			issued := false
 			for i := 0; i < ep.numPhysicalPorts; i++ {
@@ -308,7 +405,7 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 					fmt.Sprintf("%d:%s:%d", srcNode, NoC.Name(), dstNode),
 				)
 
-				ep.nocPort.Retrieve(now)
+				ep.inLookupBuffer.Pop()
 
 				issued = true
 
@@ -342,14 +439,15 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 					panic("HybridBookSimNoC: unknown packet ID")
 				}
 
-				msg.Meta().SendTime = now
-
-				err := ep.nocPort.Send(msg)
-				if err != nil {
+				if !ep.outPipeline.CanAccept() {
 					break
 				}
 
-				tracing.TraceReqFinalize(msg, now, NoC)
+				pipelineItem := BookSimPipelineItem{
+					taskID: akita.GetIDGenerator().Generate(),
+					msg:    msg,
+				}
+				ep.outPipeline.Accept(now, pipelineItem)
 
 				NoC.wrapper.Pop(node)
 
@@ -362,6 +460,10 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 
 	if NoC.wrapper.Busy() {
 		madeProgress = true
+	}
+
+	for _, ep := range NoC.endpoints {
+		madeProgress = ep.Run(now) || madeProgress
 	}
 
 	return madeProgress
