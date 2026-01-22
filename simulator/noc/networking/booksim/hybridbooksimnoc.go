@@ -62,7 +62,7 @@ func NewBookSimEndPoint(
 	ep.inLookupBuffer = util.NewBuffer(2 * ep.numPhysicalPorts)
 	ep.inPipeline = pipelining.MakeBuilder().
 		WithPipelineWidth(ep.numPhysicalPorts).
-		WithNumStage(80).
+		WithNumStage(40).
 		WithCyclePerStage(1).
 		WithPostPipelineBuffer(ep.inLookupBuffer).
 		Build(fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nodeID) + "_in_pipeline")
@@ -70,7 +70,7 @@ func NewBookSimEndPoint(
 	ep.outLookupBuffer = util.NewBuffer(2 * ep.numPhysicalPorts)
 	ep.outPipeline = pipelining.MakeBuilder().
 		WithPipelineWidth(ep.numPhysicalPorts).
-		WithNumStage(80).
+		WithNumStage(40).
 		WithCyclePerStage(1).
 		WithPostPipelineBuffer(ep.outLookupBuffer).
 		Build(fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nodeID) + "_out_pipeline")
@@ -105,6 +105,18 @@ func (e *BookSimEndPoint) parseFromDevice(now akita.VTimeInSec) bool {
 			tracing.MsgIDAtReceiver(item, e.noc),
 		)
 
+		if e.isTranslation(item) {
+			ok := e.processTranslation(e.inLookupBuffer, item)
+			if !ok {
+				return madeProgess
+			}
+
+			e.nocPort.Retrieve(now)
+
+			madeProgess = true
+			continue
+		}
+
 		if !e.inPipeline.CanAccept() {
 			return madeProgess
 		}
@@ -118,6 +130,35 @@ func (e *BookSimEndPoint) parseFromDevice(now akita.VTimeInSec) bool {
 		e.nocPort.Retrieve(now)
 		madeProgess = true
 	}
+}
+
+func (e *BookSimEndPoint) isTranslation(
+	msg akita.Msg,
+) bool {
+	return false
+
+	//srcName := msg.Meta().Src.Name()
+	//dstName := msg.Meta().Dst.Name()
+	//
+	//return strings.Contains(srcName, "TLB") || strings.Contains(dstName, "TLB")
+}
+
+func (e *BookSimEndPoint) processTranslation(
+	buffer util.Buffer,
+	msg akita.Msg,
+) bool {
+	if !buffer.CanPush() {
+		return false
+	}
+
+	pipelineItem := BookSimPipelineItem{
+		taskID: akita.GetIDGenerator().Generate(),
+		msg:    msg,
+	}
+
+	buffer.Push(pipelineItem)
+
+	return true
 }
 
 func (e *BookSimEndPoint) parseFromNoC(now akita.VTimeInSec) bool {
@@ -445,6 +486,20 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 				msg, found := NoC.inflightMsg[packetID]
 				if !found {
 					panic("HybridBookSimNoC: unknown packet ID")
+				}
+
+				if ep.isTranslation(msg) {
+					ok := ep.processTranslation(ep.outLookupBuffer, msg)
+					if !ok {
+						break
+					}
+
+					NoC.wrapper.Pop(node)
+
+					delete(NoC.inflightMsg, packetID)
+					madeProgress = true
+
+					continue
 				}
 
 				if !ep.outPipeline.CanAccept() {

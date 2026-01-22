@@ -1,6 +1,7 @@
 package tracing
 
 import (
+	"strings"
 	"sync"
 
 	"gitlab.com/akita/akita"
@@ -15,6 +16,12 @@ type NocTracer struct {
 	averageTime   akita.VTimeInSec
 	inflightTasks map[string]Task
 	taskCount     uint64
+
+	translationAvgTime akita.VTimeInSec
+	translationCount   uint64
+
+	dataAvgTime akita.VTimeInSec
+	dataCount   uint64
 }
 
 // NewTranslationReqTracer creates a new TranslationReqTracer
@@ -40,6 +47,38 @@ func (t *NocTracer) TotalCount() uint64 {
 	defer t.lock.Unlock()
 
 	return t.taskCount
+}
+
+// TranslationAvgTime returns the average time spent on translation requests
+func (t *NocTracer) TranslationAvgTime() akita.VTimeInSec {
+	t.lock.Lock()
+	time := t.translationAvgTime
+	t.lock.Unlock()
+	return time
+}
+
+// DataAvgTime returns the average time spent on data requests
+func (t *NocTracer) DataAvgTime() akita.VTimeInSec {
+	t.lock.Lock()
+	time := t.dataAvgTime
+	t.lock.Unlock()
+	return time
+}
+
+// TranslationCount returns the number of translation requests
+func (t *NocTracer) TranslationCount() uint64 {
+	t.lock.Lock()
+	count := t.translationCount
+	t.lock.Unlock()
+	return count
+}
+
+// DataCount returns the number of data requests
+func (t *NocTracer) DataCount() uint64 {
+	t.lock.Lock()
+	count := t.dataCount
+	t.lock.Unlock()
+	return count
 }
 
 // StartTask records the task start time
@@ -71,7 +110,31 @@ func (t *NocTracer) EndTask(task Task) {
 	t.averageTime = akita.VTimeInSec(
 		(float64(t.averageTime)*float64(t.taskCount) + float64(taskTime)) /
 			float64(t.taskCount+1))
+
+	msg := originalTask.Detail.(akita.Msg)
+	if t.isTranslation(msg) {
+		t.translationAvgTime = akita.VTimeInSec(
+			(float64(t.translationAvgTime)*float64(t.translationCount) +
+				float64(taskTime)) /
+				float64(t.translationCount+1))
+		t.translationCount++
+	} else {
+		t.dataAvgTime = akita.VTimeInSec(
+			(float64(t.dataAvgTime)*float64(t.dataCount) +
+				float64(taskTime)) /
+				float64(t.dataCount+1))
+		t.dataCount++
+	}
+
 	delete(t.inflightTasks, task.ID)
 	t.taskCount++
 	t.lock.Unlock()
+}
+
+// isTranslation checks whether the message is a translation request
+func (t *NocTracer) isTranslation(msg akita.Msg) bool {
+	srcName := msg.Meta().Src.Name()
+	dstName := msg.Meta().Dst.Name()
+
+	return strings.Contains(srcName, "TLB") || strings.Contains(dstName, "TLB")
 }

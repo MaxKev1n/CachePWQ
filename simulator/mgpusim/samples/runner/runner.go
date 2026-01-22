@@ -3478,13 +3478,33 @@ func (r *Runner) reportBookSimTracer() {
 	for _, t := range r.BookSimLatencyTracers {
 		r.metricsCollector.Collect(
 			t.noc.Name(),
-			"trans_count",
+			"total_count",
 			float64(t.tracer.TotalCount()),
 		)
 		r.metricsCollector.Collect(
 			t.noc.Name(),
-			"trans_latency",
+			"total_latency",
 			float64(t.tracer.AverageTime()),
+		)
+		r.metricsCollector.Collect(
+			t.noc.Name(),
+			"translation_count",
+			float64(t.tracer.TranslationCount()),
+		)
+		r.metricsCollector.Collect(
+			t.noc.Name(),
+			"translation_latency",
+			float64(t.tracer.TranslationAvgTime()),
+		)
+		r.metricsCollector.Collect(
+			t.noc.Name(),
+			"data_count",
+			float64(t.tracer.DataCount()),
+		)
+		r.metricsCollector.Collect(
+			t.noc.Name(),
+			"data_latency",
+			float64(t.tracer.DataAvgTime()),
 		)
 	}
 }
