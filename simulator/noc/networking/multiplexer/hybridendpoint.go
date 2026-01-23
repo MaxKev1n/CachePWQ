@@ -22,6 +22,8 @@ type HybridEndPoint struct {
 	encodingOverhead         float64
 	msgOutBuf                []akita.Msg
 	msgOutBufSize            int
+	msgForwardBuf            []akita.Msg
+	msgForwardBufSize        int
 	flitsToSend              []*noc.Flit
 	flitsToAssemble          []*noc.Flit
 	flitAssemblingBufferSize int
@@ -38,11 +40,21 @@ func (ep *HybridEndPoint) Send(msg akita.Msg) *akita.SendError {
 	ep.Lock()
 	defer ep.Unlock()
 
-	if len(ep.msgOutBuf) >= ep.msgOutBufSize {
-		return &akita.SendError{}
-	}
+	_, dstExist := ep.devicePorts[msg.Meta().Dst]
+	_, srcExist := ep.devicePorts[msg.Meta().Src]
+	if dstExist && srcExist {
+		if len(ep.msgForwardBuf) >= ep.msgForwardBufSize {
+			return &akita.SendError{}
+		}
 
-	ep.msgOutBuf = append(ep.msgOutBuf, msg)
+		ep.msgForwardBuf = append(ep.msgForwardBuf, msg)
+	} else {
+		if len(ep.msgOutBuf) >= ep.msgOutBufSize {
+			return &akita.SendError{}
+		}
+
+		ep.msgOutBuf = append(ep.msgOutBuf, msg)
+	}
 
 	ep.TickLater(msg.Meta().SendTime)
 
@@ -59,7 +71,7 @@ func (ep *HybridEndPoint) PlugIn(port akita.Port, srcBufCap int) {
 	port.SetConnection(ep)
 	ep.DevicePorts = append(ep.DevicePorts, port)
 	ep.devicePorts[port] = struct{}{}
-	ep.msgOutBufSize = srcBufCap
+	ep.msgForwardBufSize = srcBufCap
 }
 
 // PlugInNoCPort connects a port to the endpoint.
@@ -91,6 +103,7 @@ func (ep *HybridEndPoint) Tick(now akita.VTimeInSec) bool {
 	madeProgress := false
 
 	for i := 0; i < ep.numReqPerCycle; i++ {
+		madeProgress = ep.forward(now) || madeProgress
 		madeProgress = ep.sendFlitOut(now) || madeProgress
 		madeProgress = ep.prepareFlits(now) || madeProgress
 		madeProgress = ep.tryDeliver(now) || madeProgress
@@ -212,6 +225,24 @@ func (ep *HybridEndPoint) tryDeliver(now akita.VTimeInSec) bool {
 		ep.assemblingMsg = nil
 		ep.numFlitReqired = 0
 		ep.numFlitArrived = 0
+		return true
+	}
+	return false
+}
+
+func (ep *HybridEndPoint) forward(now akita.VTimeInSec) bool {
+	if len(ep.msgForwardBuf) == 0 {
+		return false
+	}
+
+	msg := ep.msgForwardBuf[0]
+
+	msg.Meta().RecvTime = now
+
+	err := msg.Meta().Dst.Recv(msg)
+	if err == nil {
+		ep.msgForwardBuf = ep.msgForwardBuf[1:]
+
 		return true
 	}
 	return false

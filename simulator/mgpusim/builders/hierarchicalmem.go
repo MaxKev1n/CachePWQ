@@ -149,10 +149,6 @@ func (b *HierarchicalMemSideGPUBuilder) createGlobalNoC(chiplet *Chiplet) {
 	chiplet.GlobalNoC.MaxNumSMSidePort++
 	chiplet.GlobalNoC.MaxNumSMSideNode++
 
-	// GPC L2TLB
-	chiplet.GlobalNoC.MaxNumSMSidePort += len(chiplet.L2TLBs)
-	chiplet.GlobalNoC.MaxNumSMSideNode += len(chiplet.L2TLBs)
-
 	// monolithic L3TLB
 	chiplet.GlobalNoC.MaxNumMemSidePort++
 	chiplet.GlobalNoC.MaxNumMemSideNode++
@@ -300,23 +296,6 @@ func (b *HierarchicalMemSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 		mux.AddRoute(l1s.GetBottomPort(), localPort)
 	}
 
-	for i, l1stlb := range chiplet.L1STLBs {
-		ep := multiplexer.MakeEndPointBuilder().
-			WithEngine(b.engine).
-			WithFreq(b.freq).
-			WithDevicePorts([]akita.Port{l1stlb.GetBottomPort()}).
-			WithFlitByteSize(32).
-			WithNumReqPerCycle(1).
-			WithNetworkPortBufferSize(1).
-			Build(fmt.Sprintf("%s.L1STLB[%d]", chiplet.name, i))
-
-		gpcID := i / numSAPerGPC
-		mux := chiplet.gpcMux[gpcID]
-
-		localPort := mux.AddLowSidePort(ep)
-		mux.AddRoute(l1stlb.GetBottomPort(), localPort)
-	}
-
 	for i, l1i := range chiplet.L1IAddrTranslator {
 		ep := multiplexer.MakeEndPointBuilder().
 			WithEngine(b.engine).
@@ -332,23 +311,6 @@ func (b *HierarchicalMemSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 
 		localPort := mux.AddLowSidePort(ep)
 		mux.AddRoute(l1i.GetBottomPort(), localPort)
-	}
-
-	for i, l1itlb := range chiplet.L1ITLBs {
-		ep := multiplexer.MakeEndPointBuilder().
-			WithEngine(b.engine).
-			WithFreq(b.freq).
-			WithDevicePorts([]akita.Port{l1itlb.GetBottomPort()}).
-			WithFlitByteSize(32).
-			WithNumReqPerCycle(1).
-			WithNetworkPortBufferSize(1).
-			Build(fmt.Sprintf("%s.L1ITLB[%d]", chiplet.name, i))
-
-		gpcID := i / numSAPerGPC
-		mux := chiplet.gpcMux[gpcID]
-
-		localPort := mux.AddLowSidePort(ep)
-		mux.AddRoute(l1itlb.GetBottomPort(), localPort)
 	}
 }
 
@@ -398,19 +360,36 @@ func (b *HierarchicalMemSideGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 			WithFlitAssemblingBufferSize(128).
 			WithNumReqPerCycle(64).
 			WithNetworkPortBufferSize(64).
-			WithDevicePorts([]akita.Port{chiplet.L2TLBs[i].GetTopPort()}).
 			Build(fmt.Sprintf("%s.GPCHighSideEndPoint[%d]", chiplet.name, i))
 
 		mux.SetHighSideHybridEndPoint(ep)
+
+		numSAPerGPC := b.numShaderArrayPerChiplet / len(chiplet.gpcMux)
+
+		for j := i * numSAPerGPC; j < (i+1)*numSAPerGPC; j++ {
+			ep.PlugIn(chiplet.L1STLBs[j].GetBottomPort(), 4)
+			ep.PlugIn(chiplet.L1ITLBs[j].GetBottomPort(), 4)
+		}
+
+		ep.PlugIn(chiplet.L2TLBs[i].GetTopPort(), 4)
+
+		l2TLB := multiplexer.MakeEndPointBuilder().
+			WithEngine(b.engine).
+			WithFreq(b.freq).
+			WithDevicePorts([]akita.Port{chiplet.L2TLBs[i].GetBottomPort()}).
+			WithFlitByteSize(32).
+			WithNumReqPerCycle(4).
+			WithNetworkPortBufferSize(4).
+			Build(fmt.Sprintf("%s.L2TLB[%d]", chiplet.name, i))
+
+		localPort := mux.AddLowSidePort(l2TLB)
+		mux.AddRoute(chiplet.L2TLBs[i].GetBottomPort(), localPort)
 
 		nocPort := chiplet.GlobalNoC.PlugInSMSideMultiPort(ep.NetworkPort, 64, 4)
 		for _, port := range mux.RoutingTable.GetAllSrcPorts() {
 			chiplet.GlobalNoC.AddRoute(port, ep.NetworkPort)
 		}
 		ep.PlugInNoCPort(nocPort, 64)
-
-		chiplet.GlobalNoC.AddRoute(chiplet.L2TLBs[i].GetTopPort(), ep.NetworkPort)
-		chiplet.GlobalNoC.PlugInSMSideMultiPort(chiplet.L2TLBs[i].GetBottomPort(), 64, 1)
 	}
 
 	for i, mux := range chiplet.l2Mux {
