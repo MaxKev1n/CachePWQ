@@ -23,6 +23,23 @@ def geometric_mean(df: pd.DataFrame) -> float:
     product = np.prod(data)
     return product ** (1 / len(data))
 
+def harmonic_mean(df: pd.DataFrame) -> float:
+    """
+    Calculate the harmonic mean of a list of numbers.
+
+    Args:
+        data (list): A list of numerical values.
+
+    Returns:
+        float: The harmonic mean of the input data.
+    """
+    data = df.tolist()
+    if not data or any(x <= 0 for x in data):
+        return 0.0
+
+    reciprocal_sum = sum(1 / x for x in data)
+    return len(data) / reciprocal_sum
+
 
 def collect_performance_data(
     benchmark_name: str,
@@ -79,8 +96,6 @@ def collect_performance_data(
 def plot_normalized_time(
     baseline: pd.DataFrame,
     Opt1: pd.DataFrame,
-    Opt2: pd.DataFrame,
-    Opt3: pd.DataFrame,
     out_dir: str,
 ) -> None:
     """
@@ -108,10 +123,20 @@ def plot_normalized_time(
     benchmarks = get_benchmarks()
 
     bar_width = 0.2
-    r1 = np.arange(len(benchmarks) + 1) * (4 * bar_width + 0.1)
+    r1 = np.arange(len(benchmarks) + 1) * (2 * bar_width + 0.1)
     r2 = [x + bar_width for x in r1]
-    r3 = [x + bar_width for x in r2]
-    r4 = [x + bar_width for x in r3]
+
+    # Normalize the time
+    Opt1["Data"] = [
+        (
+            baseline["Data"][i] / Opt1["Data"][i]
+            if Opt1["Data"][i] != 0 and baseline["Data"][i] != 0
+            else 0
+        )
+        for i in range(len(benchmarks))
+    ]
+
+    baseline["Data"] = [1.0 for _ in range(len(benchmarks))]
 
     # Geometric mean
     baseline = pd.concat(
@@ -120,7 +145,7 @@ def plot_normalized_time(
             pd.DataFrame(
                 {
                     "Benchmark": ["Geometric Mean"],
-                    "Data": [geometric_mean(baseline["Data"])],
+                    "Data": [harmonic_mean(baseline["Data"])],
                 }
             ),
         ],
@@ -132,70 +157,18 @@ def plot_normalized_time(
             pd.DataFrame(
                 {
                     "Benchmark": ["Geometric Mean"],
-                    "Data": [geometric_mean(Opt1["Data"])],
+                    "Data": [harmonic_mean(Opt1["Data"])],
                 }
             ),
         ],
         ignore_index=True,
     )
-    Opt2 = pd.concat(
-        [
-            Opt2,
-            pd.DataFrame(
-                {
-                    "Benchmark": ["Geometric Mean"],
-                    "Data": [geometric_mean(Opt2["Data"])],
-                }
-            ),
-        ],
-        ignore_index=True,
-    )
-    Opt3 = pd.concat(
-        [
-            Opt3,
-            pd.DataFrame(
-                {
-                    "Benchmark": ["Geometric Mean"],
-                    "Data": [geometric_mean(Opt3["Data"])],
-                }
-            ),
-        ],
-        ignore_index=True,
-    )
-
-    # Normalize the time
-    Opt1["Data"] = [
-        (
-            baseline["Data"][i] / Opt1["Data"][i]
-            if Opt1["Data"][i] != 0 and baseline["Data"][i] != 0
-            else 0
-        )
-        for i in range(len(benchmarks) + 1)
-    ]
-    Opt2["Data"] = [
-        (
-            baseline["Data"][i] / Opt2["Data"][i]
-            if Opt2["Data"][i] != 0 and baseline["Data"][i] != 0
-            else 0
-        )
-        for i in range(len(benchmarks) + 1)
-    ]
-    Opt3["Data"] = [
-        (
-            baseline["Data"][i] / Opt3["Data"][i]
-            if Opt3["Data"][i] != 0 and baseline["Data"][i] != 0
-            else 0
-        )
-        for i in range(len(benchmarks) + 1)
-    ]
-
-    baseline["Data"] = [1.0 for _ in range(len(benchmarks) + 1)]
 
     bar1 = plt.bar(
         r1,
         baseline["Data"],
         width=bar_width,
-        label="4 GB/s NoC",
+        label="40 Cycle Latency NoC",
         color="#fcfdf7",
         edgecolor="black",
         linewidth=1.5,
@@ -204,66 +177,47 @@ def plot_normalized_time(
         r2,
         Opt1["Data"],
         width=bar_width,
-        label="8 GB/s NoC",
+        label="15 Cycle Latency NoC",
         color="#cce5d8",
         edgecolor="black",
         linewidth=1.5,
     )
-    bar3 = plt.bar(
-        r3,
-        Opt2["Data"],
-        width=bar_width,
-        label="16 GB/s NoC",
-        color="#6ba78b",
-        edgecolor="black",
-        linewidth=1.5,
-    )
-    bar4 = plt.bar(
-        r4,
-        Opt3["Data"],
-        width=bar_width,
-        label="32 GB/s NoC",
-        color="#3f6b5c",
-        edgecolor="black",
-        linewidth=1.5,
-    )
 
-    for bar in bar1 + bar2 + bar3 + bar4:
+    for bar in bar1 + bar2:
         height = bar.get_height()
         x = bar.get_x() + bar.get_width() / 2
 
-        if height >= 4.5:
-            plt.annotate(
-                f"{height:.1f}",
-                xy=(x, 4.2),
-                xytext=(0, 20),  # 相对偏移 (0,15) 表示向上15pt
-                textcoords="offset points",
-                ha="center",
-                va="bottom",
-                fontsize=20,
-                fontweight="bold",
-                bbox=dict(
-                    facecolor="white",
-                    edgecolor="black",
-                    boxstyle="round,pad=0.1",
-                ),
-                # arrowprops=dict(arrowstyle="-", color="red", lw=2),
-            )
+        plt.annotate(
+            f"{height:.1f}",
+            xy=(x, height),
+            xytext=(0, 10),  # 相对偏移 (0,15) 表示向上15pt
+            textcoords="offset points",
+            ha="center",
+            va="bottom",
+            fontsize=20,
+            fontweight="bold",
+            bbox=dict(
+                facecolor="white",
+                edgecolor="black",
+                boxstyle="round,pad=0.1",
+            ),
+            # arrowprops=dict(arrowstyle="-", color="red", lw=2),
+        )
 
-    plt.xlim(min(r1) - bar_width, max(r4) + bar_width)
+    plt.xlim(min(r1) - bar_width, max(r2) + bar_width)
     plt.xticks(
-        [r + 1.5 * bar_width for r in r1],
-        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["GMean"],
+        [r + 0.5 * bar_width for r in r1],
+        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
         fontsize=24,
         fontweight="bold",
     )
     plt.ylabel("Speedup", fontsize=24, fontweight="bold")
     plt.yticks(
-        np.arange(0, 5.1, 1),
+        np.arange(0, 2.1, 0.5),
         fontsize=26,
         fontweight="bold",
     )
-    plt.ylim(0, 5)
+    plt.ylim(0, 2)
     plt.legend(
         loc="upper center",
         ncol=5,
@@ -285,7 +239,7 @@ def plot_normalized_time(
         spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
 
     output_file = os.path.join(
-        out_dir, "IndependentNoC_bandwidth_Performance_Comparison"
+        out_dir, "Hierarchical_Memory_Side_Latency_Normalized_Time"
     )
     plt.savefig(output_file + ".png")
     plt.savefig(output_file + ".pdf")
@@ -311,17 +265,11 @@ if __name__ == "__main__":
     Opt1 = pd.DataFrame(
         columns=["Benchmark", "Data"],
     )
-    Opt2 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
-    )
-    Opt3 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
-    )
 
     for benchmark in get_benchmarks():
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/MemorySide-4GB-BookSim",
+            input_dir="../../data/HierarchicalMemorySideBaseline",
         )
 
         baseline = pd.concat(
@@ -339,7 +287,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/MemorySide-8GB-BookSim",
+            input_dir="../../data/HierarchicalMemorySideLowLatency",
         )
 
         Opt1 = pd.concat(
@@ -355,46 +303,8 @@ if __name__ == "__main__":
             ignore_index=True,
         )
 
-        perf_data = collect_performance_data(
-            benchmark_name=benchmark,
-            input_dir="../../data/MemorySide-16GB-BookSim",
-        )
-
-        Opt2 = pd.concat(
-            [
-                Opt2,
-                pd.DataFrame(
-                    {
-                        "Benchmark": [benchmark],
-                        "Data": [perf_data],
-                    }
-                ),
-            ],
-            ignore_index=True,
-        )
-
-        perf_data = collect_performance_data(
-            benchmark_name=benchmark,
-            input_dir="../../data/MemorySide-2NoC-BookSim",
-        )
-
-        Opt3 = pd.concat(
-            [
-                Opt3,
-                pd.DataFrame(
-                    {
-                        "Benchmark": [benchmark],
-                        "Data": [perf_data],
-                    }
-                ),
-            ],
-            ignore_index=True,
-        )
-
     plot_normalized_time(
         baseline=baseline.copy(),
         Opt1=Opt1.copy(),
-        Opt2=Opt2.copy(),
-        Opt3=Opt3.copy(),
         out_dir=args.outDir,
     )
