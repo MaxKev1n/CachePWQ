@@ -193,7 +193,7 @@ func NewHybridBookSimNoC(
 ) *HybridBookSimNoC {
 	NoC := &HybridBookSimNoC{
 		inflightMsg: make(map[uint64]akita.Msg),
-		flitSize:    40,
+		flitSize:    64,
 	}
 
 	NoC.TickingComponent = akita.NewTickingComponent(name, engine, 2*akita.GHz, NoC)
@@ -380,8 +380,7 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 					panic("HybridBookSimNoC: invalid routeFn result (nil)")
 				}
 
-				numFlits := NoC.prepareFlits(msg)
-				if !NoC.wrapper.CanInject(srcNode, numFlits) {
+				if !NoC.wrapper.CanInject(srcNode, msg.Meta().TrafficBytes) {
 					continue
 				}
 
@@ -473,6 +472,7 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 
 func (NoC *HybridBookSimNoC) prepareFlits(msg akita.Msg) int {
 	bytes := msg.Meta().TrafficBytes
+	log.Printf("%s: %v\n", reflect.TypeOf(msg), bytes)
 	if bytes <= 0 {
 		panic(fmt.Sprintf("HybridBookSimNoC: %v with non-positive size", reflect.TypeOf(msg)))
 	}

@@ -283,9 +283,6 @@ void* InterconnectInterface::Get(unsigned deviceID)
     turn++;
     if (turn == _vcs) turn = 0;
   }
-  if (data) {
-    _round_robin_turn[subnet][icntID] = turn;
-  }
 
   return data;
 

@@ -205,7 +205,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishL1ToL2RoutingPath(chiplet *Chip
 			srcPorts,
 			l2.TopPort,
 			0x84001000+uint64(i)*0x1000,
-			1024,
+			512,
 		)
 	}
 }

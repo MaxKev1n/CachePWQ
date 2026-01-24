@@ -31,9 +31,9 @@ void booksim_cycle(booksim_net_t net) {
 }
 
 // injection API
-int booksim_can_inject(booksim_net_t net, int src, int n_flits) {
+int booksim_can_inject(booksim_net_t net, int src, int size_bytes) {
     auto wrap = reinterpret_cast<booksim_net_wrap*>(net);
-    return wrap->iface->HasBuffer(src, n_flits*wrap->iface->GetFlitSize());
+    return wrap->iface->HasBuffer(src, size_bytes);
 }
 
 int booksim_inject(booksim_net_t net, int src, int dst,

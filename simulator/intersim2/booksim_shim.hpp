@@ -18,7 +18,7 @@ extern "C" {
     void booksim_destroy(booksim_net_t net);
     void booksim_cycle(booksim_net_t net);
 
-    int booksim_can_inject(booksim_net_t net, int src, int n_flits);
+    int booksim_can_inject(booksim_net_t net, int src, int size_bytes);
     int booksim_inject(booksim_net_t net, int src, int dest,
                        unsigned long long pkt_id, int type, int size_bytes);
 

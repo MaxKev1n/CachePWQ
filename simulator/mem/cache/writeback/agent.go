@@ -40,7 +40,7 @@ func NewAgent(
 		a,
 	)
 	a.numReqs = numReqs
-	a.MaxOutstanding = 4096 // 修改 2: 设置最大在途请求数
+	a.MaxOutstanding = 512 // 修改 2: 设置最大在途请求数
 	a.ActiveReqs = make(map[string]akita.Msg)
 
 	for i := uint64(0); i < a.numReqs; i++ {
@@ -64,6 +64,8 @@ func NewAgent(
 func (a *Agent) Tick(now akita.VTimeInSec) bool {
 	madeProgress := false
 
+	numReqs := 0
+
 	// 修改 3: 只要没达到在途上限，就持续注入
 	// 模拟 GPU SM 持续发出请求直到管线填满
 	for len(a.ActiveReqs) < a.MaxOutstanding && len(a.MsgsToSend) > 0 {
@@ -71,6 +73,12 @@ func (a *Agent) Tick(now akita.VTimeInSec) bool {
 			madeProgress = true
 		} else {
 			break // 网络出口已满
+		}
+
+		numReqs++
+
+		if numReqs >= 4 {
+			break // 每个周期最多发出 16 个请求
 		}
 	}
 
