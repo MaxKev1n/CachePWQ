@@ -149,10 +149,6 @@ func (b *HierarchicalMemSideGPUBuilder) createGlobalNoC(chiplet *Chiplet) {
 	chiplet.GlobalNoC.MaxNumSMSidePort++
 	chiplet.GlobalNoC.MaxNumSMSideNode++
 
-	// monolithic L3TLB
-	chiplet.GlobalNoC.MaxNumMemSidePort++
-	chiplet.GlobalNoC.MaxNumMemSideNode++
-
 	log.Printf("%s has %d SM side components and %d Mem side components\n",
 		chiplet.GlobalNoC.Name(), chiplet.GlobalNoC.MaxNumSMSidePort, chiplet.GlobalNoC.MaxNumMemSidePort)
 
@@ -373,17 +369,13 @@ func (b *HierarchicalMemSideGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 
 		ep.PlugIn(chiplet.L2TLBs[i].GetTopPort(), 4)
 
-		l2TLB := multiplexer.MakeEndPointBuilder().
-			WithEngine(b.engine).
-			WithFreq(b.freq).
-			WithDevicePorts([]akita.Port{chiplet.L2TLBs[i].GetBottomPort()}).
-			WithFlitByteSize(32).
-			WithNumReqPerCycle(4).
-			WithNetworkPortBufferSize(4).
-			Build(fmt.Sprintf("%s.L2TLB[%d]", chiplet.name, i))
-
-		localPort := mux.AddLowSidePort(l2TLB)
-		mux.AddRoute(chiplet.L2TLBs[i].GetBottomPort(), localPort)
+		latencyGenerator := multiplexer.NewLatencyGenerator(
+			fmt.Sprintf("%s.GPCHighSideLatencyGenerator[%d]", chiplet.name, i),
+			b.engine,
+			b.freq,
+		)
+		latencyGenerator.PlugIn(b.l2TLBs[i].GetBottomPort(), 4)
+		latencyGenerator.Build()
 
 		nocPort := chiplet.GlobalNoC.PlugInSMSideMultiPort(ep.NetworkPort, 64, 4)
 		for _, port := range mux.RoutingTable.GetAllSrcPorts() {
@@ -411,7 +403,14 @@ func (b *HierarchicalMemSideGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 		ep.PlugInNoCPort(nocPort, 64)
 	}
 
-	chiplet.GlobalNoC.PlugInMemSideMultiPort(chiplet.L3TLBs[0].GetTopPort(), 64, 1)
+	latencyGenerator := multiplexer.NewLatencyGenerator(
+		fmt.Sprintf("%s.L3TLBLatencyGenerator", chiplet.name),
+		b.engine,
+		b.freq,
+	)
+	latencyGenerator.PlugIn(b.l3TLBs[0].GetTopPort(), 4)
+	latencyGenerator.Build()
+
 	chiplet.GlobalNoC.PlugInSMSideMultiPort(chiplet.MMU.TranslationPortPort(), 64, 1)
 }
 
