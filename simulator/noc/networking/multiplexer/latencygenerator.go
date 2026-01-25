@@ -108,23 +108,27 @@ func (g *LatencyGenerator) Forward(
 	buffer util.Buffer,
 	now akita.VTimeInSec,
 ) bool {
-	item := buffer.Peek()
-	if item == nil {
-		return false
+	madeProgress := false
+
+	for {
+		item := buffer.Peek()
+		if item == nil {
+			return madeProgress
+		}
+
+		msg := item.(latencyPipeItem).msg
+
+		msg.Meta().RecvTime = now
+
+		err := msg.Meta().Dst.Recv(msg)
+		if err != nil {
+			return madeProgress
+		}
+
+		buffer.Pop()
+
+		madeProgress = true
 	}
-
-	msg := item.(latencyPipeItem).msg
-
-	msg.Meta().RecvTime = now
-
-	err := msg.Meta().Dst.Recv(msg)
-	if err != nil {
-		return false
-	}
-
-	buffer.Pop()
-
-	return true
 }
 
 func (g *LatencyGenerator) Send(
