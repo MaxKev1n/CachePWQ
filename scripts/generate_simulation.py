@@ -4,13 +4,14 @@ import subprocess
 import argparse
 import datetime
 import shutil
+import sys
 from plot.benchmark import memory_overhead
 
 # ==========================================================
 # Configuration
 # ==========================================================
 
-CachePWQ_PATH = "/Users/chenzihang/codes/CachePWQ"
+CachePWQ_PATH = "/Users/chenzihang/Develop/CachePWQ"
 MGPU_PATH = f"{CachePWQ_PATH}/simulator/mgpusim/"
 BENCH_PATH = os.path.join(MGPU_PATH, "samples")
 CONFIG = "monolithic"
@@ -218,6 +219,7 @@ def generate_runners_on_desktop(yaml_path=None):
 
     print(f"[OK] Generated run scripts and moved binaries to {base_output_dir}")
 
+    return base_output_dir
 
 def generate_runners(yaml_path=None, eda_mode=False):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -322,6 +324,57 @@ def generate_runners(yaml_path=None, eda_mode=False):
 
     print(f"[OK] Generated run scripts and moved binaries to {base_output_dir}")
 
+    return base_output_dir
+
+def log_run_info(base_dir):
+    """Record commit id, datetime, and executed command to a log file."""
+    log_path = os.path.join(base_dir, "run_summary.log")
+
+    sim_dir = os.path.join(CachePWQ_PATH, "simulator")
+
+    with open(log_path, "a") as f:
+        f.write("==== Generate Summary ====\n")
+
+        # Current time
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        f.write(f"Time: {timestamp}\n")
+
+        # Git commit id
+        try:
+            commit_id = (
+                subprocess.check_output(["git", "rev-parse", "HEAD"])
+                .decode("utf-8")
+                .strip()
+            )
+        except subprocess.CalledProcessError:
+            commit_id = "N/A (not a git repository)"
+        f.write(f"Commit ID: {commit_id}\n")
+
+        # Python command
+        cmd_line = " ".join(sys.argv)
+        f.write(f"Command: {cmd_line}\n")
+
+        if os.path.isdir(sim_dir):
+            try:
+                diff_data = subprocess.check_output(
+                    ["git", "diff", "HEAD", "."], cwd=sim_dir
+                ).decode("utf-8").strip()
+
+                if diff_data:
+                    f.write("Status: DIRTY (Uncommitted changes found)\n")
+                    f.write("-" * 10 + " GIT DIFF " + "-" * 10 + "\n")
+                    f.write(diff_data + "\n")
+                    f.write("-" * 30 + "\n")
+                else:
+                    f.write("Status: CLEAN (No uncommitted changes)\n")
+
+            except subprocess.CalledProcessError:
+                f.write("Git Info: Error retrieving git status (Is it a git repo?)\n")
+        else:
+            f.write(f"Git Info: SIMULATOR_DIR not found at {sim_dir}\n")
+
+        f.write("\n")
+    print(f"[INFO] Run info written to {log_path}")
 
 # ==========================================================
 # Main Entry
@@ -340,12 +393,15 @@ def main():
     )
     args = parser.parse_args()
 
-    compile_all()
+    #compile_all()
+    base_output_dir = ""
 
     if args.eda:
-        generate_runners(yaml_path=args.use_yaml, eda_mode=args.eda)
+        base_output_dir = generate_runners(yaml_path=args.use_yaml, eda_mode=args.eda)
     else:
-        generate_runners_on_desktop(yaml_path=args.use_yaml)
+        base_output_dir = generate_runners_on_desktop(yaml_path=args.use_yaml)
+
+    log_run_info(base_output_dir)
 
 
 if __name__ == "__main__":
