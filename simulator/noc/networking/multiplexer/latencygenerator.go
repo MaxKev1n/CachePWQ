@@ -2,8 +2,10 @@ package multiplexer
 
 import (
 	"fmt"
+	"math/bits"
 
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/pipelining"
 )
@@ -46,8 +48,7 @@ func NewLatencyGenerator(
 }
 
 func (g *LatencyGenerator) Build() {
-	// Create 4 pipelines: 1 cycles, 10 cycles, 50 cycles, 100 cycles
-	for _, latency := range []int{1, 10, 50, 100} {
+	for _, latency := range []int{25, 50} {
 		buffer := util.NewBuffer(2 * g.width)
 		pipeline := pipelining.MakeBuilder().
 			WithPipelineWidth(g.width).
@@ -85,7 +86,17 @@ func (g *LatencyGenerator) Distribute(now akita.VTimeInSec) bool {
 			return madeProgress
 		}
 
-		pipeline := g.pipelines[0]
+		address := uint64(0)
+		switch msg := g.inputQueue[0].(type) {
+		case *device.TranslationReq:
+			address = msg.VAddr
+		case *device.TranslationRsp:
+			address = msg.Page.VAddr
+		default:
+			panic("unsupported message type")
+		}
+
+		pipeline := g.pipelines[getL3TLBSliceIndex(address)]
 
 		if !pipeline.CanAccept() {
 			return madeProgress
@@ -153,4 +164,10 @@ func (g *LatencyGenerator) Unplug(port akita.Port) {
 
 func (g *LatencyGenerator) NotifyAvailable(now akita.VTimeInSec, port akita.Port) {
 	g.TickLater(now)
+}
+
+func getL3TLBSliceIndex(va uint64) int {
+	relevantBits := (va >> 12) & 0x7FFFFFFFF
+
+	return bits.OnesCount64(relevantBits) % 2
 }
