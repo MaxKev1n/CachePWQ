@@ -550,11 +550,6 @@ func (b *Headroom1Builder) buildMMU(chiplet *Chiplet) {
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).
 		WithPageTable(b.pageTable).
-		WithNumChiplets(uint64(b.numChiplet)).
-		//		WithLowAddr(b.memAddrOffset).
-		//		WithTotMem(b.totalMem).
-		//		WithBankSize(b.memoryPerChiplet).
-		//		WithNumMemoryBankPerChiplet(uint64(b.numMemoryBankPerChiplet)).
 		WithMaxNumReqInFlight(8)
 
 	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.MMU", chiplet.name))

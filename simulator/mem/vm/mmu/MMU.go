@@ -7,8 +7,6 @@ import (
 	"reflect"
 	"strconv"
 
-	"strings"
-
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
@@ -18,8 +16,7 @@ import (
 )
 
 type PageWalker struct {
-	mmu *MMUImpl
-
+	queue         []*device.TranslationReq
 	inflightTrans *Transaction
 }
 
@@ -27,9 +24,7 @@ type PageWalker struct {
 type MMUImpl struct {
 	akita.TickingComponent
 
-	ToTop            akita.Port
-	ControlPort      akita.Port
-	CommandProcessor akita.Port
+	ToTop akita.Port
 
 	pageWalkCachePort akita.Port
 	PageWalkCache     akita.Port
@@ -37,90 +32,24 @@ type MMUImpl struct {
 
 	TranslationPort akita.Port
 	lowModuleFinder cache.LowModuleFinder
-	numChiplets     uint64
 
 	pageTable *device.PageTableImpl
-	//	latency             int
-	maxRequestsInFlight int
 
-	queue         []*device.TranslationReq
-	pageWalkers   []*PageWalker
+	pageWalkers   []PageWalker
+	nextPointer   int
 	queueCapacity int
-
-	remoteMemAccessesInCurEpoch  uint64
-	avgWalksEnqueuedInCurEpoch   float64
-	remoteMemAccessesInPrevEpoch uint64
-	avgWalksEnqueuedInPrevEpoch  float64
-	memAccessesInCurEpoch        uint64
-	memAccessesInPrevEpoch       uint64
-
-	numWalksDone        uint64
-	numWalksInCurEpoch  uint64
-	numWalksInPrevEpoch uint64
-	lastChecked         uint64
-	sendStateInfo       bool
-	// numWalksArrived          uint64
-	interleaving uint64
-
-	inflightMemRequests []*mem.ReadReq
-
-	maxMemRequestsInFlight int
-	memReqToTrans          map[string]*Transaction
 }
 
 // Tick defines how the MMU update state each cycle
 func (mmu *MMUImpl) Tick(now akita.VTimeInSec) bool {
 	madeProgress := false
 
-	madeProgress = mmu.performCtrlReq(now) || madeProgress
-
-	if mmu.GetNumActiveWalkers() > 0 {
-		tracing.StartTask("", "", now, mmu, "imbalance", "", nil)
-	}
-
 	madeProgress = mmu.topSender.Tick(now) || madeProgress
 	madeProgress = mmu.walkPageTable(now) || madeProgress
-	madeProgress = mmu.sendToMem(now) || madeProgress
 	madeProgress = mmu.parseFromPageWalkCache(now) || madeProgress
 	madeProgress = mmu.parseFromMem(now) || madeProgress
 	madeProgress = mmu.parseFromTop(now) || madeProgress
-	madeProgress = mmu.issueToWalkers(now) || madeProgress
-	return true
-	// return madeProgress
-}
 
-func (mmu *MMUImpl) performCtrlReq(now akita.VTimeInSec) bool {
-	item := mmu.ControlPort.Peek()
-	if item == nil {
-		return false
-	}
-	madeProgress := false
-	switch req := item.(type) {
-	case *akita.TLBIndexingSwitchMsg:
-		madeProgress = mmu.switchIndexing(now, req)
-	case *akita.SendStatsMsg:
-		madeProgress = mmu.sendCollectedStatsToCP(now)
-	default:
-		log.Panicf("cannot process request %s", reflect.TypeOf(req))
-	}
-	if madeProgress {
-		mmu.ControlPort.Retrieve(now)
-		return true
-	}
-	panic("something is wrong!")
-}
-
-func (mmu *MMUImpl) sendCollectedStatsToCP(now akita.VTimeInSec) bool {
-	req := akita.CollectedStatsMsgBuilder{}.
-		WithSendTime(now).
-		WithSrc(mmu.ControlPort).
-		WithDst(mmu.CommandProcessor).
-		Build()
-	err := mmu.ControlPort.Send(req)
-	if err != nil {
-		panic("could not send stats to CP!")
-	}
-	mmu.ControlPort.Retrieve(now)
 	return true
 }
 
@@ -135,157 +64,29 @@ func (mmu *MMUImpl) trace(now akita.VTimeInSec, what string) {
 }
 
 func (mmu *MMUImpl) walkPageTable(now akita.VTimeInSec) bool {
-	numActiveTransactions := 0
+	madeProgress := false
 
-	for _, walker := range mmu.pageWalkers {
-		walker.walkPageTable()
-
-		if walker.inflightTrans != nil {
-			numActiveTransactions++
+	for i := range mmu.pageWalkers {
+		inflightTrans := mmu.pageWalkers[i].inflightTrans
+		if inflightTrans == nil {
+			continue
 		}
 
-		walkDone := false
-		if walker.inflightTrans != nil &&
-			walker.inflightTrans.state == transactionFinished {
-			walkDone = true
-
-			walker.inflightTrans = nil
+		switch inflightTrans.state {
+		case newTransaction:
+			mmu.sendToPageWalkCache(now, inflightTrans)
+		case pageWalkCacheDone:
+			mmu.sendToMem(now, inflightTrans)
+		case memDone:
+			mmu.sendToMem(now, inflightTrans)
+		case transactionFinished:
+			mmu.pageWalkers[i].inflightTrans = nil
 		}
 
-		if walkDone {
-			mmu.numWalksDone++
-			if mmu.numWalksDone == 1200 && !mmu.sendStateInfo && mmu.interleaving == 12 {
-				mmu.numWalksDone = 0
-				mmu.lastChecked = 0
-				mmu.sendStateInfo = true
-			}
-			mmu.avgWalksEnqueuedInCurEpoch =
-				(mmu.avgWalksEnqueuedInCurEpoch*float64(mmu.numWalksInCurEpoch) +
-					float64(len(mmu.ToTop.(akita.MsgBufferContainer).GetBuffer()))) /
-					float64(mmu.numWalksInCurEpoch+1)
-
-			mmu.numWalksInCurEpoch++
-		}
+		madeProgress = true
 	}
 
-	tracing.StartTask(
-		"",
-		"",
-		now,
-		mmu,
-		"num_active_walkers",
-		fmt.Sprintf("%d", numActiveTransactions),
-		nil,
-	)
-
-	numTranslations := 0
-
-	for _, walker := range mmu.pageWalkers {
-		if walker.inflightTrans != nil {
-			numTranslations++
-		}
-	}
-
-	return numTranslations > 0 || len(mmu.queue) > 0
-}
-
-func (walker *PageWalker) walkPageTable() {
-	trans := walker.inflightTrans
-
-	if trans == nil {
-		return
-	}
-
-	if trans.state == pageWalkCacheDone || trans.state == memDone {
-		req := walker.generateMemReq(trans)
-
-		if len(walker.mmu.inflightMemRequests)+1 > walker.mmu.maxMemRequestsInFlight {
-			return
-		}
-
-		if _, ok := walker.mmu.memReqToTrans[req.ID]; ok {
-			panic("duplicate mem access ID detected!")
-		}
-
-		walker.inflightTrans.state = sentToMem
-		walker.mmu.memReqToTrans[req.ID] = trans
-		walker.mmu.inflightMemRequests = append(
-			walker.mmu.inflightMemRequests,
-			req,
-		)
-	}
-}
-
-func (walker *PageWalker) generateMemReq(
-	trans *Transaction,
-) *mem.ReadReq {
-	PPN := trans.PPN
-	PPNWithOffset := walker.mmu.pageTable.AddOffset(PPN, trans.vAddr)
-
-	trans.vAddr = walker.mmu.pageTable.NextLevel(trans.vAddr)
-
-	srcPort := walker.mmu.TranslationPort
-	readReqInfo := &mem.ReadReqInfo{ReturnAccessInfo: true}
-	dstPort := walker.mmu.lowModuleFinder.Find(PPNWithOffset)
-
-	readReq := mem.ReadReqBuilder{}.
-		WithSrc(srcPort).
-		WithDst(dstPort).
-		WithPID(trans.req.PID).
-		WithAddress(PPNWithOffset).
-		WithByteSize(8).
-		WithInfo(readReqInfo).
-		Build()
-
-	trans.memReq = readReq
-
-	return readReq
-}
-
-func (mmu *MMUImpl) sendMsgToCP(now akita.VTimeInSec) bool {
-	if !mmu.sendStateInfo {
-		panic("how are we sending a message to CP when we shouldn't be?!")
-	}
-	req := akita.SendStatsMsgBuilder{}.
-		WithSendTime(now).
-		WithSrc(mmu.ControlPort).
-		WithDst(mmu.CommandProcessor).
-		Build()
-
-	err := mmu.ControlPort.Send(req)
-	if err != nil {
-		fmt.Println(err)
-		// panic("oh no")
-	}
-	return true
-}
-
-func (mmu *MMUImpl) switchIndexing(now akita.VTimeInSec,
-	req *akita.TLBIndexingSwitchMsg) bool {
-
-	mmu.numWalksDone = 0
-	mmu.lastChecked = 0
-
-	mmu.avgWalksEnqueuedInCurEpoch = 0
-	mmu.avgWalksEnqueuedInPrevEpoch = 0
-
-	mmu.remoteMemAccessesInCurEpoch = 0
-	mmu.remoteMemAccessesInPrevEpoch = 0
-
-	mmu.memAccessesInCurEpoch = 0
-	mmu.memAccessesInPrevEpoch = 0
-
-	mmu.numWalksInCurEpoch = 0
-	mmu.numWalksInPrevEpoch = 0
-
-	if req.TLBInterleaving == 12 {
-		mmu.sendStateInfo = false
-	} else {
-		mmu.sendStateInfo = true
-	}
-	mmu.interleaving = req.TLBInterleaving
-	// fmt.Println(mmu.Name(), "flushing stats on switch", now, req.TLBInterleaving)
-	return true
+	return madeProgress
 }
 
 func (mmu *MMUImpl) parseFromPageWalkCache(now akita.VTimeInSec) bool {
@@ -321,82 +122,69 @@ func (mmu *MMUImpl) parseFromMem(now akita.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (mmu *MMUImpl) sendToMem(now akita.VTimeInSec) bool {
-	madeProgress := false
-
-	for len(mmu.inflightMemRequests) > 0 {
-		req := mmu.inflightMemRequests[0]
-		req.SendTime = now
-
-		err := mmu.TranslationPort.Send(req)
-		if err != nil {
-			break
-		}
-
-		tracing.StartTask(
-			req.Meta().ID+"MMU-mem-latency",
-			tracing.MsgIDAtReceiver(req, mmu),
-			now,
-			mmu,
-			"MMU_mem_latency",
-			reflect.TypeOf(req).String(),
-			req,
-		)
-
-		dstsplits := strings.Split(req.Dst.Name(), ".")
-		dstType := dstsplits[2]
-
-		trans, ok := mmu.memReqToTrans[req.ID]
-		if !ok {
-			log.Panic("could not find matching mem access ID!")
-		}
-
-		if dstType == "ChipRDMA" {
-			mmu.remoteMemAccessesInCurEpoch++
-			tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
-				now, mmu, "page_walk_req_remote")
-			if trans.level == 3 {
-				tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
-					now, mmu, "pw-level-3-remote-reqs")
-			}
-		} else {
-			tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
-				now, mmu, "page_walk_req_local")
-		}
-		mmu.memAccessesInCurEpoch++
-
-		trans.msgID = req.ID
-
-		if trans.req.PSV != nil {
-			req.PSV = trans.req.PSV
-			req.PSV.AddItem(
-				&req.PSV.PTW,
-				req,
-				trans.req,
-				nil,
-			)
-		}
-
-		// remove from pendingIssueToMem
-		mmu.inflightMemRequests = mmu.inflightMemRequests[1:]
-
-		madeProgress = true
+func (mmu *MMUImpl) sendToPageWalkCache(now akita.VTimeInSec, trans *Transaction) {
+	transState := trans.state
+	if transState != newTransaction {
+		panic("this state shouldn't be here!")
 	}
 
-	return madeProgress
+	readReq := mem.ReadReqBuilder{}.
+		WithSendTime(now).
+		WithSrc(mmu.pageWalkCachePort).
+		WithDst(mmu.PageWalkCache).
+		WithPID(trans.req.PID).
+		WithAddress(mmu.pageTable.AlignToPage(trans.req.VAddr)).
+		WithByteSize(8).
+		Build()
+
+	trans.msgID = readReq.ID
+	mmu.pageWalkCachePort.Send(readReq)
+	trans.state = sentToPageWalkCache
 }
 
-func (mmu *MMUImpl) handlePageWalkCacheResponse(
-	rsp *mem.DataReadyRsp,
-	now akita.VTimeInSec,
-) {
-	for _, walker := range mmu.pageWalkers {
-		trans := walker.inflightTrans
+func (mmu *MMUImpl) sendToMem(now akita.VTimeInSec, trans *Transaction) {
+	transState := trans.state
+	if transState != pageWalkCacheDone && transState != memDone {
+		panic("this state shouldn't be here!")
+	}
 
-		if trans == nil {
+	PPN := trans.PPN
+	PPNWithOffset := mmu.pageTable.AddOffset(PPN, trans.vAddr)
+
+	srcPort := mmu.TranslationPort
+	readReqInfo := &mem.ReadReqInfo{ReturnAccessInfo: true}
+	dstPort := mmu.lowModuleFinder.Find(PPNWithOffset)
+
+	readReq := mem.ReadReqBuilder{}.
+		WithSendTime(now).
+		WithSrc(srcPort).
+		WithDst(dstPort).
+		WithPID(trans.req.PID).
+		WithAddress(PPNWithOffset).
+		WithByteSize(8).
+		WithInfo(readReqInfo).
+		Build()
+
+	err := srcPort.Send(readReq)
+	if err != nil {
+		return
+	}
+
+	trans.vAddr = mmu.pageTable.NextLevel(trans.vAddr)
+	trans.msgID = readReq.ID
+	trans.state = sentToMem
+
+	tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
+		now, mmu, "page_walk_req_local")
+}
+
+func (mmu *MMUImpl) handlePageWalkCacheResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) {
+	for i := range mmu.pageWalkers {
+		if mmu.pageWalkers[i].inflightTrans == nil {
 			continue
 		}
 
+		trans := mmu.pageWalkers[i].inflightTrans
 		if trans.msgID == rsp.RespondTo {
 			if rsp.Data != nil {
 				rspData := binary.LittleEndian.Uint64(rsp.Data)
@@ -410,79 +198,59 @@ func (mmu *MMUImpl) handlePageWalkCacheResponse(
 
 			tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
 				now, mmu, "pwc-hit-level"+strconv.Itoa(trans.level))
-
-			return
 		}
 	}
-	panic("could not find matching page walk cache access ID!")
 }
 
 func (mmu *MMUImpl) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) {
-	for _, walker := range mmu.pageWalkers {
-		if walker.inflightTrans == nil {
+	for i := range mmu.pageWalkers {
+		if mmu.pageWalkers[i].inflightTrans == nil {
 			continue
 		}
 
-		if rsp.RespondTo != walker.inflightTrans.msgID {
-			continue
-		}
+		trans := mmu.pageWalkers[i].inflightTrans
+		if trans.msgID == rsp.RespondTo {
+			rspInfo := rsp.Info.(*mem.DataReadyRspInfo)
+			accessResult := rspInfo.AccessResult
+			src := rspInfo.Src
+			taskStep := fmt.Sprintf("chiplet-%s-level-%d-%s", getChipletNum(src), trans.level, getAccessResultString(accessResult))
 
-		trans := mmu.memReqToTrans[rsp.RespondTo]
-
-		rspInfo := rsp.Info.(*mem.DataReadyRspInfo)
-		accessResult := rspInfo.AccessResult
-		src := rspInfo.Src
-
-		taskStep := fmt.Sprintf(
-			"chiplet-%s-level-%d-%s",
-			getChipletNum(src),
-			trans.level,
-			getAccessResultString(accessResult),
-		)
-
-		tracing.AddTaskStep(
-			trans.msgID+"MMU-mem-latency",
-			now, mmu,
-			taskStep,
-		)
-		tracing.EndTask(
-			trans.msgID+"MMU-mem-latency",
-			now,
-			mmu,
-		)
-
-		if trans.req.PSV != nil {
-			trans.req.PSV.RemoveItem(
-				&trans.req.PSV.PTW,
-				trans.memReq,
-				nil,
+			tracing.AddTaskStep(
+				trans.msgID+"MMU-mem-latency",
+				now, mmu,
+				taskStep,
 			)
+			tracing.EndTask(
+				trans.msgID+"MMU-mem-latency",
+				now,
+				mmu,
+			)
+
+			trans.PPN = binary.LittleEndian.Uint64(rsp.Data)
+			trans.state = memDone
+			if trans.level+1 == 4 {
+				mmu.finalizeTransaction(now, i)
+			} else {
+				mmu.fillPageWalkCache(now, i)
+			}
+			trans.level++
 		}
-
-		trans.PPN = binary.LittleEndian.Uint64(rsp.Data)
-		trans.state = memDone
-		trans.memReq = nil
-		if trans.level+1 == 4 {
-			walker.finalizeTransaction(now, trans)
-		} else {
-			mmu.fillPageWalkCache(now, trans)
-		}
-
-		trans.level++
-
-		delete(mmu.memReqToTrans, rsp.RespondTo)
-
-		return
 	}
-	log.Panicf("could not find matching mem access ID %s!", rsp.RespondTo)
 }
 
 func (mmu *MMUImpl) fillPageWalkCache(
 	now akita.VTimeInSec,
-	trans *Transaction,
-) {
+	i int,
+) bool {
+	trans := mmu.pageWalkers[i].inflightTrans
+
+	if trans == nil {
+		panic("no inflight transaction")
+	}
+
 	level := uint64(trans.level)
 	data := uint64ToBytes(trans.PPN | level)
+
 	writeReq := mem.WriteReqBuilder{}.
 		WithSendTime(now).
 		WithSrc(mmu.pageWalkCachePort).
@@ -492,127 +260,129 @@ func (mmu *MMUImpl) fillPageWalkCache(
 		WithData(data).
 		Build()
 
+	err := mmu.pageWalkCachePort.Send(writeReq)
+	if err != nil {
+		return false
+	}
+
 	trans.msgID = writeReq.ID
-	mmu.pageWalkCachePort.Send(writeReq)
+
+	return true
 }
 
-func (walker *PageWalker) finalizeTransaction(
+func (mmu *MMUImpl) finalizeTransaction(
 	now akita.VTimeInSec,
-	trans *Transaction,
+	walkingIndex int,
 ) bool {
-	req := trans.req
-	page, found := walker.mmu.pageTable.Find(req.PID, req.VAddr)
+	req := mmu.pageWalkers[walkingIndex].inflightTrans.req
 
+	page, found := mmu.pageTable.Find(req.PID, req.VAddr)
 	if !found {
 		panic("page not found")
 	}
 
-	pAddr := trans.PPN
+	pAddr := mmu.pageWalkers[walkingIndex].inflightTrans.PPN
 	if pAddr != page.PAddr {
 		panic("addresses don't match!")
 	}
 
 	newPage := device.Page{PID: req.PID, VAddr: req.VAddr, PAddr: pAddr, Valid: true}
-	trans.page = newPage
-	trans.state = transactionFinished
 
-	return walker.mmu.doPageWalkHit(now, trans)
+	mmu.pageWalkers[walkingIndex].inflightTrans.page = newPage
+	mmu.pageWalkers[walkingIndex].inflightTrans.state = transactionFinished
+
+	return mmu.doPageWalkHit(now, walkingIndex)
 }
 
 func (mmu *MMUImpl) doPageWalkHit(
 	now akita.VTimeInSec,
-	trans *Transaction,
+	walkingIndex int,
 ) bool {
 	if !mmu.topSender.CanSend(1) {
 		return false
 	}
 
+	walking := mmu.pageWalkers[walkingIndex].inflightTrans
+
 	rsp := device.TranslationRspBuilder{}.
 		WithSendTime(now).
 		WithSrc(mmu.ToTop).
-		WithDst(trans.req.Src).
-		WithRspTo(trans.req.ID).
-		WithPage(trans.page).
+		WithDst(walking.req.Src).
+		WithRspTo(walking.req.ID).
+		WithPage(walking.page).
 		Build()
 
 	mmu.topSender.Send(rsp)
 
-	tracing.TraceReqComplete(trans.req, now, mmu)
+	tracing.TraceReqComplete(walking.req, now, mmu)
 
 	return true
 }
 
 func (mmu *MMUImpl) parseFromTop(now akita.VTimeInSec) bool {
-	req := mmu.ToTop.Peek()
-	if req == nil {
-		return false
-	}
+	madeProgress := false
 
-	if len(mmu.queue) >= mmu.queueCapacity {
-		return false
-	}
+	item := mmu.ToTop.Peek()
 
-	switch req := req.(type) {
-	case *device.TranslationReq:
-		mmu.queue = append(
-			mmu.queue,
-			req,
-		)
+	if item != nil {
+		req, ok := item.(*device.TranslationReq)
+		if !ok {
+			log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(req))
+		}
 
-		tracing.TraceReqReceive(req, now, mmu)
+		for i := 0; i < len(mmu.pageWalkers); i++ {
+			index := (mmu.nextPointer + i) % len(mmu.pageWalkers)
+			if len(mmu.pageWalkers[index].queue) < mmu.queueCapacity {
+				mmu.pageWalkers[index].queue = append(mmu.pageWalkers[index].queue, req)
+				mmu.nextPointer = (index + 1) % len(mmu.pageWalkers)
 
-		mmu.ToTop.Retrieve(now)
-	default:
-		log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(req))
-	}
+				mmu.ToTop.Retrieve(now)
 
-	return false
-}
+				tracing.StartTask(
+					tracing.MsgIDAtReceiver(req, mmu),
+					req.Meta().ID,
+					now,
+					mmu,
+					"req",
+					reflect.TypeOf(req).String(),
+					req,
+				)
 
-func (mmu *MMUImpl) issueToWalkers(now akita.VTimeInSec) bool {
-	if len(mmu.queue) == 0 {
-		return false
-	}
+				tracing.TraceReqReceive(req, now, mmu)
 
-	req := mmu.queue[0]
+				madeProgress = true
 
-	for _, walker := range mmu.pageWalkers {
-		if walker.inflightTrans == nil {
-			readReq := mem.ReadReqBuilder{}.
-				WithSendTime(now).
-				WithSrc(mmu.pageWalkCachePort).
-				WithDst(mmu.PageWalkCache).
-				WithPID(req.PID).
-				WithAddress(mmu.pageTable.AlignToPage(req.VAddr)).
-				WithByteSize(8).
-				Build()
-
-			err := mmu.pageWalkCachePort.Send(readReq)
-
-			if err != nil {
-				return false
+				break
 			}
+		}
+	}
+
+	for i := range mmu.pageWalkers {
+		walker := &mmu.pageWalkers[i]
+
+		if walker.inflightTrans == nil && len(walker.queue) > 0 {
+			req := walker.queue[0]
 
 			rearrangedVAddr := mmu.pageTable.Rearrange(req.VAddr)
 			root := mmu.pageTable.GetRoot(req.PID)
 			translationInPipeline := Transaction{
 				req:   req,
 				level: 0,
-				msgID: readReq.ID,
-				state: sentToPageWalkCache,
+				msgID: "invalid",
+				state: newTransaction,
 				vAddr: rearrangedVAddr,
 				PPN:   root,
 			}
 
 			walker.inflightTrans = &translationInPipeline
 
-			mmu.queue = mmu.queue[1:]
+			walker.queue = walker.queue[1:]
 
-			return true
+			madeProgress = true
 		}
 	}
 
-	return false
+	return madeProgress
 }
 
 // SetLowModuleFinder sets the table recording where to find an address.
@@ -620,39 +390,20 @@ func (mmu *MMUImpl) SetLowModuleFinder(lmf cache.LowModuleFinder) {
 	mmu.lowModuleFinder = lmf
 }
 
-// ToTop returns the port connecting to the top component.
+func (mmu *MMUImpl) GetNumActiveWalkers() int {
+	num := 0
+	for i := range mmu.pageWalkers {
+		if mmu.pageWalkers[i].inflightTrans != nil {
+			num++
+		}
+	}
+	return num
+}
+
 func (mmu *MMUImpl) ToTopPort() akita.Port {
 	return mmu.ToTop
 }
 
-// TranslationPort returns the port connecting to the lower memory system.
 func (mmu *MMUImpl) TranslationPortPort() akita.Port {
 	return mmu.TranslationPort
-}
-
-// CommandProcessorPort returns the port connecting to the command processor.
-func (mmu *MMUImpl) CommandProcessorPort() akita.Port {
-	return mmu.CommandProcessor
-}
-
-// ControlPortPort returns the port connecting to the control processor.
-func (mmu *MMUImpl) ControlPortPort() akita.Port {
-	return mmu.ControlPort
-}
-
-// SetCommandProcessorPort sets the command processor port.
-func (mmu *MMUImpl) SetCommandProcessorPort(port akita.Port) {
-	mmu.CommandProcessor = port
-}
-
-func (mmu *MMUImpl) GetNumActiveWalkers() int {
-	numActiveWalker := 0
-
-	for _, walker := range mmu.pageWalkers {
-		if walker.inflightTrans != nil {
-			numActiveWalker++
-		}
-	}
-
-	return numActiveWalker
 }

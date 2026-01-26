@@ -657,7 +657,7 @@ func (b *CommonBuilder) buildIdealMMU(chiplet *Chiplet) {
 	}
 
 	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.IdealMMU", chiplet.name))
-	chiplet.MMU.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
+
 	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
 }
 
@@ -680,7 +680,7 @@ func (b *CommonBuilder) buildCAPWQMMU(chiplet *Chiplet) {
 	}
 
 	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.CaPWQMMU", chiplet.name))
-	chiplet.MMU.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
+
 	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
 }
 
@@ -703,7 +703,7 @@ func (b *CommonBuilder) buildMPWMMU(chiplet *Chiplet) {
 	}
 
 	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.MPWMMU", chiplet.name))
-	chiplet.MMU.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
+
 	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
 }
 
@@ -713,7 +713,6 @@ func (b *CommonBuilder) buildDefaultMMU(chiplet *Chiplet) {
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).
 		WithPageTable(b.pageTable).
-		WithNumChiplets(uint64(b.numChiplet)).
 		WithMaxNumReqInFlight(16)
 
 	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
@@ -726,7 +725,7 @@ func (b *CommonBuilder) buildDefaultMMU(chiplet *Chiplet) {
 	}
 
 	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.BaselineMMU", chiplet.name))
-	chiplet.MMU.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
+
 	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
 }
 
@@ -820,7 +819,6 @@ func (b *CommonBuilder) connectCP() {
 	b.connectCPWithTLBs()
 	b.connectCPWithCaches()
 	b.connectCPWithRTUs()
-	b.connectCPWithMMUs()
 }
 
 func (b *CommonBuilder) connectMMUToL2(chiplet *Chiplet) {
@@ -931,14 +929,6 @@ func (b *CommonBuilder) connectCPWithRTUs() {
 		b.cp.RTUs = append(b.cp.RTUs, rtu.GetControlPort())
 		b.internalConn.PlugIn(rtu.GetControlPort(), 10)
 		rtu.SetCommandProcessor(b.cp.ToRTU)
-	}
-}
-
-func (b *CommonBuilder) connectCPWithMMUs() {
-	for _, chiplet := range b.chiplets {
-		mmu := chiplet.MMU
-		b.cp.MMUs = append(b.cp.MMUs, mmu.ControlPortPort())
-		b.internalConn.PlugIn(mmu.ControlPortPort(), 10)
 	}
 }
 

@@ -124,7 +124,6 @@ func (b *HierarchicalMemSideGPUBuilder) connectCP() {
 	b.connectCPWithCUs()
 	b.connectCPWithAddressTranslators()
 	b.connectCPWithCaches()
-	b.connectCPWithMMUs()
 	b.connectCPWithTLBs()
 }
 

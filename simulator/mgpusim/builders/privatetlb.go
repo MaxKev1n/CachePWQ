@@ -98,7 +98,6 @@ func (b *PrivateTLBGPUBuilder) connectCP() {
 	b.connectCPWithCUs()
 	b.connectCPWithAddressTranslators()
 	b.connectCPWithCaches()
-	b.connectCPWithMMUs()
 	b.connectCPWithTLBs()
 }
 

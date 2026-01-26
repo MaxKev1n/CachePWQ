@@ -184,7 +184,6 @@ func (b *MagicSMSideGPUBuilder) connectCP() {
 	b.connectCPWithCUs()
 	b.connectCPWithAddressTranslators()
 	b.connectCPWithCaches()
-	b.connectCPWithMMUs()
 	b.connectCPWithTLBs()
 }
 
@@ -402,7 +401,6 @@ func (b *MagicSMSideGPUBuilder) buildIdealMMU(chiplet *Chiplet) {
 
 	for i := 0; i < b.numL2TLBSlices; i++ {
 		mmu := mmuBuilder.Build(fmt.Sprintf("%s.IdealMMU[%d]", chiplet.name, i))
-		mmu.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
 		b.MMUs = append(b.MMUs, mmu)
 		b.gpu.MMUs = append(b.gpu.MMUs, mmu)
 	}
@@ -440,7 +438,6 @@ func (b *MagicSMSideGPUBuilder) buildCAPWQMMU(chiplet *Chiplet) {
 
 	for i := 0; i < b.numL2TLBSlices; i++ {
 		mmu := mmuBuilder.Build(fmt.Sprintf("%s.caPWQMMU[%d]", chiplet.name, i))
-		mmu.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
 		b.MMUs = append(b.MMUs, mmu)
 		b.gpu.MMUs = append(b.gpu.MMUs, mmu)
 	}
@@ -459,7 +456,6 @@ func (b *MagicSMSideGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).
 		WithPageTable(b.pageTable).
-		WithNumChiplets(uint64(b.numChiplet)).
 		WithMaxNumReqInFlight(maxNumReqInFlight / b.numL2TLBSlices)
 
 	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
@@ -478,7 +474,6 @@ func (b *MagicSMSideGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
 
 	for i := 0; i < b.numL2TLBSlices; i++ {
 		mmu := mmuBuilder.Build(fmt.Sprintf("%s.BaselineMMU[%d]", chiplet.name, i))
-		mmu.SetCommandProcessorPort(b.gpu.CommandProcessor.ToMMUs)
 		b.MMUs = append(b.MMUs, mmu)
 		b.gpu.MMUs = append(b.gpu.MMUs, mmu)
 	}
@@ -504,12 +499,5 @@ func (b *MagicSMSideGPUBuilder) connectMMUToL2(chiplet *Chiplet) {
 	for _, mmu := range b.MMUs {
 		mmu.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
 		chiplet.L1ToL2Connection.PlugIn(mmu.TranslationPortPort(), 64)
-	}
-}
-
-func (b *MagicSMSideGPUBuilder) connectCPWithMMUs() {
-	for _, mmu := range b.MMUs {
-		b.cp.MMUs = append(b.cp.MMUs, mmu.ControlPortPort())
-		b.internalConn.PlugIn(mmu.ControlPortPort(), 10)
 	}
 }
