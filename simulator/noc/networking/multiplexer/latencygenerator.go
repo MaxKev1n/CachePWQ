@@ -48,7 +48,7 @@ func NewLatencyGenerator(
 }
 
 func (g *LatencyGenerator) Build() {
-	for _, latency := range []int{25, 50} {
+	for _, latency := range []int{50, 100} {
 		buffer := util.NewBuffer(2 * g.width)
 		pipeline := pipelining.MakeBuilder().
 			WithPipelineWidth(g.width).
@@ -65,15 +65,14 @@ func (g *LatencyGenerator) Build() {
 func (g *LatencyGenerator) Tick(now akita.VTimeInSec) bool {
 	madeProgress := false
 
-	madeProgress = g.Distribute(now) || madeProgress
+	madeProgress = g.Forward(now) || madeProgress
 
 	for _, pipeline := range g.pipelines {
-		madeProgress = madeProgress || pipeline.Tick(now)
+		madeProgress = pipeline.Tick(now) || madeProgress
 	}
 
-	for _, buffer := range g.lookupBuffers {
-		madeProgress = g.Forward(buffer, now) || madeProgress
-	}
+	madeProgress = g.Distribute(now) || madeProgress
+	madeProgress = madeProgress || g.Busy()
 
 	return madeProgress
 }
@@ -116,29 +115,42 @@ func (g *LatencyGenerator) Distribute(now akita.VTimeInSec) bool {
 }
 
 func (g *LatencyGenerator) Forward(
-	buffer util.Buffer,
 	now akita.VTimeInSec,
 ) bool {
 	madeProgress := false
 
 	for {
-		item := buffer.Peek()
-		if item == nil {
-			return madeProgress
+		noIssues := 0
+		noRecvs := 0
+
+		for i := 0; i < len(g.lookupBuffers); i++ {
+			buffer := g.lookupBuffers[i]
+
+			item := buffer.Peek()
+			if item == nil {
+				noIssues++
+
+				continue
+			}
+
+			msg := item.(latencyPipeItem).msg
+			msg.Meta().RecvTime = now
+
+			err := msg.Meta().Dst.Recv(msg)
+			if err != nil {
+				noRecvs++
+
+				continue
+			}
+
+			buffer.Pop()
+
+			madeProgress = true
 		}
 
-		msg := item.(latencyPipeItem).msg
-
-		msg.Meta().RecvTime = now
-
-		err := msg.Meta().Dst.Recv(msg)
-		if err != nil {
+		if noIssues == len(g.lookupBuffers) || noRecvs == len(g.lookupBuffers) {
 			return madeProgress
 		}
-
-		buffer.Pop()
-
-		madeProgress = true
 	}
 }
 
@@ -150,6 +162,16 @@ func (g *LatencyGenerator) Send(
 	g.TickLater(msg.Meta().SendTime)
 
 	return nil
+}
+
+func (g *LatencyGenerator) Busy() bool {
+	for _, buffer := range g.lookupBuffers {
+		if buffer.Size() > 0 {
+			return true
+		}
+	}
+
+	return len(g.inputQueue) > 0
 }
 
 func (g *LatencyGenerator) PlugIn(port akita.Port, srcBufCap int) {
