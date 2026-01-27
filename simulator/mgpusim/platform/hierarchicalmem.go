@@ -7,20 +7,20 @@ import (
 	"gitlab.com/akita/mgpusim/driver"
 )
 
-// DistributedTLBGPUPlatformBuilder can build a platform that equips DisTLBGPU GPU.
+// HierarchicalMemSidePlatformBuilder can build a platform that equips DisTLBGPU GPU.
 type HierarchicalMemSidePlatformBuilder struct {
 	CommonPlatformBuilder
 }
 
-// Makebuilder creates a EmuBuilder with default parameters.
+// MakeHierarchicalMemSidePlatformBuilder creates a EmuBuilder with default parameters.
 func MakeHierarchicalMemSidePlatformBuilder() HierarchicalMemSidePlatformBuilder {
 	b := HierarchicalMemSidePlatformBuilder{
 		CommonPlatformBuilder{
 			numGPU:                   1,
 			log2PageSize:             uint64(12),
 			numCUPerShaderArray:      uint64(4),
-			numShaderArrayPerChiplet: uint64(32),
-			numMemoryBankPerChiplet:  uint64(32),
+			numShaderArrayPerChiplet: uint64(16),
+			numMemoryBankPerChiplet:  uint64(64),
 			numChiplets:              uint64(1),
 			totalMem:                 16 * mem.GB,
 			bankSize:                 256 * mem.MB,
