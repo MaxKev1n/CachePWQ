@@ -76,9 +76,9 @@ func (b MMUBuilder) Build(name string) MMU {
 	}
 
 	mmu.queueCapacity = 8
-	mmu.pageWalkers = make([]PageWalker, 0, b.maxNumReqInFlight)
+	mmu.pageWalkers = make([]PageWalkerImpl, 0, b.maxNumReqInFlight)
 	for i := 0; i < b.maxNumReqInFlight; i++ {
-		walker := PageWalker{
+		walker := PageWalkerImpl{
 			queue:         make([]*device.TranslationReq, 0),
 			inflightTrans: nil,
 		}

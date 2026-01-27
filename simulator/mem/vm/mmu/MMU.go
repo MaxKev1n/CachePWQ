@@ -15,7 +15,7 @@ import (
 	"gitlab.com/akita/util/tracing"
 )
 
-type PageWalker struct {
+type PageWalkerImpl struct {
 	queue         []*device.TranslationReq
 	inflightTrans *Transaction
 }
@@ -35,7 +35,7 @@ type MMUImpl struct {
 
 	pageTable *device.PageTableImpl
 
-	pageWalkers   []PageWalker
+	pageWalkers   []PageWalkerImpl
 	nextPointer   int
 	queueCapacity int
 }

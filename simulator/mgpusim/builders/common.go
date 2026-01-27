@@ -667,7 +667,6 @@ func (b *CommonBuilder) buildCAPWQMMU(chiplet *Chiplet) {
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).
 		WithPageTable(b.pageTable).
-		WithNumChiplets(uint64(b.numChiplet)).
 		WithMaxNumReqInFlight(16)
 
 	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {

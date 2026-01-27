@@ -1125,6 +1125,51 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithBookSimGlobal(*GlobalNoCConfigFile)
 		b.WithBookSimDir(*booksimDir)
 		r.Engine, r.GPUDriver = b.Build()
+	case "hierarchicalMemSideCaPWQ":
+		b := platform.MakeHierarchicalMemSideCaPWQPlatformBuilder()
+		if r.Parallel {
+			b.WithParallelEngine()
+		}
+
+		if *isaDebug {
+			b.WithISADebugging()
+		}
+
+		if *visTracing {
+			b.WithVisTracing()
+		}
+
+		if *memTracing {
+			b.WithMemTracing()
+		}
+
+		if *tlbTracing {
+			b.WithTLBTracing()
+		}
+
+		if *disableProgressBar {
+			b.WithoutProgressBar()
+		}
+
+		if *tipFlag {
+			b.UseTimeInstProfiling()
+		}
+
+		if *teaFlag {
+			if !*tipFlag {
+				log.Panic("TEA requires TIP to be enabled.")
+			}
+
+			b.UseTimeEventAnalysis()
+		}
+
+		b.WithAlg(*schedulingAlg)
+		b.WithSchedulingPartition(*schedulingPartition)
+		b.WithMemAllocatorType(*memAllocatorType)
+		b.WithLog2PageSize(*log2PageSize)
+		b.WithBookSimGlobal(*GlobalNoCConfigFile)
+		b.WithBookSimDir(*booksimDir)
+		r.Engine, r.GPUDriver = b.Build()
 	case "hierarchicalSMSide":
 		b := platform.MakeHierarchicalSMSidePlatformBuilder()
 		if r.Parallel {
