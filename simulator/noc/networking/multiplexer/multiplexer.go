@@ -2,6 +2,7 @@ package multiplexer
 
 import (
 	"fmt"
+	"log"
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/noc"
@@ -209,6 +210,7 @@ func (m *Multiplexer) assignDownlinkOutputBuf(f *noc.Flit) {
 
 	outPort, ok := m.RoutingTable.Find(finalDestination)
 	if !ok {
+		log.Printf("%s->%s\n", f.Msg.Meta().Src.Name(), finalDestination.Name())
 		panic(fmt.Sprintf("No route found for destination %s in Multiplexer %s",
 			finalDestination.Name(), m.Name()))
 	}
