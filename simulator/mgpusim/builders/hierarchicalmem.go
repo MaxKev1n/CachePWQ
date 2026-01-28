@@ -6,7 +6,10 @@ import (
 	"math"
 
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
+	"gitlab.com/akita/mem/cache/writeback"
+	"gitlab.com/akita/mem/idealmemcontroller"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/tip"
@@ -450,6 +453,59 @@ func (b *HierarchicalMemSideGPUBuilder) establishL2TLBToL3TLBRoutingPath(chiplet
 
 func (b *HierarchicalMemSideGPUBuilder) connectMMUToGlobalNoC(chiplet *Chiplet) {
 	chiplet.MMU.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
+}
+
+func (b *HierarchicalMemSideGPUBuilder) buildMemBanks(chiplet *Chiplet) {
+	l2Builder := writeback.MakeBuilder().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithLog2BlockSize(b.log2CacheLineSize).
+		WithWayAssociativity(16).
+		WithByteSize(128 * mem.KB).
+		WithNumMSHREntry(32).
+		WithNumReqPerCycle(4).
+		WithBankLatency(10).
+		WithPipelineLatency(80).
+		WithNumBanks(1)
+
+	for i := 0; i < b.numMemoryBankPerChiplet; i++ {
+		dramName := fmt.Sprintf("%s.DRAM_%d", chiplet.name, i)
+		dram := idealmemcontroller.New(
+			dramName, b.engine, 512*mem.MB)
+		addrConverter := idealmemcontroller.InterleavingConverter{
+			InterleavingSize:    1 << b.log2MemoryBankInterleavingSize,
+			TotalNumOfElements:  b.numChiplet * b.numMemoryBankPerChiplet,
+			CurrentElementIndex: b.numMemoryBankPerChiplet*int(chiplet.ChipletID) + i,
+			Offset:              b.memAddrOffset,
+			//  + b.memoryPerChiplet*chiplet.ChipletID,
+		}
+		// fmt.Println("^^^^^", b.numMemoryBankPerChiplet*int(chiplet.ChipletID)+i)
+		dram.AddressConverter = addrConverter
+
+		b.drams = append(b.drams, dram)
+		b.gpu.MemoryControllers = append(b.gpu.MemoryControllers, dram)
+		chiplet.DRAMs = append(chiplet.DRAMs, dram)
+
+		if b.enableVisTracing {
+			tracing.CollectTrace(dram, b.visTracer)
+		}
+
+		cacheName := fmt.Sprintf("%s.L2_%d", chiplet.name, i)
+		l2 := l2Builder.Build(cacheName)
+		b.l2Caches = append(b.l2Caches, l2)
+		b.gpu.L2Caches = append(b.gpu.L2Caches, l2)
+		chiplet.L2Caches = append(chiplet.L2Caches, l2)
+		l2.SetLowModuleFinder(&cache.SingleLowModuleFinder{
+			LowModule: dram.ToTop,
+		})
+		if b.enableVisTracing {
+			tracing.CollectTrace(l2, b.visTracer)
+		}
+
+		if b.useTimeEventAnalysis {
+			b.TipEngine.L2Caches = append(b.TipEngine.L2Caches, l2)
+		}
+	}
 }
 
 func (b *HierarchicalMemSideGPUBuilder) buildL2TLB(chiplet *Chiplet) {
