@@ -482,63 +482,42 @@ func (tlb *LatTLB) handleTranslationMiss(
 	req *device.TranslationReq,
 	setID int,
 ) bool {
-	if tlb.doPageWalk(req.VAddr) {
-
-		if tlb.mshr.IsFull() {
-			tracing.StartTask(tlb.Name()+"stall", "", now, tlb, "mshr_stall", "", nil)
-			tlb.stats.numMSHRStallsInCurEpoch++
-			return false
-		}
-
-		fetched := tlb.fetchBottom(now, req)
-		if fetched {
-			//tlb.TopPort.Retrieve(now)
-			tlb.lookupBuffer.Pop()
-			// if tlb.stats.sendStateInfo {
-			tlb.stats.numAccess += 1
-			tlb.stats.accessesInCurEpoch++
-			tlb.stats.numMiss += 1
-			tlb.stats.missesInCurEpoch++
-			// }
-			// tracing.TraceReqReceive(req, now, tlb)
-			tracing.AddTaskDetailedStep(
-				tracing.MsgIDAtReceiver(req, tlb),
-				now, tlb,
-				"tlb-miss",
-				req.VAddr,
-			)
-
-			// this is the missepoint
-			// add a set miss tracer here.
-			tracing.StartTask("", "", now, tlb, "set_miss_tracing",
-				strconv.FormatUint(uint64(setID), 10), nil)
-			if tlb.mode4Kstrip {
-				tlb.updateReverseSwitchStats(req.VAddr)
-			}
-
-			return true
-		}
-
+	if tlb.mshr.IsFull() {
+		tracing.StartTask(tlb.Name()+"stall", "", now, tlb, "mshr_stall", "", nil)
+		tlb.stats.numMSHRStallsInCurEpoch++
 		return false
-	} else {
-		req.Dst = tlb.ToRTU
-		req.PutInL2TLBBuffer = true
-		err := tlb.TopPort.Send(req)
-		if err != nil {
-			return false
-		}
-		tracing.AddTaskStep(
+	}
+
+	fetched := tlb.fetchBottom(now, req)
+	if fetched {
+		//tlb.TopPort.Retrieve(now)
+		tlb.lookupBuffer.Pop()
+		// if tlb.stats.sendStateInfo {
+		tlb.stats.numAccess += 1
+		tlb.stats.accessesInCurEpoch++
+		tlb.stats.numMiss += 1
+		tlb.stats.missesInCurEpoch++
+		// }
+		// tracing.TraceReqReceive(req, now, tlb)
+		tracing.AddTaskDetailedStep(
 			tracing.MsgIDAtReceiver(req, tlb),
 			now, tlb,
-			"tlb-redirect",
+			"tlb-miss",
+			req.VAddr,
 		)
-		tlb.lookupBuffer.Pop()
+
+		// this is the missepoint
+		// add a set miss tracer here.
+		tracing.StartTask("", "", now, tlb, "set_miss_tracing",
+			strconv.FormatUint(uint64(setID), 10), nil)
+		if tlb.mode4Kstrip {
+			tlb.updateReverseSwitchStats(req.VAddr)
+		}
+
 		return true
 	}
-}
 
-func (tlb *LatTLB) doPageWalk(vAddr uint64) (doWalk bool) {
-	return tlb.Name() == tlb.TLBFinder.Find(vAddr).Name()[0:21]
+	return false
 }
 
 // we are assuimg 4K pages here. TODO: FIX THIS!

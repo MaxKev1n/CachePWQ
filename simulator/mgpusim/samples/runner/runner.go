@@ -1125,6 +1125,51 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithBookSimGlobal(*GlobalNoCConfigFile)
 		b.WithBookSimDir(*booksimDir)
 		r.Engine, r.GPUDriver = b.Build()
+	case "hierarchicalMemSideDistTLB":
+		b := platform.MakeHierarchicalMemSideDistTLBPlatformBuilder()
+		if r.Parallel {
+			b.WithParallelEngine()
+		}
+
+		if *isaDebug {
+			b.WithISADebugging()
+		}
+
+		if *visTracing {
+			b.WithVisTracing()
+		}
+
+		if *memTracing {
+			b.WithMemTracing()
+		}
+
+		if *tlbTracing {
+			b.WithTLBTracing()
+		}
+
+		if *disableProgressBar {
+			b.WithoutProgressBar()
+		}
+
+		if *tipFlag {
+			b.UseTimeInstProfiling()
+		}
+
+		if *teaFlag {
+			if !*tipFlag {
+				log.Panic("TEA requires TIP to be enabled.")
+			}
+
+			b.UseTimeEventAnalysis()
+		}
+
+		b.WithAlg(*schedulingAlg)
+		b.WithSchedulingPartition(*schedulingPartition)
+		b.WithMemAllocatorType(*memAllocatorType)
+		b.WithLog2PageSize(*log2PageSize)
+		b.WithBookSimGlobal(*GlobalNoCConfigFile)
+		b.WithBookSimDir(*booksimDir)
+		r.Engine, r.GPUDriver = b.Build()
 	case "hierarchicalMemSideCaPWQ":
 		b := platform.MakeHierarchicalMemSideCaPWQPlatformBuilder()
 		if r.Parallel {
@@ -1914,6 +1959,17 @@ func (r *Runner) addTLBLatencyTracer() {
 			tracing.CollectTrace(tlb, tracer)
 		}
 
+		for _, tlb := range gpu.L2TLBs {
+			pipeline := tlb.GetPipeline()
+			tracer := tracing.NewAverageTimeTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "pipeline"
+				})
+			r.TLBPipelineLatencyTracers = append(r.TLBPipelineLatencyTracers,
+				TLBPipelineLatencyTracer{tracer: tracer, pipeline: pipeline})
+			tracing.CollectTrace(pipeline, tracer)
+		}
+
 		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageTimeTracer(
 				func(task tracing.Task) bool {
@@ -1998,7 +2054,7 @@ func (r *Runner) addTLBCoalesceTracer() {
 	}
 
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, tlb := range gpu.L3TLBs {
+		for _, tlb := range gpu.L2TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "buflen"
@@ -2006,7 +2062,7 @@ func (r *Runner) addTLBCoalesceTracer() {
 			r.L2TLBBufLenTracers = append(r.L2TLBBufLenTracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L3TLBs {
+		for _, tlb := range gpu.L2TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "bufleng0"
@@ -2014,7 +2070,7 @@ func (r *Runner) addTLBCoalesceTracer() {
 			r.L2TLBBufLenG0Tracers = append(r.L2TLBBufLenG0Tracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L3TLBs {
+		for _, tlb := range gpu.L2TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "coalesceaddr"
@@ -2022,7 +2078,7 @@ func (r *Runner) addTLBCoalesceTracer() {
 			r.L2TLBCoalesceAddrTracers = append(r.L2TLBCoalesceAddrTracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L3TLBs {
+		for _, tlb := range gpu.L2TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "coalesce"
@@ -2039,7 +2095,7 @@ func (r *Runner) addL2TLBMSHRLenTracer() {
 	}
 
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, tlb := range gpu.L3TLBs {
+		for _, tlb := range gpu.L2TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRlen"
@@ -2047,7 +2103,7 @@ func (r *Runner) addL2TLBMSHRLenTracer() {
 			r.L2TLBMSHRLenTracers = append(r.L2TLBMSHRLenTracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L3TLBs {
+		for _, tlb := range gpu.L2TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRlen_g0"
@@ -2055,7 +2111,7 @@ func (r *Runner) addL2TLBMSHRLenTracer() {
 			r.L2TLBMSHRLenG0Tracers = append(r.L2TLBMSHRLenG0Tracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L3TLBs {
+		for _, tlb := range gpu.L2TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRuniq"
@@ -2063,7 +2119,7 @@ func (r *Runner) addL2TLBMSHRLenTracer() {
 			r.L2TLBMSHRUniqLenTracers = append(r.L2TLBMSHRUniqLenTracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L3TLBs {
+		for _, tlb := range gpu.L2TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRuniq_g0"
@@ -2822,7 +2878,7 @@ func (r *Runner) addL3TLBQueueingImbalanceTracer() {
 		return
 	}
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, this := range gpu.L3TLBs {
+		for _, this := range gpu.L2TLBs {
 			tracer := tlb.NewGlobalTLBQueueingTracer(
 				func(task tracing.Task) bool {
 					if task.Kind == "imbalance" {
@@ -2831,7 +2887,7 @@ func (r *Runner) addL3TLBQueueingImbalanceTracer() {
 					return false
 				})
 			tracer.AddThis(this)
-			for _, tlb := range gpu.L3TLBs {
+			for _, tlb := range gpu.L2TLBs {
 				tracer.AddTLB(tlb)
 			}
 			tracing.CollectTrace(this, tracer)
@@ -2847,7 +2903,7 @@ func (r *Runner) addL3TLBEntropyTracer() {
 		return
 	}
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, this := range gpu.L3TLBs {
+		for _, this := range gpu.L2TLBs {
 			tracer := tlb.NewEntropyTracer(
 				func(task tracing.Task) bool {
 					if task.Kind == "entropy" {
@@ -2889,7 +2945,7 @@ func (r *Runner) addTLBSetMissTracer() {
 		return
 	}
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, tlb := range gpu.L3TLBs {
+		for _, tlb := range gpu.L2TLBs {
 			tracer := tracing.NewReferenceTracer(
 				func(task tracing.Task) bool {
 					if task.Kind == "set_miss_tracing" {
@@ -2910,7 +2966,7 @@ func (r *Runner) addTLBMSHRStallTracer() {
 		return
 	}
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, tlb := range gpu.L3TLBs {
+		for _, tlb := range gpu.L2TLBs {
 			tracer := tracing.NewTotalTimeTracer(
 				func(task tracing.Task) bool {
 					if task.Kind == "mshr_stall" {
@@ -2931,7 +2987,7 @@ func (r *Runner) addTLBReqStallTracer() {
 		return
 	}
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, tlb := range gpu.L3TLBs {
+		for _, tlb := range gpu.L2TLBs {
 			tracer := tracing.NewStepCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "stalled-l2-tlb-req-count" || task.Kind == "l2-tlb-req-count"
