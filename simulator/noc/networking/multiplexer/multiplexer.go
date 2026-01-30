@@ -2,7 +2,6 @@ package multiplexer
 
 import (
 	"fmt"
-	"log"
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/noc"
@@ -206,22 +205,14 @@ func (m *Multiplexer) sendOut(now akita.VTimeInSec) bool {
 }
 
 func (m *Multiplexer) assignDownlinkOutputBuf(f *noc.Flit) {
-	finalDestination := f.Msg.Meta().Dst
+	outPort := m.RoutingTable.Find(f.Msg.Meta().Dst)
 
-	outPort, ok := m.RoutingTable.Find(finalDestination)
-	if !ok {
-		log.Printf("%s->%s\n", f.Msg.Meta().Src.Name(), finalDestination.Name())
-		panic(fmt.Sprintf("No route found for destination %s in Multiplexer %s",
-			finalDestination.Name(), m.Name()))
-	}
-
-	complex, ok := m.portToComplexMapping[outPort]
-	if !ok {
+	if complex, ok := m.portToComplexMapping[outPort]; ok {
+		f.OutputBuf = complex.sendOutBuffer
+	} else {
 		panic(fmt.Sprintf("Port %s is not registered in Multiplexer %s",
 			outPort.Name(), m.Name()))
 	}
-
-	f.OutputBuf = complex.sendOutBuffer
 }
 
 // createPortComplex initializes the internal structures for a given port pair.

@@ -19,7 +19,7 @@ type Switch struct {
 	routingTable         RoutingTable
 	arbiter              arbitration.Arbiter
 	numReqPerCycle       int
-	latency              int
+	bufferSizeInNumFlit  int
 }
 
 // addPort adds a new port on the switch.
@@ -162,12 +162,13 @@ func (s *Switch) sendOut(now akita.VTimeInSec) (madeProgress bool) {
 }
 
 func (s *Switch) assignFlitOutputBuf(f *noc.Flit) {
-	outPort, ok := s.routingTable.Find(f.Msg.Meta().Dst)
-	if !ok {
-		panic("no route found for destination")
+	outPort := s.routingTable.Find(f.Msg.Meta().Dst)
+
+	if complex, ok := s.portToComplexMapping[outPort]; ok {
+		f.OutputBuf = complex.sendOutBuffer
+	} else {
+		panic(fmt.Sprintf("No port complex found for port %s", outPort.Name()))
 	}
-	complex := s.portToComplexMapping[outPort]
-	f.OutputBuf = complex.sendOutBuffer
 }
 
 func (s *Switch) setFlitNextHopDst(f *noc.Flit) {
@@ -176,16 +177,14 @@ func (s *Switch) setFlitNextHopDst(f *noc.Flit) {
 }
 
 func (s *Switch) createPortComplex(
-	numReqPerCycle int,
-	switchLatency int,
+	latency int,
 	local, remote akita.Port,
 ) portComplex {
-
-	sendOutBuf := util.NewBuffer(2 * numReqPerCycle)
-	forwardBuf := util.NewBuffer(2 * numReqPerCycle)
-	routeBuf := util.NewBuffer(2 * numReqPerCycle)
+	sendOutBuf := util.NewBuffer(2 * s.numReqPerCycle)
+	forwardBuf := util.NewBuffer(2 * s.numReqPerCycle)
+	routeBuf := util.NewBuffer(2 * s.numReqPerCycle)
 	pipeline := pipelining.NewPipeline(
-		local.Name()+"pipeline", switchLatency, 1, routeBuf)
+		local.Name()+"pipeline", latency, 1, routeBuf)
 
 	pc := portComplex{
 		localPort:     local,
@@ -202,17 +201,18 @@ func (s *Switch) createPortComplex(
 // ConnectEndPointToSwitch connects an EndPoint to a Switch.
 func (s *Switch) ConnectEndPointToSwitch(
 	ep *EndPoint,
+	latency int,
 	freq akita.Freq,
 ) (switchPort akita.Port) {
-	port := akita.NewLimitNumMsgPort(s, ep.flitAssemblingBufferSize,
+	port := akita.NewLimitNumMsgPort(s, s.bufferSizeInNumFlit,
 		fmt.Sprintf("%s.Port%d", s.Name(), len(s.ports)))
 	conn := akita.NewDirectConnection(
 		fmt.Sprintf("%s-%s", ep.NetworkPort.Name(), port.Name()),
 		s.Engine, freq)
-	conn.PlugIn(port, 2*ep.numReqPerCycle)
-	conn.PlugIn(ep.NetworkPort, 2*ep.numReqPerCycle)
+	conn.PlugIn(port, 2*s.numReqPerCycle)
+	conn.PlugIn(ep.NetworkPort, 2*s.numReqPerCycle)
 
-	s.addPort(s.createPortComplex(ep.numReqPerCycle, s.latency, port, ep.NetworkPort))
+	s.addPort(s.createPortComplex(latency, port, ep.NetworkPort))
 
 	ep.DefaultSwitchDst = port
 
@@ -221,12 +221,12 @@ func (s *Switch) ConnectEndPointToSwitch(
 
 // SwitchBuilder can build switches
 type SwitchBuilder struct {
-	engine         akita.Engine
-	freq           akita.Freq
-	routingTable   RoutingTable
-	arbiter        arbitration.Arbiter
-	numReqPerCycle int
-	latency        int
+	engine              akita.Engine
+	freq                akita.Freq
+	routingTable        RoutingTable
+	arbiter             arbitration.Arbiter
+	numReqPerCycle      int
+	bufferSizeInNumFlit int
 }
 
 // WithEngine sets the engine that the switch to build uses.
@@ -258,9 +258,11 @@ func (b SwitchBuilder) WithNumReqPerCycle(numReqPerCycle int) SwitchBuilder {
 	return b
 }
 
-// WithSwitchLatency sets the latency of the switch to be built.
-func (b SwitchBuilder) WithSwitchLatency(latency int) SwitchBuilder {
-	b.latency = latency
+// WithBufferSizeInNumFlit sets the buffer size at each port of the switch to be built.
+func (b SwitchBuilder) WithBufferSizeInNumFlit(
+	size int,
+) SwitchBuilder {
+	b.bufferSizeInNumFlit = size
 	return b
 }
 
@@ -277,7 +279,7 @@ func (b SwitchBuilder) Build(name string) *Switch {
 	s.arbiter = b.arbiter
 	s.portToComplexMapping = make(map[akita.Port]portComplex)
 	s.numReqPerCycle = b.numReqPerCycle
-	s.latency = b.latency
+	s.bufferSizeInNumFlit = b.bufferSizeInNumFlit
 	return s
 }
 
@@ -303,4 +305,28 @@ func (b SwitchBuilder) arbiterMustBeGiven() {
 	if b.arbiter == nil {
 		panic("switch requires an arbiter to operate")
 	}
+}
+
+// ConnectSwitches connect two switches together.
+func ConnectSwitches(
+	a, b *Switch,
+	latency int,
+	numReqPerCycle int,
+	engine akita.Engine,
+	freq akita.Freq,
+) (portOnA, portOnB akita.Port) {
+	portA := akita.NewLimitNumMsgPort(a, a.bufferSizeInNumFlit,
+		fmt.Sprintf("%s.Port%d", a.Name(), len(a.ports)))
+	portB := akita.NewLimitNumMsgPort(b, b.bufferSizeInNumFlit,
+		fmt.Sprintf("%s.Port%d", b.Name(), len(b.ports)))
+	conn := akita.NewDirectConnection(
+		fmt.Sprintf("%s-%s", portA.Name(), portB.Name()),
+		engine, freq)
+	conn.PlugIn(portA, 2*numReqPerCycle)
+	conn.PlugIn(portB, 2*numReqPerCycle)
+
+	a.addPort(a.createPortComplex(latency, portA, portB))
+	b.addPort(b.createPortComplex(latency, portB, portA))
+
+	return portA, portB
 }
