@@ -105,6 +105,8 @@ type LatTLB struct {
 	setsAccessed [256]uint64
 	mode4Kstrip  bool
 	hysterisis   bool
+
+	gpcID int
 }
 
 func (tlb *LatTLB) GetStalledPSV() *psv.PerfSignatureVec {
@@ -151,6 +153,10 @@ func (tlb *LatTLB) GetLowModuleFinder() cache.LowModuleFinder {
 
 func (tlb *LatTLB) SetCommandProcessor(cp akita.Port) {
 	tlb.CommandProcessor = cp
+}
+
+func (tlb *LatTLB) SetGPCID(id int) {
+	tlb.gpcID = id
 }
 
 // Reset sets all the entries int he LatTLB to be invalid
@@ -246,6 +252,7 @@ func (tlb *LatTLB) respondMSHREntry(now akita.VTimeInSec) bool {
 		WithPage(page).
 		WithAccessResult(accessResult).
 		WithSrcL2TLB(tlb.Name()).
+		WithGPCID(tlb.gpcID).
 		Build()
 	err := tlb.TopPort.Send(rspToTop)
 	if err != nil {
@@ -256,7 +263,7 @@ func (tlb *LatTLB) respondMSHREntry(now akita.VTimeInSec) bool {
 	if len(mshrEntry.Requests) == 0 {
 		tlb.respondingMSHREntry = nil
 	}
-	tracing.StartTracingNetworkReq(rspToTop, now, tlb, req)
+	tracing.StartTracingNetworkTLBReq(rspToTop, now, tlb, req, tlb.gpcID)
 	tracing.TraceReqComplete(req, now, tlb)
 	return true
 }
@@ -347,7 +354,7 @@ func (tlb *LatTLB) parseFromTop(now akita.VTimeInSec) bool {
 		tlb.pipeline.Accept(now, pipelineItem)
 		tlb.TopPort.Retrieve(now)
 		tracing.TraceReqReceive(req, now, tlb)
-		tracing.StopTracingNetworkReq(req, now, tlb)
+		tracing.StopTracingNetworkTLBReq(req, now, tlb, tlb.gpcID)
 		tracing.StartTask(strconv.FormatUint(req.VAddr, 10), "", now, tlb, "entropy", "", nil)
 		return true
 	}
@@ -557,11 +564,12 @@ func (tlb *LatTLB) sendRspToTop(
 		WithPage(page).
 		WithAccessResult(device.TLBHit).
 		WithSrcL2TLB(tlb.Name()).
+		WithGPCID(tlb.gpcID).
 		Build()
 
 	err := tlb.TopPort.Send(rsp)
 	if err == nil {
-		tracing.StartTracingNetworkReq(rsp, now, tlb, req)
+		tracing.StartTracingNetworkTLBReq(rsp, now, tlb, req, tlb.gpcID)
 		return true
 	}
 	return false

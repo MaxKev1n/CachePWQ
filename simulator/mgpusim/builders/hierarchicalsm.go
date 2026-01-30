@@ -391,6 +391,7 @@ func (b *HierarchicalSMSideGPUBuilder) establishL1TLBToL2TLBRoutingPath(chiplet 
 	for i := 0; i < numGPCs; i++ {
 		for j := i * numCUsPerGPC; j < (i+1)*numCUsPerGPC; j++ {
 			chiplet.L1VTLBs[j].SetLowModuleFinder(interleavedLowModuleFinder)
+			chiplet.L1VTLBs[j].SetGPCID(i)
 		}
 
 		numSAPerGPC := b.numShaderArrayPerChiplet / numGPCs
@@ -401,14 +402,17 @@ func (b *HierarchicalSMSideGPUBuilder) establishL1TLBToL2TLBRoutingPath(chiplet 
 		for j := i * numSAPerGPC; j < (i+1)*numSAPerGPC; j++ {
 			chiplet.L1STLBs[j].SetLowModuleFinder(interleavedLowModuleFinder)
 			chiplet.L1ITLBs[j].SetLowModuleFinder(interleavedLowModuleFinder)
+			chiplet.L1STLBs[j].SetGPCID(i)
+			chiplet.L1ITLBs[j].SetGPCID(i)
 		}
 	}
 
-	for _, l2tlb := range chiplet.L2TLBs {
+	for i, l2tlb := range chiplet.L2TLBs {
 		interleavedLowModuleFinder.LowModules = append(interleavedLowModuleFinder.LowModules,
 			l2tlb.GetTopPort())
 
 		l2tlb.SetTLBFinder(interleavedLowModuleFinder)
+		l2tlb.SetGPCID(i)
 	}
 }
 

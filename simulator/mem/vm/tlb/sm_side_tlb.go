@@ -62,6 +62,8 @@ type SMSideTLB struct {
 	hysterisis   bool
 
 	ID int
+
+	gpcID int
 }
 
 func (tlb *SMSideTLB) GetLowModuleFinder() cache.LowModuleFinder {
@@ -105,6 +107,10 @@ func (tlb *SMSideTLB) SetLowModuleFinder(lmf cache.LowModuleFinder) {
 
 func (tlb *SMSideTLB) SetCommandProcessor(cp akita.Port) {
 	tlb.CommandProcessor = cp
+}
+
+func (tlb *SMSideTLB) SetGPCID(id int) {
+	tlb.gpcID = id
 }
 
 // Reset sets all the entries int he SMSideTLB to be invalid

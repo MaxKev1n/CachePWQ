@@ -33,6 +33,8 @@ type IdealLatTLB struct {
 	isPaused bool
 
 	CommandProcessor akita.Port
+
+	gpcID int
 }
 
 // GetPipeline gets the pipeline in the LatTLB
@@ -69,6 +71,10 @@ func (tlb *IdealLatTLB) GetNumWays() int {
 
 func (tlb *IdealLatTLB) GetLowModuleFinder() cache.LowModuleFinder {
 	panic("not implemented")
+}
+
+func (tlb *IdealLatTLB) SetGPCID(id int) {
+	tlb.gpcID = id
 }
 
 // Tick defines how LatTLB update states at each cycle

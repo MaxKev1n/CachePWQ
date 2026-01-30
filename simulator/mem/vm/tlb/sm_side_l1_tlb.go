@@ -45,6 +45,8 @@ type SMSideL1TLB struct {
 	PartitionIndex uint64
 
 	RRPtr bool
+
+	gpcID int
 }
 
 // GetNumSets gets the number of sets in the TLB
@@ -95,6 +97,10 @@ func (tlb *SMSideL1TLB) SetCommandProcessor(port akita.Port) {
 
 func (tlb *SMSideL1TLB) SetTLBFinder(lmf cache.LowModuleFinder) {
 	panic("not implemented")
+}
+
+func (tlb *SMSideL1TLB) SetGPCID(gpcID int) {
+	tlb.gpcID = gpcID
 }
 
 // Reset sets all the entries int he SMSideL1TLB to be invalid

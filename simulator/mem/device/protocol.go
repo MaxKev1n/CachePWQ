@@ -29,6 +29,7 @@ type TranslationReq struct {
 	TLBID       int
 	PartitionID int
 	PSV         *psv.PerfSignatureVec
+	GPCID       int
 }
 
 // Meta returns the meta data associated with the message.
@@ -45,6 +46,7 @@ type TranslationReqBuilder struct {
 	deviceID    uint64
 	tlbID       int
 	partitionID int
+	GPCID       int
 }
 
 // WithSendTime sets the send time of the request to build.:w
@@ -97,6 +99,12 @@ func (b TranslationReqBuilder) WithPartitionID(partitionID int) TranslationReqBu
 	return b
 }
 
+// WithGPCID sets the GPC ID of the request to build.
+func (b TranslationReqBuilder) WithGPCID(gpcID int) TranslationReqBuilder {
+	b.GPCID = gpcID
+	return b
+}
+
 // Build creats a new TranslationReq
 func (b TranslationReqBuilder) Build() *TranslationReq {
 	r := &TranslationReq{}
@@ -110,6 +118,7 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 	r.DeviceID = b.deviceID
 	r.TLBID = b.tlbID
 	r.PartitionID = b.partitionID
+	r.GPCID = b.GPCID
 	return r
 }
 
@@ -121,6 +130,7 @@ type TranslationRsp struct {
 	Page      Page
 	HitOrMiss AccessResult
 	SrcL2TLB  string
+	GPCID     int
 }
 
 // Meta returns the meta data associated with the message.
@@ -136,6 +146,7 @@ type TranslationRspBuilder struct {
 	page      Page
 	hitOrMiss AccessResult
 	srcL2TLB  string
+	GPCID     int
 }
 
 // WithSendTime sets the send time of the message to build.
@@ -182,6 +193,12 @@ func (b TranslationRspBuilder) WithSrcL2TLB(srcL2TLB string) TranslationRspBuild
 	return b
 }
 
+// WithGPCID sets the GPC ID of the respond to build.
+func (b TranslationRspBuilder) WithGPCID(gpcID int) TranslationRspBuilder {
+	b.GPCID = gpcID
+	return b
+}
+
 // Build creats a new TranslationRsp
 func (b TranslationRspBuilder) Build() *TranslationRsp {
 	r := &TranslationRsp{}
@@ -194,6 +211,7 @@ func (b TranslationRspBuilder) Build() *TranslationRsp {
 	r.Page = b.page
 	r.HitOrMiss = b.hitOrMiss
 	r.SrcL2TLB = b.srcL2TLB
+	r.GPCID = b.GPCID
 	return r
 }
 

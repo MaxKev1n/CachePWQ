@@ -1,6 +1,7 @@
 package tracing
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -75,18 +76,16 @@ func getComponent(fullCompName string) (comp string) {
 func getTaskType(src Task, dst Task) (taskType string) {
 	srcComponent := getComponent(src.Where)
 	dstComponent := getComponent(dst.Where)
-	taskType = srcComponent + "-" + dstComponent
-	if srcComponent == dstComponent {
-		if srcComponent == "RTU" {
-			if src.What == "*device.TranslationReq" {
-				taskType += "-translation-request"
-			} else if src.What == "*device.TranslationRsp" {
-				taskType += "-translation-response"
-			}
-		} else {
-			panic("equal component names not RTU!")
-		}
+
+	if strings.Contains(srcComponent, "TLB") && strings.Contains(dstComponent, "TLB") {
+		srcComponent = "GPC" + fmt.Sprintf("%d", src.Detail.(int)) + "_" + srcComponent
+		dstComponent = "GPC" + fmt.Sprintf("%d", dst.Detail.(int)) + "_" + dstComponent
+
+		taskType = srcComponent + "-" + dstComponent
+	} else {
+		taskType = srcComponent + "-" + dstComponent
 	}
+
 	return
 }
 

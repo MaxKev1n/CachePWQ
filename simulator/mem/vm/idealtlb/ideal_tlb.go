@@ -20,6 +20,8 @@ type IdealTLB struct {
 	numReqPerCycle int
 
 	isPaused bool
+
+	gpcID int
 }
 
 func (tlb *IdealTLB) GetNumSets() int {
@@ -75,6 +77,10 @@ func (tlb *IdealTLB) SetCommandProcessor(port akita.Port) {
 func (tlb *IdealTLB) SetTLBFinder(finder cache.LowModuleFinder) {
 	//TODO implement me
 	panic("implement me")
+}
+
+func (tlb *IdealTLB) SetGPCID(id int) {
+	tlb.gpcID = id
 }
 
 // Tick defines how TLB update states at each cycle

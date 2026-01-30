@@ -120,6 +120,28 @@ func EndTask(
 	domain.InvokeHook(ctx)
 }
 
+// EndDetailedTask notifies the hooks about the end of a task.
+func EndDetailedTask(
+	id string,
+	now akita.VTimeInSec,
+	domain NamedHookable,
+	detail interface{},
+) {
+	task := Task{
+		ID:      id,
+		EndTime: now,
+		Where:   domain.Name(),
+		Detail:  detail,
+	}
+	ctx := akita.HookCtx{
+		Now:    now,
+		Domain: domain,
+		Item:   task,
+		Pos:    HookPosTaskEnd,
+	}
+	domain.InvokeHook(ctx)
+}
+
 // MsgIDAtReceiver generates a standard ID for the message task at the
 // message receiver.
 func MsgIDAtReceiver(msg akita.Msg, domain NamedHookable) string {
@@ -158,12 +180,34 @@ func StartTracingNetworkReq(
 		reflect.TypeOf(req).String(), req)
 }
 
+func StartTracingNetworkTLBReq(
+	req akita.Msg,
+	now akita.VTimeInSec,
+	domain NamedHookable,
+	parent akita.Msg,
+	gpcID int,
+) {
+	StartTask(req.Meta().ID+"-trace-trans-req",
+		MsgIDAtReceiver(parent, domain),
+		now, domain, "trace-trans-req",
+		reflect.TypeOf(req).String(), gpcID)
+}
+
 func StopTracingNetworkReq(
 	req akita.Msg,
 	now akita.VTimeInSec,
 	domain NamedHookable,
 ) {
 	EndTask(req.Meta().ID+"-trace-trans-req", now, domain)
+}
+
+func StopTracingNetworkTLBReq(
+	req akita.Msg,
+	now akita.VTimeInSec,
+	domain NamedHookable,
+	gpcID int,
+) {
+	EndDetailedTask(req.Meta().ID+"-trace-trans-req", now, domain, gpcID)
 }
 
 func StartTracingNetwork(

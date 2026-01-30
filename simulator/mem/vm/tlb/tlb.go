@@ -30,6 +30,7 @@ type TLB interface {
 	GetFrontQueueLength() int
 	SetCommandProcessor(akita.Port)
 	SetTLBFinder(cache.LowModuleFinder)
+	SetGPCID(gpcID int)
 }
 
 // A TLB is a cache that maintains some page information.
@@ -60,6 +61,8 @@ type TLBImpl struct {
 	isPaused bool
 
 	GlobalIndex int
+
+	gpcID int
 }
 
 func (tlb *TLBImpl) GetStalledPSV() *psv.PerfSignatureVec {
@@ -110,6 +113,10 @@ func (tlb *TLBImpl) SetCommandProcessor(port akita.Port) {
 
 func (tlb *TLBImpl) SetTLBFinder(lmf cache.LowModuleFinder) {
 	panic("not implemented")
+}
+
+func (tlb *TLBImpl) SetGPCID(id int) {
+	tlb.gpcID = id
 }
 
 // Reset sets all the entries int he TLB to be invalid
@@ -362,6 +369,7 @@ func (tlb *TLBImpl) fetchBottom(now akita.VTimeInSec, req *device.TranslationReq
 		WithVAddr(req.VAddr).
 		WithDeviceID(req.DeviceID).
 		WithTLBID(tlb.GlobalIndex).
+		WithGPCID(tlb.gpcID).
 		Build()
 	err := tlb.BottomPort.Send(fetchBottom)
 	if err != nil {
@@ -391,7 +399,7 @@ func (tlb *TLBImpl) fetchBottom(now akita.VTimeInSec, req *device.TranslationReq
 		reflect.TypeOf(req).String(),
 		req,
 	)
-	tracing.StartTracingNetworkReq(fetchBottom, now, tlb, req)
+	tracing.StartTracingNetworkTLBReq(fetchBottom, now, tlb, req, tlb.gpcID)
 	// tracing.TraceReqReceive(req, now, tlb)
 	tracing.TraceReqInitiate(fetchBottom, now, tlb,
 		tracing.MsgIDAtReceiver(req, tlb))
@@ -473,7 +481,7 @@ func (tlb *TLBImpl) parseBottom(now akita.VTimeInSec) bool {
 	tlb.mshr.Remove(rsp.Page.PID, rsp.Page.VAddr)
 	tlb.BottomPort.Retrieve(now)
 
-	tracing.StopTracingNetworkReq(rsp, now, tlb)
+	tracing.StopTracingNetworkTLBReq(rsp, now, tlb, tlb.gpcID)
 	tracing.TraceReqFinalize(mshrEntry.reqToBottom, now, tlb)
 
 	tracing.EndTask(
