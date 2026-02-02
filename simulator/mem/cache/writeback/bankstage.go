@@ -105,6 +105,7 @@ func (s *bankStage) finalizeReadHit(now akita.VTimeInSec) bool {
 		WithSrc(s.cache.TopPort).
 		WithDst(read.Src).
 		WithRspTo(read.ID).
+		WithPID(read.PID).
 		WithData(data)
 
 	if read.Info != nil {
@@ -113,7 +114,13 @@ func (s *bankStage) finalizeReadHit(now akita.VTimeInSec) bool {
 			if readReqInfo.AccessResult != mem.ReadHit {
 				panic("oh no")
 			}
-			dataReadyRspBuilder = dataReadyRspBuilder.WithInfo(&mem.DataReadyRspInfo{AccessResult: mem.ReadHit, Src: s.cache.Name()})
+			dataReadyRspBuilder = dataReadyRspBuilder.WithInfo(
+				&mem.DataReadyRspInfo{
+					AccessResult: mem.ReadHit,
+					Address:      read.Address,
+					Src:          s.cache.Name(),
+				},
+			)
 		}
 	}
 

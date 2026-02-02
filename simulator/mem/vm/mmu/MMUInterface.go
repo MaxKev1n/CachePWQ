@@ -8,6 +8,7 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/device"
+	"gitlab.com/akita/util/ca"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -17,6 +18,7 @@ type MMU interface {
 	GetNumActiveWalkers() int
 	ToTopPort() akita.Port
 	TranslationPortPort() akita.Port
+	ToCachePort() akita.Port
 	SetLowModuleFinder(lmf cache.LowModuleFinder)
 }
 
@@ -27,24 +29,27 @@ const (
 	sentToPageWalkCache
 	pageWalkCacheDone
 	sentToMem
+	sentWRToL1
 	memDone
+	sentRDToL1
+	l1Done
 	transactionFinished
 )
 
 type Transaction struct {
 	akita.MsgMeta
 
-	req    *device.TranslationReq
-	memReq *mem.ReadReq
-	page   device.Page
-	//cycleLeft int
-	//migration *device.PageMigrationReqToDriver
+	req               *device.TranslationReq
+	memReq            *mem.ReadReq
+	page              device.Page
 	level             int
 	msgID             string
 	state             transactionState
 	PPN               uint64
+	LastPPNWithOffset uint64
 	vAddr             uint64
 	remoteMemAccesses int
+	pid               ca.PID
 }
 
 func (r *Transaction) TaskID() string {

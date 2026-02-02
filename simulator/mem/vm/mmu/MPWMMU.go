@@ -716,6 +716,11 @@ func (mmu *MPWMMU) TranslationPortPort() akita.Port {
 	return mmu.TranslationPort
 }
 
+// ToCachePort returns the port connecting to the cache.
+func (mmu *MPWMMU) ToCachePort() akita.Port {
+	panic("MPWMMU does not have a cache port")
+}
+
 // CommandProcessorPort returns the port connecting to the command processor.
 func (mmu *MPWMMU) CommandProcessorPort() akita.Port {
 	return mmu.CommandProcessor

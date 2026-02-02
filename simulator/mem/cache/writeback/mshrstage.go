@@ -110,12 +110,19 @@ func (s *mshrStage) respondRead(
 		WithSrc(s.cache.TopPort).
 		WithDst(read.Src).
 		WithRspTo(read.ID).
+		WithPID(read.PID).
 		WithData(data[offset : offset+read.AccessByteSize])
 
 	if read.Info != nil {
 		readReqInfo := read.Info.(*mem.ReadReqInfo)
 		if readReqInfo.ReturnAccessInfo {
-			dataReadyRspBuilder = dataReadyRspBuilder.WithInfo(&mem.DataReadyRspInfo{AccessResult: readReqInfo.AccessResult, Src: s.cache.Name()})
+			dataReadyRspBuilder = dataReadyRspBuilder.WithInfo(
+				&mem.DataReadyRspInfo{
+					AccessResult: readReqInfo.AccessResult,
+					Src:          s.cache.Name(),
+					Address:      read.Address,
+				},
+			)
 		}
 	}
 	dataReady := dataReadyRspBuilder.Build()

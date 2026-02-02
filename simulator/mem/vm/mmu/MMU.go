@@ -407,3 +407,7 @@ func (mmu *MMUImpl) ToTopPort() akita.Port {
 func (mmu *MMUImpl) TranslationPortPort() akita.Port {
 	return mmu.TranslationPort
 }
+
+func (mmu *MMUImpl) ToCachePort() akita.Port {
+	panic("Baseline MMU does not support ToCachePort")
+}

@@ -317,6 +317,7 @@ type DataReadyRsp struct {
 	RespondTo string // The ID of the request it replies
 	Data      []byte
 	Info      interface{}
+	PID       ca.PID
 }
 
 // Meta returns the meta data attached to each message.
@@ -332,7 +333,8 @@ func (r *DataReadyRsp) GetRespondTo() string {
 // DataReadyRspInfo stores
 type DataReadyRspInfo struct {
 	AccessResult
-	Src string
+	Src     string
+	Address uint64
 }
 
 // DataReadyRspBuilder can build data ready responds.
@@ -342,6 +344,7 @@ type DataReadyRspBuilder struct {
 	rspTo    string
 	data     []byte
 	info     interface{}
+	pid      ca.PID
 }
 
 // WithSendTime sets the send time of the request to build.
@@ -382,6 +385,12 @@ func (b DataReadyRspBuilder) WithInfo(info interface{}) DataReadyRspBuilder {
 	return b
 }
 
+// WithPID sets the PID of the request to build.
+func (b DataReadyRspBuilder) WithPID(pid ca.PID) DataReadyRspBuilder {
+	b.pid = pid
+	return b
+}
+
 // Build creates a new DataReadyRsp
 func (b DataReadyRspBuilder) Build() *DataReadyRsp {
 	r := &DataReadyRsp{}
@@ -393,6 +402,7 @@ func (b DataReadyRspBuilder) Build() *DataReadyRsp {
 	r.RespondTo = b.rspTo
 	r.Data = b.data
 	r.Info = b.info
+	r.PID = b.pid
 	return r
 }
 
