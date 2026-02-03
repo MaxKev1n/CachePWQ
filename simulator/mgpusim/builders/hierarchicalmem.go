@@ -137,13 +137,13 @@ func (b *HierarchicalMemSideGPUBuilder) createGlobalNoC(chiplet *Chiplet) {
 	b.gpu.NoCs = append(b.gpu.NoCs, chiplet.GlobalNoC)
 
 	maxCUsPerGPC := 16     // same as NVIDIA A100
-	maxL2PerPartition := 8 // same as NVIDIA V100
+	maxL2PerPartition := 4 // same as NVIDIA V100
 
 	chiplet.GlobalNoC.MaxNumSMSidePort = ((len(chiplet.CUs) - 1) / maxCUsPerGPC) + 1
 	chiplet.GlobalNoC.MaxNumSMSideNode = chiplet.GlobalNoC.MaxNumSMSidePort * 4
 
 	chiplet.GlobalNoC.MaxNumMemSidePort = ((len(chiplet.L2Caches) - 1) / maxL2PerPartition) + 1
-	chiplet.GlobalNoC.MaxNumMemSideNode = chiplet.GlobalNoC.MaxNumMemSidePort * 8
+	chiplet.GlobalNoC.MaxNumMemSideNode = chiplet.GlobalNoC.MaxNumMemSidePort * 16
 
 	// Monolithic MMU
 	chiplet.GlobalNoC.MaxNumSMSidePort++
@@ -349,7 +349,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 }
 
 func (b *HierarchicalMemSideGPUBuilder) establishL2Partition(chiplet *Chiplet) {
-	maxL2PerPartition := 8
+	maxL2PerPartition := 4
 	numMux := (len(chiplet.L2Caches)-1)/maxL2PerPartition + 1
 
 	for muxID := 0; muxID < numMux; muxID++ {
@@ -377,7 +377,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishL2Partition(chiplet *Chiplet) {
 			WithNetworkPortBufferSize(4).
 			Build(fmt.Sprintf("%s.L2Cache[%d]", chiplet.name, i))
 
-		muxID := i / 8
+		muxID := i / maxL2PerPartition
 		mux := chiplet.l2Mux[muxID]
 
 		localPort := mux.AddLowSidePort(ep)
@@ -417,7 +417,7 @@ func (b *HierarchicalMemSideGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 
 		mux.SetHighSideHybridEndPoint(ep)
 
-		nocPort := chiplet.GlobalNoC.PlugInMemSideMultiPort(ep.NetworkPort, 64, 8)
+		nocPort := chiplet.GlobalNoC.PlugInMemSideMultiPort(ep.NetworkPort, 64, 16)
 		for _, port := range mux.RoutingTable.GetAllSrcPorts() {
 			chiplet.GlobalNoC.AddRoute(port, ep.NetworkPort)
 		}

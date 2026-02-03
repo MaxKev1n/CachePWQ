@@ -182,6 +182,8 @@ type HybridBookSimNoC struct {
 	MaxNumMemSideNode int
 
 	flitSize int
+
+	rrPtr int
 }
 
 // NewHybridBookSimNoC creates a hybrid BookSim network wrapper.
@@ -193,7 +195,7 @@ func NewHybridBookSimNoC(
 ) *HybridBookSimNoC {
 	NoC := &HybridBookSimNoC{
 		inflightMsg: make(map[uint64]akita.Msg),
-		flitSize:    40,
+		flitSize:    64,
 	}
 
 	NoC.TickingComponent = akita.NewTickingComponent(name, engine, 2*akita.GHz, NoC)
@@ -368,9 +370,14 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 	}
 
 	madeProgress := false
+	numEndpoints := len(NoC.endpoints)
 
 	// Injection phase
-	for _, ep := range NoC.endpoints {
+	startPtr := NoC.rrPtr
+	for i := 0; i < numEndpoints; i++ {
+		currIdx := (startPtr + i) % numEndpoints
+		ep := NoC.endpoints[currIdx]
+
 		for {
 			item := ep.inLookupBuffer.Peek()
 			if item == nil {
@@ -380,7 +387,7 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 			msg := item.(BookSimPipelineItem).msg
 
 			issued := false
-			for i := 0; i < ep.numPhysicalPorts; i++ {
+			for p := 0; p < ep.numPhysicalPorts; p++ {
 				srcNode := ep.GetSrcNodeID()
 
 				dstEp := NoC.route(msg)
@@ -388,8 +395,7 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 					panic("HybridBookSimNoC: invalid routeFn result (nil)")
 				}
 
-				numFlits := NoC.prepareFlits(msg)
-				if !NoC.wrapper.CanInject(srcNode, numFlits) {
+				if !NoC.wrapper.CanInject(srcNode, msg.Meta().TrafficBytes) {
 					continue
 				}
 
@@ -417,6 +423,7 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 
 				issued = true
 
+				NoC.rrPtr = (currIdx + 1) % numEndpoints
 				break
 			}
 
@@ -433,7 +440,7 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 
 	// Ejection phase
 	for _, ep := range NoC.endpoints {
-		for i := 0; i < ep.numPhysicalPorts; i++ {
+		for p := 0; p < ep.numPhysicalPorts; p++ {
 			node := ep.GetSrcNodeID()
 
 			for {
