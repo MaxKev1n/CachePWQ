@@ -384,7 +384,7 @@ func (b *HierarchicalSMSideGPUBuilder) establishL1TLBToL2TLBRoutingPath(chiplet 
 
 	interleavedLowModuleFinder := cache.NewXORLowModuleFinder(
 		len(chiplet.L2TLBs),
-		4,
+		12,
 		int(math.Log2(float64(len(chiplet.L2TLBs)))),
 		int(b.log2PageSize))
 
