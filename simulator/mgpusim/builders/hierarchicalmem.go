@@ -140,13 +140,13 @@ func (b *HierarchicalMemSideGPUBuilder) createGlobalNoC(chiplet *Chiplet) {
 	b.gpu.NoCs = append(b.gpu.NoCs, chiplet.GlobalNoC)
 
 	maxCUsPerGPC := 16     // same as NVIDIA A100
-	maxL2PerPartition := 8 // same as NVIDIA V100
+	maxL2PerPartition := 4 // same as NVIDIA V100
 
 	chiplet.GlobalNoC.MaxNumSMSidePort = ((len(chiplet.CUs) - 1) / maxCUsPerGPC) + 1
 	chiplet.GlobalNoC.MaxNumSMSideNode = chiplet.GlobalNoC.MaxNumSMSidePort * 4
 
 	chiplet.GlobalNoC.MaxNumMemSidePort = ((len(chiplet.L2Caches) - 1) / maxL2PerPartition) + 1
-	chiplet.GlobalNoC.MaxNumMemSideNode = chiplet.GlobalNoC.MaxNumMemSidePort * 8
+	chiplet.GlobalNoC.MaxNumMemSideNode = chiplet.GlobalNoC.MaxNumMemSidePort * 16
 
 	// Monolithic MMU
 	chiplet.GlobalNoC.MaxNumSMSidePort++
@@ -207,7 +207,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishL1ToL2RoutingPath(chiplet *Chip
 			srcPorts,
 			l2.TopPort,
 			0x84001000+uint64(i)*0x1000,
-			512,
+			4096,
 		)
 	}
 }
@@ -376,7 +376,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 }
 
 func (b *HierarchicalMemSideGPUBuilder) establishL2Partition(chiplet *Chiplet) {
-	maxL2PerPartition := 8
+	maxL2PerPartition := 4
 	numMux := (len(chiplet.L2Caches)-1)/maxL2PerPartition + 1
 
 	for muxID := 0; muxID < numMux; muxID++ {
@@ -404,7 +404,7 @@ func (b *HierarchicalMemSideGPUBuilder) establishL2Partition(chiplet *Chiplet) {
 			WithNetworkPortBufferSize(6).
 			Build(fmt.Sprintf("%s.L2Cache[%d]", chiplet.name, i))
 
-		muxID := i / 8
+		muxID := i / 4
 		mux := chiplet.l2Mux[muxID]
 
 		localPort := mux.AddLowSidePort(ep)
@@ -448,7 +448,7 @@ func (b *HierarchicalMemSideGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 
 		mux.SetHighSideHybridEndPoint(ep)
 
-		nocPort := chiplet.GlobalNoC.PlugInMemSide(ep.NetworkPort, 64, 8)
+		nocPort := chiplet.GlobalNoC.PlugInMemSide(ep.NetworkPort, 64, 16)
 		for _, port := range mux.RoutingTable.GetAllSrcPorts() {
 			chiplet.GlobalNoC.AddRoute(port, ep.NetworkPort)
 		}
@@ -505,10 +505,9 @@ func (b *HierarchicalMemSideGPUBuilder) buildMemBanks(chiplet *Chiplet) {
 		WithFreq(b.freq).
 		WithLog2BlockSize(b.log2CacheLineSize).
 		WithWayAssociativity(16).
-		WithByteSize(128 * mem.KB).
+		WithByteSize(256 * mem.KB).
 		WithNumMSHREntry(32).
 		WithNumReqPerCycle(4).
-		WithBankLatency(10).
 		WithPipelineLatency(80).
 		WithNumBanks(1)
 

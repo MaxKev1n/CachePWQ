@@ -40,7 +40,7 @@ func NewAgent(
 		a,
 	)
 	a.numReqs = numReqs
-	a.MaxOutstanding = 512 // 修改 2: 设置最大在途请求数
+	a.MaxOutstanding = 4096 // 修改 2: 设置最大在途请求数
 	a.ActiveReqs = make(map[string]akita.Msg)
 
 	for i := uint64(0); i < a.numReqs; i++ {
