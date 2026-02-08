@@ -444,11 +444,14 @@ func (b *HierarchicalMemSideDistTLBGPUBuilder) establishL1TLBToL2TLBRoutingPath(
 	numCUsPerGPC := 16
 	numGPCs := (len(chiplet.CUs)-1)/numCUsPerGPC + 1
 
-	interleavedLowModuleFinder := cache.NewXORLowModuleFinder(
-		len(chiplet.L2TLBs),
-		12,
-		int(math.Log2(float64(len(chiplet.L2TLBs)))),
-		int(b.log2PageSize))
+	numElemBits := int(math.Log2(float64(256) / float64(4)))
+	numBits := int(math.Log2(float64(256)))
+	interleavedLowModuleFinder := cache.NewPartitionedXORLowModuleFinder(
+		numElemBits,
+		4,
+		numBits,
+		int(b.log2PageSize),
+	)
 
 	for i := 0; i < numGPCs; i++ {
 		for j := i * numCUsPerGPC; j < (i+1)*numCUsPerGPC; j++ {
@@ -532,8 +535,8 @@ func (b *HierarchicalMemSideDistTLBGPUBuilder) buildMemBanks(chiplet *Chiplet) {
 }
 
 func (b *HierarchicalMemSideDistTLBGPUBuilder) buildL2TLB(chiplet *Chiplet) {
-	numSets := 32 // 128 // 256 // changed this here
-	numWays := 8  // 8 // changed this here
+	numSets := 256 // 128 // 256 // changed this here
+	numWays := 8   // 8 // changed this here
 	log2NumSets := int(math.Log2(float64(numSets)))
 
 	tlbIndexBitsStart := int(math.Log2(float64(b.remoteTLBInterleavingSize))) + int(b.log2PageSize) + 1
@@ -553,15 +556,21 @@ func (b *HierarchicalMemSideDistTLBGPUBuilder) buildL2TLB(chiplet *Chiplet) {
 		t = t << 1
 	}
 	//fmt.Println(mask)
+	maxL2PerPartition := 4
+	numPartitions := (len(chiplet.L2Caches)-1)/maxL2PerPartition + 1
 
-	for i := 0; i < 8; i++ {
+	for i := 0; i < numPartitions; i++ {
+		if numWays%numPartitions != 0 {
+			panic("numWays not divisible by numMux")
+		}
+
 		builder := tlb.MakeLatTLBBuilder().
 			WithEngine(b.engine).
 			WithFreq(b.freq).
 			WithNumWays(numWays).
-			WithNumSets(numSets).
-			WithNumMSHREntry(32).
-			WithNumReqPerCycle(1).
+			WithNumSets(numSets / numPartitions).
+			WithNumMSHREntry(256 / numPartitions).
+			WithNumReqPerCycle(4).
 			WithLog2PageSize(b.log2PageSize).
 			WithLowModule(chiplet.MMU.ToTopPort()).
 			WithIndexingMask(mask).
