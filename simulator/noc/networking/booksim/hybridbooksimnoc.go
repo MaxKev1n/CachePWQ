@@ -195,7 +195,7 @@ func NewHybridBookSimNoC(
 ) *HybridBookSimNoC {
 	NoC := &HybridBookSimNoC{
 		inflightMsg: make(map[uint64]akita.Msg),
-		flitSize:    64,
+		flitSize:    40,
 	}
 
 	NoC.TickingComponent = akita.NewTickingComponent(name, engine, 2*akita.GHz, NoC)

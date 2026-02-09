@@ -157,6 +157,8 @@ func (c *IdealCaPWQCache) handleReadReq(
 
 	c.postPipelineBuf.Pop()
 
+	delete(c.storage, req.Info.(string))
+
 	return true
 }
 
