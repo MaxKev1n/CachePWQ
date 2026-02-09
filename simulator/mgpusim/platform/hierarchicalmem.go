@@ -20,7 +20,7 @@ func MakeHierarchicalMemSidePlatformBuilder() HierarchicalMemSidePlatformBuilder
 			log2PageSize:             uint64(12),
 			numCUPerShaderArray:      uint64(4),
 			numShaderArrayPerChiplet: uint64(16),
-			numMemoryBankPerChiplet:  uint64(16),
+			numMemoryBankPerChiplet:  uint64(64),
 			numChiplets:              uint64(1),
 			totalMem:                 16 * mem.GB,
 			bankSize:                 256 * mem.MB,
