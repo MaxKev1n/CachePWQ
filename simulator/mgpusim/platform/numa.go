@@ -3,6 +3,7 @@ package platform
 import (
 	"log"
 	"os"
+	"path/filepath"
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
@@ -115,8 +116,20 @@ func (b *NUMAPlatformBuilder) createGPUBuilder(
 	}
 
 	if b.usePowerModel {
+		root := os.Getenv("CAPWQ_ROOT")
+		if root == "" {
+			panic("PROJECT_ROOT is not set")
+		}
+
+		configPath := filepath.Join(
+			root,
+			"simulator",
+			"GPUWattch",
+			"accelwattch_ptx_sim.xml",
+		)
+
 		power.NewPowerModel(
-			"/Users/chenzihang/Develop/CachePWQ/simulator/GPUWattch/accelwattch_ptx_sim.xml",
+			configPath,
 			engine,
 		)
 	}

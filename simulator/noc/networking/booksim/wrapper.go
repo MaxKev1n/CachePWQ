@@ -90,6 +90,8 @@ import "C"
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"unsafe"
 
@@ -120,7 +122,19 @@ func NewNetworkWrapper(
 	numCUs int,
 	numMems int,
 ) *NetworkWrapper {
-	return NewNetworkWrapperWithLib("/Users/chenzihang/Develop/CachePWQ/simulator/noc/networking/booksim/native/libintersim.dylib", config, numCUs, numMems)
+	root := os.Getenv("CAPWQ_ROOT")
+	if root == "" {
+		panic("PROJECT_ROOT is not set")
+	}
+
+	libPath := filepath.Join(
+		root,
+		"simulator",
+		"libs",
+		"libintersim.so",
+	)
+
+	return NewNetworkWrapperWithLib(libPath, config, numCUs, numMems)
 }
 
 func NewNetworkWrapperWithLib(
