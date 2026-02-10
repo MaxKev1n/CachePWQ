@@ -59,6 +59,7 @@ type IdealMMU struct {
 	lookupBuffer util.Buffer
 
 	numActiveTransactions uint64
+	maxActiveTransactions uint64
 }
 
 func (mmu *IdealMMU) GetNumActiveWalkers() int {
@@ -255,6 +256,11 @@ func (mmu *IdealMMU) parseFromTop(now akita.VTimeInSec) bool {
 		if req == nil {
 			return madeProgress
 		}
+
+		if !mmu.CanAccept() {
+			return madeProgress
+		}
+
 		switch req := req.(type) {
 		case *device.TranslationReq:
 			result := mmu.startWalking(req, now)
@@ -294,4 +300,12 @@ func (mmu *IdealMMU) startWalking(req *device.TranslationReq, now akita.VTimeInS
 // SetLowModuleFinder sets the table recording where to find an address.
 func (mmu *IdealMMU) SetLowModuleFinder(lmf cache.LowModuleFinder) {
 	mmu.lowModuleFinder = lmf
+}
+
+func (mmu *IdealMMU) CanAccept() bool {
+	if mmu.maxActiveTransactions == 0 {
+		return true
+	}
+
+	return mmu.numActiveTransactions < mmu.maxActiveTransactions
 }

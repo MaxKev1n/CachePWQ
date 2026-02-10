@@ -6,3 +6,4 @@ MMU:
   type: "IdealMMU"
 
   walkLatency: 200
+  numPageWalkers: 0

@@ -656,6 +656,15 @@ func (b *CommonBuilder) buildIdealMMU(chiplet *Chiplet) {
 		mmuBuilder = mmuBuilder.WithLatency(latencyInt)
 	}
 
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
+		}
+
+		mmuBuilder = mmuBuilder.WithMaxActiveTransactions(uint64(numWalkersInt))
+	}
+
 	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.IdealMMU", chiplet.name))
 
 	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)

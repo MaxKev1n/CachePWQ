@@ -16,6 +16,7 @@ type IdealMMUBuilder struct {
 	pageTable                *device.PageTableImpl
 	migrationServiceProvider akita.Port
 	latency                  int
+	maxActiveTransactions    uint64
 	//	lowAddr                  uint64
 	//	totMem                   uint64
 	//	bankSize                 uint64
@@ -66,6 +67,11 @@ func (b IdealMMUBuilder) WithMigrationServiceProvider(p akita.Port) IdealMMUBuil
 // WithLatency sets the latency of the MMU in cycles.
 func (b IdealMMUBuilder) WithLatency(n int) IdealMMUBuilder {
 	b.latency = n
+	return b
+}
+
+func (b IdealMMUBuilder) WithMaxActiveTransactions(n uint64) IdealMMUBuilder {
+	b.maxActiveTransactions = n
 	return b
 }
 
@@ -125,6 +131,8 @@ func (b IdealMMUBuilder) Build(name string) MMU {
 	mmu.lookupBuffer = util.NewBuffer(4096)
 	pipelineBuilder := pipelining.MakeBuilder().WithPipelineWidth(1024).WithNumStage(b.latency).WithCyclePerStage(1).WithPostPipelineBuffer(mmu.lookupBuffer)
 	mmu.pipeline = pipelineBuilder.Build(mmu.Name() + "_pipeline")
+
+	mmu.maxActiveTransactions = b.maxActiveTransactions
 
 	mmu.topSender = akitaext.NewBufferedSender(mmu.ToTop, util.NewBuffer(4096))
 	if b.pageTable != nil {
