@@ -248,7 +248,7 @@ func (b *NUMAGPUBuilder) createGlobalNoC(chiplet *Chiplet) {
 		chiplet.GlobalNoC.Name(), chiplet.GlobalNoC.MaxNumSMSidePort, chiplet.GlobalNoC.MaxNumMemSidePort)
 
 	chiplet.GlobalNoC.CreateNetworkWithLib(
-		b.booksimDir+"libintersim.dylib", b.booksimGlobal,
+		b.booksimDir+"libintersim.so", b.booksimGlobal,
 	)
 }
 

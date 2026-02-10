@@ -1,8 +1,6 @@
 package power
 
 /*
-#cgo CFLAGS: -I/Users/chenzihang/Develop/CachePWQ/simulator/GPUWattch/
-#cgo LDFLAGS: -L/Users/chenzihang/Develop/CachePWQ/simulator/GPUWattch/build/ -lgpuwattch
 #include "gpuwattch_lib.h"
 #include "power_interface.h"
 #include <stdlib.h>
