@@ -357,6 +357,8 @@ type Runner struct {
 	L2TLBMSHRLenG0Tracers           []*tracing.AverageCountTracer
 	L2TLBMSHRUniqLenG0Tracers       []*tracing.AverageCountTracer
 	ActivePageWalkerTracers         []ActivePageWalkerTracer
+	ActiveMMUSecondaryQueueTracers  []*tracing.AverageCountTracer
+	MaxMMUSecondaryQueueTracers     []*tracing.MaximumCountTracer
 	L2TLBMySQLTracer                tracing.MySQLTracer
 	L2TLBQueueingImbalanceTracers   []TLBQueueImbalanceTracer
 	PageWalkerImbalanceTracers      []PageWalkerImbalanceTracer
@@ -2294,6 +2296,30 @@ func (r *Runner) addActiveWalkerTracer() {
 				ActivePageWalkerTracer{tracer: tracer, mmu: mmu})
 			tracing.CollectTrace(mmu, tracer)
 		}
+
+		for _, mmu := range gpu.MMUs {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "secondary_queue_len"
+				})
+			tracer.TracedComponentName = mmu.Name()
+
+			r.ActiveMMUSecondaryQueueTracers = append(r.ActiveMMUSecondaryQueueTracers,
+				tracer)
+			tracing.CollectTrace(mmu, tracer)
+		}
+
+		for _, mmu := range gpu.MMUs {
+			tracer := tracing.NewMaximumCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "secondary_queue_len"
+				})
+			tracer.TracedComponentName = mmu.Name()
+
+			r.MaxMMUSecondaryQueueTracers = append(r.MaxMMUSecondaryQueueTracers,
+				tracer)
+			tracing.CollectTrace(mmu, tracer)
+		}
 	}
 
 }
@@ -3507,6 +3533,26 @@ func (r *Runner) reportActiveWalkerCount() {
 			tracer.mmu.Name(),
 			"average active walkers",
 			float64(tracer.tracer.AverageCount()),
+		)
+	}
+	for _, tracer := range r.ActiveMMUSecondaryQueueTracers {
+		if tracer.AverageCount() == 0 {
+			continue
+		}
+		r.metricsCollector.Collect(
+			tracer.TracedComponentName,
+			"average secondaryQueue length",
+			float64(tracer.AverageCount()),
+		)
+	}
+	for _, tracer := range r.MaxMMUSecondaryQueueTracers {
+		if tracer.MaximumCount() == 0 {
+			continue
+		}
+		r.metricsCollector.Collect(
+			tracer.TracedComponentName,
+			"maximum secondaryQueue length",
+			float64(tracer.MaximumCount()),
 		)
 	}
 }

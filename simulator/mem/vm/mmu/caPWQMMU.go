@@ -18,8 +18,6 @@ import (
 type CaPWQPageWalker struct {
 	queue         []*device.TranslationReq
 	inflightTrans *Transaction
-
-	waitingTrans *Transaction
 }
 
 // CaPWQMMU is the default mmu implementation. It is also an akita Component.
@@ -44,9 +42,13 @@ type CaPWQMMU struct {
 	nextPointer   int
 	queueCapacity int
 
+	secondaryQueue []*Transaction
+
 	log2CacheLineSize uint64
 
 	inflightMemRequets map[string]string // For Debugging
+
+	numInflightPTWRequests uint64
 }
 
 // Tick defines how the MMU update state each cycle
@@ -59,6 +61,27 @@ func (mmu *CaPWQMMU) Tick(now akita.VTimeInSec) bool {
 	madeProgress = mmu.parseFromMem(now) || madeProgress
 	madeProgress = mmu.parseFromTop(now) || madeProgress
 	madeProgress = mmu.parseFromL1(now) || madeProgress
+
+	if mmu.isActive() {
+		tracing.StartTask(
+			"",
+			"",
+			now,
+			mmu,
+			"num_active_walkers",
+			strconv.Itoa(int(mmu.numInflightPTWRequests)),
+			nil,
+		)
+		tracing.StartTask(
+			"",
+			"",
+			now,
+			mmu,
+			"secondary_queue_len",
+			strconv.Itoa(int(len(mmu.secondaryQueue))),
+			nil,
+		)
+	}
 
 	return true
 }
@@ -78,12 +101,12 @@ func (mmu *CaPWQMMU) walkPageTable(now akita.VTimeInSec) bool {
 
 	for i := range mmu.pageWalkers {
 		if mmu.pageWalkers[i].inflightTrans == nil {
-			if mmu.pageWalkers[i].waitingTrans == nil {
+			if len(mmu.secondaryQueue) == 0 {
 				continue
 			}
 
-			mmu.pageWalkers[i].inflightTrans = mmu.pageWalkers[i].waitingTrans
-			mmu.pageWalkers[i].waitingTrans = nil
+			mmu.pageWalkers[i].inflightTrans = mmu.secondaryQueue[0]
+			mmu.secondaryQueue = mmu.secondaryQueue[1:]
 		}
 		inflightTrans := mmu.pageWalkers[i].inflightTrans
 
@@ -327,32 +350,21 @@ func (mmu *CaPWQMMU) handlePageWalkCacheResponse(rsp *mem.DataReadyRsp, now akit
 }
 
 func (mmu *CaPWQMMU) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) bool {
-	for i := range mmu.pageWalkers {
-		if mmu.pageWalkers[i].inflightTrans != nil && mmu.pageWalkers[i].waitingTrans != nil {
-			continue
-		}
-		rspInfo := rsp.Info.(*mem.DataReadyRspInfo)
+	rspInfo := rsp.Info.(*mem.DataReadyRspInfo)
 
-		tempTransaction := Transaction{
-			pid:               rsp.PID,
-			state:             memDone,
-			PPN:               binary.LittleEndian.Uint64(rsp.Data),
-			LastPPNWithOffset: rspInfo.Address,
-			msgID:             rsp.RespondTo,
-		}
-
-		if mmu.pageWalkers[i].inflightTrans == nil {
-			mmu.pageWalkers[i].inflightTrans = &tempTransaction
-		} else {
-			mmu.pageWalkers[i].waitingTrans = &tempTransaction
-		}
-
-		mmu.TranslationPort.Retrieve(now)
-
-		return true
+	tempTransaction := Transaction{
+		pid:               rsp.PID,
+		state:             memDone,
+		PPN:               binary.LittleEndian.Uint64(rsp.Data),
+		LastPPNWithOffset: rspInfo.Address,
+		msgID:             rsp.RespondTo,
 	}
 
-	return false
+	mmu.secondaryQueue = append(mmu.secondaryQueue, &tempTransaction)
+
+	mmu.TranslationPort.Retrieve(now)
+
+	return true
 }
 
 func (mmu *CaPWQMMU) handleL1ReadResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) bool {
@@ -464,6 +476,8 @@ func (mmu *CaPWQMMU) doPageWalkHit(
 
 	tracing.TraceReqComplete(walking.req, now, mmu)
 
+	mmu.numInflightPTWRequests--
+
 	return true
 }
 
@@ -508,7 +522,13 @@ func (mmu *CaPWQMMU) parseFromTop(now akita.VTimeInSec) bool {
 	for i := range mmu.pageWalkers {
 		walker := &mmu.pageWalkers[i]
 
-		if walker.inflightTrans == nil && len(walker.queue) > 0 {
+		if walker.inflightTrans == nil && len(mmu.secondaryQueue) > 0 {
+			walker.inflightTrans = mmu.secondaryQueue[0]
+
+			mmu.secondaryQueue = mmu.secondaryQueue[1:]
+
+			madeProgress = true
+		} else if walker.inflightTrans == nil && len(walker.queue) > 0 {
 			req := walker.queue[0]
 
 			rearrangedVAddr := mmu.pageTable.Rearrange(req.VAddr)
@@ -526,6 +546,8 @@ func (mmu *CaPWQMMU) parseFromTop(now akita.VTimeInSec) bool {
 			walker.inflightTrans = &translationInPipeline
 
 			walker.queue = walker.queue[1:]
+
+			mmu.numInflightPTWRequests++
 
 			madeProgress = true
 		}
@@ -547,6 +569,24 @@ func (mmu *CaPWQMMU) GetNumActiveWalkers() int {
 		}
 	}
 	return num
+}
+
+func (mmu *CaPWQMMU) isActive() bool {
+	if len(mmu.secondaryQueue) > 0 {
+		return true
+	}
+
+	for i := range mmu.pageWalkers {
+		if mmu.pageWalkers[i].inflightTrans != nil {
+			return true
+		}
+
+		if len(mmu.pageWalkers[i].queue) > 0 {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (mmu *CaPWQMMU) ToTopPort() akita.Port {

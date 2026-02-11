@@ -15,6 +15,8 @@ type AverageCountTracer struct {
 	averageCount  float64
 	inflightTasks map[string]Task
 	taskCount     uint64
+
+	TracedComponentName string
 }
 
 // NewAverageCountTracer creates a new AverageCountTracer
