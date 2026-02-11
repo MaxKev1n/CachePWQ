@@ -17,6 +17,7 @@ type CaPWQMMUBuilder struct {
 	migrationServiceProvider akita.Port
 	maxNumReqInFlight        int
 	log2CacheLineSize        uint64
+	pageWalkCacheSize        uint64
 }
 
 // MakeBuilder creates a new builder
@@ -26,6 +27,7 @@ func MakeCaPWQMMUBuilder() CaPWQMMUBuilder {
 		log2PageSize:      12,
 		maxNumReqInFlight: 8, //16,
 		log2CacheLineSize: 6,
+		pageWalkCacheSize: 512, //256, //bytes
 	}
 }
 
@@ -57,6 +59,12 @@ func (b CaPWQMMUBuilder) WithPageTable(pageTable *device.PageTableImpl) CaPWQMMU
 // processed by the MMU.
 func (b CaPWQMMUBuilder) WithMaxNumReqInFlight(n int) CaPWQMMUBuilder {
 	b.maxNumReqInFlight = n
+	return b
+}
+
+// WithPageWalkCacheSize sets the size of the page walk cache.
+func (b CaPWQMMUBuilder) WithPageWalkCacheSize(size uint64) CaPWQMMUBuilder {
+	b.pageWalkCacheSize = size
 	return b
 }
 
@@ -101,7 +109,8 @@ func (b CaPWQMMUBuilder) Build(name string) MMU {
 	pageWalkCacheBuilder := writeback.MakePageWalkCacheBuilder().
 		WithEngine(b.engine).
 		WithLog2PageSize(b.log2PageSize).
-		WithBitsPerLevel(9)
+		WithBitsPerLevel(9).
+		WithByteSize(b.pageWalkCacheSize)
 	pageWalkCache := pageWalkCacheBuilder.Build("PageWalkCache")
 	mmu.PageWalkCache = pageWalkCache.TopPort
 	mmu.pageWalkCachePort = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToTop")

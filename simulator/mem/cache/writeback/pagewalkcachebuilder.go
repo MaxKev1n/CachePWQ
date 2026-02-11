@@ -11,26 +11,24 @@ import (
 
 // A PageWalkCacheBuilder can build writeback caches
 type PageWalkCacheBuilder struct {
-	engine           akita.Engine
-	freq             akita.Freq
-	lowModuleFinder  cache.LowModuleFinder
-	wayAssociativity int
-	log2BlockSize    uint64
-	byteSize         uint64
-	numReqPerCycle   int
-	pipelineLatency  int
-	log2PageSize     uint64
-	bitsPerLevel     uint64
+	engine          akita.Engine
+	freq            akita.Freq
+	lowModuleFinder cache.LowModuleFinder
+	log2BlockSize   uint64
+	byteSize        uint64
+	numReqPerCycle  int
+	pipelineLatency int
+	log2PageSize    uint64
+	bitsPerLevel    uint64
 }
 
 func MakePageWalkCacheBuilder() PageWalkCacheBuilder {
 	return PageWalkCacheBuilder{
-		freq:             1 * akita.GHz,
-		wayAssociativity: 32, //16,
-		log2BlockSize:    4,
-		byteSize:         512, //256, //bytes
-		numReqPerCycle:   4,
-		pipelineLatency:  10,
+		freq:            1 * akita.GHz,
+		log2BlockSize:   4,
+		byteSize:        512, //256, //bytes
+		numReqPerCycle:  4,
+		pipelineLatency: 10,
 	}
 }
 
@@ -41,11 +39,6 @@ func (b PageWalkCacheBuilder) WithEngine(engine akita.Engine) PageWalkCacheBuild
 
 func (b PageWalkCacheBuilder) WithFreq(freq akita.Freq) PageWalkCacheBuilder {
 	b.freq = freq
-	return b
-}
-
-func (b PageWalkCacheBuilder) WithWayAssociativity(n int) PageWalkCacheBuilder {
-	b.wayAssociativity = n
 	return b
 }
 
@@ -92,9 +85,9 @@ func (b *PageWalkCacheBuilder) Build(name string) *PageWalkCache {
 func (b *PageWalkCacheBuilder) configureCache(cacheModule *PageWalkCache) {
 	blockSize := 1 << b.log2BlockSize
 	vimctimFinder := cache.NewLRUVictimFinder()
-	numSet := int(b.byteSize / uint64(b.wayAssociativity*blockSize))
+	wayAssociativity := int(b.byteSize / uint64(blockSize))
 	directory := cache.NewPageWalkCacheDirectory(
-		numSet, b.wayAssociativity, blockSize, vimctimFinder, b.log2PageSize, b.bitsPerLevel)
+		1, wayAssociativity, blockSize, vimctimFinder, b.log2PageSize, b.bitsPerLevel)
 	storage := mem.NewStorage(b.byteSize)
 
 	cacheModule.log2BlockSize = b.log2BlockSize

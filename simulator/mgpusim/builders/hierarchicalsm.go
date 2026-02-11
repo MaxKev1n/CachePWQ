@@ -4,15 +4,18 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"strconv"
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/cache/writeback"
 	"gitlab.com/akita/mem/idealmemcontroller"
+	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/tip"
+	"gitlab.com/akita/mgpusim/yamlconfig"
 	noc "gitlab.com/akita/noc/networking/booksim"
 	"gitlab.com/akita/noc/networking/chipnetwork"
 	"gitlab.com/akita/noc/networking/multiplexer"
@@ -145,10 +148,6 @@ func (b *HierarchicalSMSideGPUBuilder) createGlobalNoC(chiplet *Chiplet) {
 
 	chiplet.GlobalNoC.MaxNumMemSidePort = ((len(chiplet.L2Caches) - 1) / maxL2PerPartition) + 1
 	chiplet.GlobalNoC.MaxNumMemSideNode = chiplet.GlobalNoC.MaxNumMemSidePort * 8
-
-	// Monolithic MMU
-	chiplet.GlobalNoC.MaxNumSMSidePort++
-	chiplet.GlobalNoC.MaxNumSMSideNode++
 
 	log.Printf("%s has %d SM side components and %d Mem side components\n",
 		chiplet.GlobalNoC.Name(), chiplet.GlobalNoC.MaxNumSMSidePort, chiplet.GlobalNoC.MaxNumMemSidePort)
@@ -293,6 +292,22 @@ func (b *HierarchicalSMSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 		localPort := mux.AddLowSidePort(ep)
 		mux.AddRoute(l1i.GetBottomPort(), localPort)
 	}
+
+	for i, mmu := range chiplet.MMUs {
+		ep := multiplexer.MakeEndPointBuilder().
+			WithEngine(b.engine).
+			WithFreq(b.freq).
+			WithDevicePorts([]akita.Port{mmu.TranslationPortPort()}).
+			WithFlitByteSize(32).
+			WithNumReqPerCycle(16).
+			WithNetworkPortBufferSize(16).
+			Build(fmt.Sprintf("%s.L1SCache[%d]", chiplet.name, i))
+
+		mux := chiplet.gpcMux[i]
+
+		localPort := mux.AddLowSidePort(ep)
+		mux.AddRoute(mmu.TranslationPortPort(), localPort)
+	}
 }
 
 func (b *HierarchicalSMSideGPUBuilder) establishL2Partition(chiplet *Chiplet) {
@@ -370,8 +385,6 @@ func (b *HierarchicalSMSideGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 		}
 		ep.PlugInNoCPort(nocPort, 64)
 	}
-
-	chiplet.GlobalNoC.PlugInSMSideMultiPort(chiplet.MMU.TranslationPortPort(), 64, 1)
 }
 
 func (b *HierarchicalSMSideGPUBuilder) establishL1TLBToL2TLBRoutingPath(chiplet *Chiplet) {
@@ -596,7 +609,9 @@ func (b *HierarchicalSMSideGPUBuilder) establishNonUniformL1TLBToL2TLBNetwork(ch
 }
 
 func (b *HierarchicalSMSideGPUBuilder) connectMMUToGlobalNoC(chiplet *Chiplet) {
-	chiplet.MMU.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
+	for _, mmu := range chiplet.MMUs {
+		mmu.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
+	}
 }
 
 func (b *HierarchicalSMSideGPUBuilder) buildMemBanks(chiplet *Chiplet) {
@@ -690,7 +705,7 @@ func (b *HierarchicalSMSideGPUBuilder) buildL2TLB(chiplet *Chiplet) {
 			WithNumMSHREntry(256 / numGPCs).
 			WithNumReqPerCycle(4).
 			WithLog2PageSize(b.log2PageSize).
-			WithLowModule(chiplet.MMU.ToTopPort()).
+			WithLowModule(chiplet.MMUs[i].ToTopPort()).
 			WithIndexingMask(mask).
 			WithLatency(10)
 		fmt.Println("num TLB sets:", numSets)
@@ -700,7 +715,7 @@ func (b *HierarchicalSMSideGPUBuilder) buildL2TLB(chiplet *Chiplet) {
 		}
 		l2TLB := builder.Build(fmt.Sprintf("%s.L2TLB[%d]", chiplet.name, i))
 		l2TLB.SetLowModuleFinder(&cache.SingleLowModuleFinder{
-			LowModule: chiplet.MMU.ToTopPort(),
+			LowModule: chiplet.MMUs[i].ToTopPort(),
 		})
 
 		b.l2TLBs = append(b.l2TLBs, l2TLB)
@@ -713,12 +728,187 @@ func (b *HierarchicalSMSideGPUBuilder) buildL2TLB(chiplet *Chiplet) {
 	}
 }
 
+func (b *HierarchicalSMSideGPUBuilder) buildMMU(chiplet *Chiplet) {
+	if yamlconfig.OverrideConfig == nil {
+		b.buildDefaultMMU(chiplet)
+	} else {
+		mmuType := yamlconfig.OverrideConfig["MMU.type"]
+
+		switch mmuType {
+		case "IdealMMU":
+			b.buildIdealMMU(chiplet)
+		case "CaPWQMMU":
+			b.buildCAPWQMMU(chiplet)
+		case "MPWMMU":
+			b.buildMPWMMU(chiplet)
+		case "BaselineMMU":
+			b.buildDefaultMMU(chiplet)
+		default:
+			log.Panicf("Unsupported MMU type: %s\n", mmuType)
+		}
+	}
+}
+
+func (b *HierarchicalSMSideGPUBuilder) buildIdealMMU(chiplet *Chiplet) {
+	maxCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
+
+	mmuBuilder := mmu.MakeIdealMMUBuilder().
+		WithEngine(b.engine).
+		WithFreq(1 * akita.GHz).
+		WithLog2PageSize(b.log2PageSize).
+		WithPageTable(b.pageTable)
+
+	if latency, ok := yamlconfig.OverrideConfig["MMU.walkLatency"]; ok {
+		latencyInt, err := strconv.Atoi(latency)
+		if err != nil {
+			log.Panicf("Invalid walk latency: %s\n", latency)
+		}
+
+		mmuBuilder = mmuBuilder.WithLatency(latencyInt)
+	}
+
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
+		}
+
+		if numWalkersInt%numGPCs != 0 {
+			log.Panicf("Number of page walkers %d not divisible by number of GPCs %d\n", numWalkersInt, numGPCs)
+		}
+
+		mmuBuilder = mmuBuilder.WithMaxActiveTransactions(uint64(numWalkersInt / numGPCs))
+	}
+
+	for i := 0; i < numGPCs; i++ {
+		chiplet.MMUs = append(chiplet.MMUs, mmuBuilder.Build(fmt.Sprintf("%s.IdealMMU[%d]", chiplet.name, i)))
+
+		b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMUs[i])
+	}
+}
+
+func (b *HierarchicalSMSideGPUBuilder) buildCAPWQMMU(chiplet *Chiplet) {
+	maxCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
+
+	mmuBuilder := mmu.MakeCaPWQMMUBuilder().
+		WithEngine(b.engine).
+		WithFreq(1 * akita.GHz).
+		WithLog2PageSize(b.log2PageSize).
+		WithPageTable(b.pageTable).
+		WithLog2CacheLineSize(b.log2CacheLineSize).
+		WithMaxNumReqInFlight(16)
+
+	if 512%numGPCs != 0 {
+		log.Panicf("512 not divisible by Number of GPCs %d\n", numGPCs)
+	}
+
+	mmuBuilder = mmuBuilder.WithPageWalkCacheSize(512 / uint64(numGPCs))
+
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
+		}
+
+		if numWalkersInt%numGPCs != 0 {
+			log.Panicf("Number of page walkers %d not divisible by number of GPCs %d\n", numWalkersInt, numGPCs)
+		}
+
+		mmuBuilder = mmuBuilder.WithMaxNumReqInFlight(numWalkersInt / numGPCs)
+	}
+
+	for i := 0; i < numGPCs; i++ {
+		chiplet.MMUs = append(chiplet.MMUs, mmuBuilder.Build(fmt.Sprintf("%s.CaPWQMMU[%d]", chiplet.name, i)))
+
+		b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMUs[i])
+	}
+}
+
+func (b *HierarchicalSMSideGPUBuilder) buildMPWMMU(chiplet *Chiplet) {
+	maxCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
+
+	mmuBuilder := mmu.MakeMPWMMUBuilder().
+		WithEngine(b.engine).
+		WithFreq(1 * akita.GHz).
+		WithLog2PageSize(b.log2PageSize).
+		WithPageTable(b.pageTable).
+		WithNumChiplets(uint64(b.numChiplet)).
+		WithMaxNumReqInFlight(16)
+
+	if 512%numGPCs != 0 {
+		log.Panicf("512 not divisible by Number of GPCs %d\n", numGPCs)
+	}
+
+	mmuBuilder = mmuBuilder.WithPageWalkCacheSize(512 / uint64(numGPCs))
+
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
+		}
+
+		if numWalkersInt%numGPCs != 0 {
+			log.Panicf("Number of page walkers %d not divisible by number of GPCs %d\n", numWalkersInt, numGPCs)
+		}
+
+		mmuBuilder = mmuBuilder.WithMaxNumReqInFlight(numWalkersInt / numGPCs)
+	}
+
+	for i := 0; i < numGPCs; i++ {
+		chiplet.MMUs = append(chiplet.MMUs, mmuBuilder.Build(fmt.Sprintf("%s.MPWMMU[%d]", chiplet.name, i)))
+
+		b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMUs[i])
+	}
+}
+
+func (b *HierarchicalSMSideGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
+	maxCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
+
+	mmuBuilder := mmu.MakeMMUBuilder().
+		WithEngine(b.engine).
+		WithFreq(1 * akita.GHz).
+		WithLog2PageSize(b.log2PageSize).
+		WithPageTable(b.pageTable).
+		WithMaxNumReqInFlight(16)
+
+	if 512%numGPCs != 0 {
+		log.Panicf("512 not divisible by Number of GPCs %d\n", numGPCs)
+	}
+
+	mmuBuilder = mmuBuilder.WithPageWalkCacheSize(512 / uint64(numGPCs))
+
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
+		}
+
+		if numWalkersInt%numGPCs != 0 {
+			log.Panicf("Number of page walkers %d not divisible by number of GPCs %d\n", numWalkersInt, numGPCs)
+		}
+
+		mmuBuilder = mmuBuilder.WithMaxNumReqInFlight(numWalkersInt / numGPCs)
+	}
+
+	for i := 0; i < numGPCs; i++ {
+		chiplet.MMUs = append(chiplet.MMUs, mmuBuilder.Build(fmt.Sprintf("%s.BaselineMMU[%d]", chiplet.name, i)))
+
+		b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMUs[i])
+	}
+}
+
 func (b *HierarchicalSMSideGPUBuilder) connectL2TLBTOMMU(chiplet *Chiplet) {
-	tlbToMMUConn := akita.NewDirectConnection(chiplet.name+".L2TLB-MMU",
-		b.engine, b.freq)
-	tlbToMMUConn.PlugIn(chiplet.MMU.ToTopPort(), 64)
-	for _, l2tlb := range chiplet.L2TLBs {
-		tlbToMMUConn.PlugIn(l2tlb.GetBottomPort(), 16)
+	for i, l2tlb := range chiplet.L2TLBs {
+		tlbToMMUConn := akita.NewDirectConnection(
+			chiplet.name+fmt.Sprintf(".L2TLB[%d]-MMU[%d]", i, i),
+			b.engine, b.freq)
+
+		tlbToMMUConn.PlugIn(chiplet.MMUs[i].ToTopPort(), 16)
+		tlbToMMUConn.PlugIn(l2tlb.GetBottomPort(), 4)
 	}
 }
 
