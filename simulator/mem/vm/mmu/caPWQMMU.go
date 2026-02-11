@@ -228,6 +228,8 @@ func (mmu *CaPWQMMU) sendToMem(now akita.VTimeInSec, i int) {
 		WithInfo(readReqInfo).
 		Build()
 
+	readReq.PTW = true
+
 	err := srcPort.Send(readReq)
 	if err != nil {
 		return

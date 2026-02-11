@@ -165,6 +165,8 @@ func (mmu *MMUImpl) sendToMem(now akita.VTimeInSec, trans *Transaction) {
 		WithInfo(readReqInfo).
 		Build()
 
+	readReq.PTW = true
+
 	err := srcPort.Send(readReq)
 	if err != nil {
 		return

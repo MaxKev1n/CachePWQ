@@ -14,6 +14,7 @@ import (
 	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
+	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	"gitlab.com/akita/mgpusim/tip"
 	"gitlab.com/akita/mgpusim/yamlconfig"
 	noc "gitlab.com/akita/noc/networking/booksim"
@@ -820,9 +821,30 @@ func (b *HierarchicalSMSideGPUBuilder) buildCAPWQMMU(chiplet *Chiplet) {
 	}
 
 	for i := 0; i < numGPCs; i++ {
-		chiplet.MMUs = append(chiplet.MMUs, mmuBuilder.Build(fmt.Sprintf("%s.CaPWQMMU[%d]", chiplet.name, i)))
+		lowModuleFinder := cache.SingleLowModuleFinder{}
 
-		b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMUs[i])
+		caPWQMMU := mmuBuilder.Build(fmt.Sprintf("%s.CaPWQMMU[%d]", chiplet.name, i))
+		caPWQMMU.(*mmu.CaPWQMMU).CacheLowModuleFinder = &lowModuleFinder
+
+		idealCache := l1cache.NewIdealCaPWQCache(
+			fmt.Sprintf("%s.L1IdealCaPWQCache[%d]", chiplet.name, i),
+			b.engine,
+			b.freq,
+			2,
+			28,
+		)
+
+		lowModuleFinder.LowModule = idealCache.GetMMUSidePort()
+
+		mmuToL1Conn := akita.NewDirectConnection(
+			fmt.Sprintf("%s.CaPWQMMU[%d]-L1IdealCaPWQCache[%d]", chiplet.name, i, i),
+			b.engine, b.freq)
+
+		mmuToL1Conn.PlugIn(idealCache.GetMMUSidePort(), 16)
+		mmuToL1Conn.PlugIn(caPWQMMU.ToCachePort(), 16)
+
+		chiplet.MMUs = append(chiplet.MMUs, caPWQMMU)
+		b.gpu.MMUs = append(b.gpu.MMUs, caPWQMMU)
 	}
 }
 
