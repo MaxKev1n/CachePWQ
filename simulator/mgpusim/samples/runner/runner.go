@@ -3636,10 +3636,6 @@ func (r *Runner) reportTLBHitRate() {
 		tlbHit := tracer.tracer.GetStepCount("tlb-hit")
 		tlbMiss := tracer.tracer.GetStepCount("tlb-miss")
 		tlbMSHRHit := tracer.tracer.GetStepCount("tlb-mshr-hit")
-		totalTransaction := tlbHit + tlbMiss + tlbMSHRHit
-		if totalTransaction == 0 {
-			continue
-		}
 		//tlb := tracer.tlb.(*tlb.TLB)
 		tlbName := tracer.tlb.Name()
 		r.metricsCollector.Collect(

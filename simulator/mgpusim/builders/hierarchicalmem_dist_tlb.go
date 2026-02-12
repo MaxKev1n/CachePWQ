@@ -444,13 +444,13 @@ func (b *HierarchicalMemSideDistTLBGPUBuilder) establishL1TLBToL2TLBRoutingPath(
 	numCUsPerGPC := 16
 	numGPCs := (len(chiplet.CUs)-1)/numCUsPerGPC + 1
 
-	numElemBits := int(math.Log2(float64(256) / float64(4)))
-	numBits := int(math.Log2(float64(256)))
+	numElemBits := int(math.Log2(float64(8)))
+	numTerms := (48-int(b.log2PageSize+7))/numElemBits - 1
 	interleavedLowModuleFinder := cache.NewPartitionedXORLowModuleFinder(
+		0, // meanless
+		numTerms,
 		numElemBits,
-		4,
-		numBits,
-		int(b.log2PageSize),
+		int(b.log2PageSize+7),
 	)
 
 	for i := 0; i < numGPCs; i++ {

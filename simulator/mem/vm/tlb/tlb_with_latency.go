@@ -82,6 +82,7 @@ type LatTLB struct {
 	log2PageSize   uint64
 	log2NumSets    uint64
 	setMask        uint64
+	numTerms       uint64
 	numSets        int
 	numWays        int
 	pageSize       uint64
@@ -539,12 +540,11 @@ func (tlb *LatTLB) vAddrToSetIDxor7(vAddr uint64) (setID int) {
 }
 
 func (tlb *LatTLB) vAddrToSetID(vAddr uint64) (setID int) {
-	index := uint64(0)
 	vpn := vAddr >> tlb.log2PageSize
-	// usefulBits := (uint64(1) << 28) - 1
-	for i := 0; i < 4; i++ {
-		index ^= (vpn & tlb.setMask)
+	index := vpn & tlb.setMask
+	for i := uint64(0); i < tlb.numTerms; i++ {
 		vpn >>= tlb.log2NumSets
+		index ^= (vpn & tlb.setMask)
 	}
 	setID = int(index)
 	tlb.setsAccessed[setID]++

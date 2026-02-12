@@ -123,6 +123,7 @@ func (b LatTLBBuilder) Build(name string) TLB {
 
 	tlb.log2NumSets = uint64(math.Log2(float64(tlb.numSets)))
 	tlb.setMask = uint64(tlb.numSets - 1)
+	tlb.numTerms = (48-b.log2PageSize)/tlb.log2NumSets - 1
 
 	tlb.numWays = b.numWays
 	tlb.numReqPerCycle = b.numReqPerCycle

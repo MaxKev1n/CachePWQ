@@ -396,13 +396,13 @@ func (b *HierarchicalSMSideGPUBuilder) establishL1TLBToL2TLBRoutingPath(chiplet 
 		panic("numGPCs != len(chiplet.L2TLBs)")
 	}
 
-	numElemBits := int(math.Log2(float64(256) / float64(4)))
-	numBits := int(math.Log2(float64(256)))
+	numElemBits := int(math.Log2(float64(4)))
+	numTerms := (48-int(b.log2PageSize+7))/numElemBits - 1
 	interleavedLowModuleFinder := cache.NewPartitionedXORLowModuleFinder(
+		0, // meanless
+		numTerms,
 		numElemBits,
-		4,
-		numBits,
-		int(b.log2PageSize),
+		int(b.log2PageSize+7),
 	)
 
 	for i := 0; i < numGPCs; i++ {
