@@ -85,6 +85,8 @@ func (s *pageWalkCacheBankStage) finalizeReadHit(now akita.VTimeInSec) bool {
 		WithDst(read.Src).
 		WithRspTo(read.ID).
 		WithData(data).
+		WithInfo(read.Address).
+		WithPID(read.PID).
 		Build()
 	s.cache.topSender.Send(dataReady)
 

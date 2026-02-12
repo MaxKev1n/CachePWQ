@@ -359,6 +359,8 @@ type Runner struct {
 	ActivePageWalkerTracers         []ActivePageWalkerTracer
 	ActiveMMUSecondaryQueueTracers  []*tracing.AverageCountTracer
 	MaxMMUSecondaryQueueTracers     []*tracing.MaximumCountTracer
+	L1CaPWQCacheLenTracers          []*tracing.AverageCountTracer
+	L1CaPWQCacheMaxLenTracers       []*tracing.MaximumCountTracer
 	L2TLBMySQLTracer                tracing.MySQLTracer
 	L2TLBQueueingImbalanceTracers   []TLBQueueImbalanceTracer
 	PageWalkerImbalanceTracers      []PageWalkerImbalanceTracer
@@ -378,6 +380,7 @@ type Runner struct {
 	ReportTLBConditionalStats       bool
 	ReportMMUConditionalStats       bool
 	ReportPageWalkLatency           bool
+	ReportL1CaPWQCacheLens          bool
 	ReportDRAMLatency               bool
 	ReportTranslationReqLatency     bool
 	ReportMMUCacheReqLatency        bool
@@ -547,6 +550,7 @@ func (r *Runner) ParseFlag() *Runner {
 		r.ReportTLBConditionalStats = true
 		r.ReportMMUConditionalStats = true
 		r.ReportPageWalkLatency = true
+		r.ReportL1CaPWQCacheLens = true
 		r.ReportDRAMLatency = true
 		r.ReportCacheHitRate = true
 		r.ReportTLBHitRate = true
@@ -651,6 +655,7 @@ func (r *Runner) Init() *Runner {
 	r.addTLBHitRateTracer()
 	r.addDRAMLatencyTracer()
 	r.addDRAMTracer()
+	r.addL1CaPWQCacheLensTracer()
 	r.addPageWalkLatencyTracer()
 	r.addMMUConditionalTracer()
 	r.addAddressTranslatorLatencyTracer()
@@ -2247,6 +2252,41 @@ func (r *Runner) addAddressTranslatorLatencyTracer() {
 	}
 }
 
+func (r *Runner) addL1CaPWQCacheLensTracer() {
+	if !r.ReportL1CaPWQCacheLens {
+		return
+	}
+	for _, gpu := range r.GPUDriver.GPUs {
+		for _, cache := range gpu.L1CaPWQCache {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "l1capwq_cache_len"
+				})
+			tracer.TracedComponentName = cache.Name()
+
+			r.L1CaPWQCacheLenTracers = append(
+				r.L1CaPWQCacheLenTracers,
+				tracer,
+			)
+			tracing.CollectTrace(cache, tracer)
+		}
+
+		for _, cache := range gpu.L1CaPWQCache {
+			tracer := tracing.NewMaximumCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "l1capwq_cache_len"
+				})
+			tracer.TracedComponentName = cache.Name()
+
+			r.L1CaPWQCacheMaxLenTracers = append(
+				r.L1CaPWQCacheMaxLenTracers,
+				tracer,
+			)
+			tracing.CollectTrace(cache, tracer)
+		}
+	}
+}
+
 func (r *Runner) addPageWalkLatencyTracer() {
 	if !r.ReportPageWalkLatency {
 		return
@@ -2300,7 +2340,7 @@ func (r *Runner) addActiveWalkerTracer() {
 		for _, mmu := range gpu.MMUs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
-					return task.Kind == "secondary_queue_len"
+					return task.Kind == "page_walk_queue_len"
 				})
 			tracer.TracedComponentName = mmu.Name()
 
@@ -2312,7 +2352,7 @@ func (r *Runner) addActiveWalkerTracer() {
 		for _, mmu := range gpu.MMUs {
 			tracer := tracing.NewMaximumCountTracer(
 				func(task tracing.Task) bool {
-					return task.Kind == "secondary_queue_len"
+					return task.Kind == "page_walk_queue_len"
 				})
 			tracer.TracedComponentName = mmu.Name()
 
@@ -3199,6 +3239,7 @@ func (r *Runner) reportStats() {
 	r.reportMemoryAccessSource()
 	r.reportTLBLatency()
 	r.reportPageWalkLatency()
+	r.reportL1CaPWQCacheLens()
 	r.reportMMUConditionalStats()
 	r.reportActiveWalkerCount()
 	r.reportDRAMLatency()
@@ -3486,6 +3527,30 @@ func (r *Runner) reportTLBLatency() {
 
 }
 
+func (r *Runner) reportL1CaPWQCacheLens() {
+	for _, tracer := range r.L1CaPWQCacheLenTracers {
+		if tracer.AverageCount() == 0 {
+			continue
+		}
+		r.metricsCollector.Collect(
+			tracer.TracedComponentName,
+			"average_pwq_cache_len",
+			float64(tracer.AverageCount()),
+		)
+	}
+
+	for _, tracer := range r.L1CaPWQCacheMaxLenTracers {
+		if tracer.MaximumCount() == 0 {
+			continue
+		}
+		r.metricsCollector.Collect(
+			tracer.TracedComponentName,
+			"maximum_pwq_cache_len",
+			float64(tracer.MaximumCount()),
+		)
+	}
+}
+
 func (r *Runner) reportPageWalkLatency() {
 	for _, tracer := range r.PageWalkLatencyTracers {
 		if tracer.tracer.AverageTime() == 0 {
@@ -3541,7 +3606,7 @@ func (r *Runner) reportActiveWalkerCount() {
 		}
 		r.metricsCollector.Collect(
 			tracer.TracedComponentName,
-			"average secondaryQueue length",
+			"average PageWalkQuque length",
 			float64(tracer.AverageCount()),
 		)
 	}
@@ -3551,7 +3616,7 @@ func (r *Runner) reportActiveWalkerCount() {
 		}
 		r.metricsCollector.Collect(
 			tracer.TracedComponentName,
-			"maximum secondaryQueue length",
+			"maximum PageWalkQuque length",
 			float64(tracer.MaximumCount()),
 		)
 	}

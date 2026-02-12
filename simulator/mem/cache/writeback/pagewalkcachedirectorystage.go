@@ -78,6 +78,8 @@ func (ds *pageWalkCacheDirectoryStage) handleReadMiss(
 		WithDst(trans.read.Src).
 		WithRspTo(trans.read.ID).
 		WithData(nil).
+		WithInfo(trans.read.Address).
+		WithPID(trans.read.PID).
 		Build()
 	ds.cache.topSender.Send(dataReady)
 

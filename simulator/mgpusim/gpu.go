@@ -28,6 +28,7 @@ type GPU struct {
 	PMC                *pagemigrationcontroller.PageMigrationController
 	Dispatchers        []akita.Component
 	CUs                []akita.Component
+	L1CaPWQCache       []l1cache.Cache
 	L1VCaches          []l1cache.Cache
 	L1ICaches          []l1cache.Cache
 	L1SCaches          []l1cache.Cache

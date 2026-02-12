@@ -133,6 +133,10 @@ func (pt *PageTableImpl) MoveToLevel(vAddr uint64, level int) uint64 {
 	return vAddr
 }
 
+func (pt *PageTableImpl) MoveFromVAddrToLevel(vAddr uint64, level int) uint64 {
+	return pt.MoveToLevel(pt.getTable(0).rearrange(vAddr), level)
+}
+
 type processTableImpl struct {
 	sync.Mutex
 	root             *treeNode

@@ -533,6 +533,8 @@ func (b *HierarchicalMemSideCaPWQGPUBuilder) establishMMUToL1RoutingPath(chiplet
 
 		lowModuleFinder.LowModules = append(lowModuleFinder.LowModules,
 			idealCache.GetMMUSidePort())
+
+		b.gpu.L1CaPWQCache = append(b.gpu.L1CaPWQCache, idealCache)
 	}
 
 	ep := multiplexer.MakeEndPointBuilder().
@@ -679,6 +681,8 @@ func (b *HierarchicalMemSideCaPWQGPUBuilder) connectL2TLBTOMMU(chiplet *Chiplet)
 	tlbToMMUConn.PlugIn(chiplet.MMU.ToTopPort(), 64)
 	for _, l2tlb := range chiplet.L2TLBs {
 		tlbToMMUConn.PlugIn(l2tlb.GetBottomPort(), 16)
+
+		chiplet.MMU.(*mmu.CaPWQMMU).L2TLB = l2tlb.GetBottomPort()
 	}
 }
 

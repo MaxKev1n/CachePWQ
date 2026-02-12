@@ -45,8 +45,8 @@ type Transaction struct {
 	level             int
 	msgID             string
 	state             transactionState
+	Address           uint64
 	PPN               uint64
-	LastPPNWithOffset uint64
 	vAddr             uint64
 	remoteMemAccesses int
 	pid               ca.PID

@@ -1,17 +1,18 @@
 package vm
 
 import (
-	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/util/ca"
 )
 
 type CaPWQBlock struct {
-	Req   *device.TranslationReq // easy for user to get PID and VPN
-	VAddr uint64                 // easy for calculating PPN with offset
+	PID     ca.PID
+	Address uint64
+	Level   int
 
-	PID           ca.PID
-	VPN           uint64
+	// For CAM, do not occupy space.
 	PPNWithOffset uint64
-	Level         int
-	MsgID         string
+	PPN           uint64
+
+	// For debugging.
+	MsgID string
 }

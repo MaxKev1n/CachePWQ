@@ -94,17 +94,15 @@ func (b CaPWQMMUBuilder) Build(name string) MMU {
 		panic("no page table!")
 	}
 
-	mmu.queueCapacity = 8
+	mmu.maxPageWalkQueueSize = 128
 	mmu.pageWalkers = make([]CaPWQPageWalker, 0, b.maxNumReqInFlight)
 	for i := 0; i < b.maxNumReqInFlight; i++ {
 		walker := CaPWQPageWalker{
-			queue:         make([]*device.TranslationReq, 0),
-			inflightTrans: nil,
+			transaction: nil,
 		}
 
 		mmu.pageWalkers = append(mmu.pageWalkers, walker)
 	}
-	mmu.nextPointer = 0
 
 	pageWalkCacheBuilder := writeback.MakePageWalkCacheBuilder().
 		WithEngine(b.engine).
@@ -113,13 +111,12 @@ func (b CaPWQMMUBuilder) Build(name string) MMU {
 		WithByteSize(b.pageWalkCacheSize)
 	pageWalkCache := pageWalkCacheBuilder.Build("PageWalkCache")
 	mmu.PageWalkCache = pageWalkCache.TopPort
-	mmu.pageWalkCachePort = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToTop")
+	mmu.ToPageWalkCache = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToTop")
 	mmuToPageWalkCache := akita.NewDirectConnection("MMUToPageWalkCache", b.engine, b.freq)
 	mmuToPageWalkCache.PlugIn(pageWalkCache.TopPort, 4)
-	mmuToPageWalkCache.PlugIn(mmu.pageWalkCachePort, 4)
+	mmuToPageWalkCache.PlugIn(mmu.ToPageWalkCache, 4)
 
 	mmu.log2CacheLineSize = b.log2CacheLineSize
-	mmu.inflightMemRequets = make(map[string]string)
 
 	return mmu
 }
