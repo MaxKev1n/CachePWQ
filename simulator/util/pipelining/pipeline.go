@@ -41,6 +41,7 @@ func NewPipeline(
 	postPipelineBuf util.Buffer,
 ) Pipeline {
 	p := &pipelineImpl{
+		name:            name,
 		width:           1,
 		numStage:        numStage,
 		cyclePerStage:   cyclePerStage,

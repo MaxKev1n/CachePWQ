@@ -20,6 +20,7 @@ import (
 	noc "gitlab.com/akita/noc/networking/booksim"
 	"gitlab.com/akita/noc/networking/chipnetwork"
 	"gitlab.com/akita/noc/networking/multiplexer"
+	"gitlab.com/akita/noc/networking/ring"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -434,72 +435,24 @@ func (b *HierarchicalSMSideGPUBuilder) establishL1TLBToL2TLBRoutingPath(chiplet 
 }
 
 func (b *HierarchicalSMSideGPUBuilder) establishUniformL1TLBToL2TLBNetwork(chiplet *Chiplet) {
-	gpcSwitch := multiplexer.SwitchBuilder{}.
-		WithEngine(b.engine).
-		WithFreq(b.freq).
-		WithArbiter(multiplexer.NewRRArbiter()).
-		WithRoutingTable(multiplexer.NewMapRoutingTable()).
-		WithNumReqPerCycle(128).
-		WithBufferSizeInNumFlit(128).
-		Build(fmt.Sprintf("%s.TLBSwitch", chiplet.name))
+	l1TLBToL2TLBConn := akita.NewDirectConnection(
+		fmt.Sprintf("%s.L1TLBToL2TLBConn", chiplet.name),
+		b.engine, b.freq)
 
-	for i, l1vtlb := range chiplet.L1VTLBs {
-		ep := multiplexer.MakeEndPointBuilder().
-			WithEngine(b.engine).
-			WithFreq(b.freq).
-			WithDevicePorts([]akita.Port{l1vtlb.GetBottomPort()}).
-			WithNumReqPerCycle(1).
-			WithFlitByteSize(32).
-			Build(fmt.Sprintf("%s.L1VTLB[%d]", chiplet.name, i))
-
-		switchPort := gpcSwitch.ConnectEndPointToSwitch(ep, 5, b.freq)
-		rt := gpcSwitch.GetRoutingTable()
-		rt.AddRoute(l1vtlb.GetBottomPort(), switchPort)
+	for _, l1vtlb := range chiplet.L1VTLBs {
+		l1TLBToL2TLBConn.PlugIn(l1vtlb.GetBottomPort(), 4)
 	}
 
-	for i, l1itlb := range chiplet.L1ITLBs {
-		ep := multiplexer.MakeEndPointBuilder().
-			WithEngine(b.engine).
-			WithFreq(b.freq).
-			WithDevicePorts([]akita.Port{l1itlb.GetBottomPort()}).
-			WithFlitByteSize(32).
-			WithNumReqPerCycle(1).
-			WithNetworkPortBufferSize(1).
-			Build(fmt.Sprintf("%s.L1ITLB[%d]", chiplet.name, i))
-
-		switchPort := gpcSwitch.ConnectEndPointToSwitch(ep, 5, b.freq)
-		rt := gpcSwitch.GetRoutingTable()
-		rt.AddRoute(l1itlb.GetBottomPort(), switchPort)
+	for _, l1itlb := range chiplet.L1ITLBs {
+		l1TLBToL2TLBConn.PlugIn(l1itlb.GetBottomPort(), 4)
 	}
 
-	for i, l1stlb := range chiplet.L1STLBs {
-		ep := multiplexer.MakeEndPointBuilder().
-			WithEngine(b.engine).
-			WithFreq(b.freq).
-			WithDevicePorts([]akita.Port{l1stlb.GetBottomPort()}).
-			WithFlitByteSize(32).
-			WithNumReqPerCycle(1).
-			WithNetworkPortBufferSize(1).
-			Build(fmt.Sprintf("%s.L1STLB[%d]", chiplet.name, i))
-
-		switchPort := gpcSwitch.ConnectEndPointToSwitch(ep, 5, b.freq)
-		rt := gpcSwitch.GetRoutingTable()
-		rt.AddRoute(l1stlb.GetBottomPort(), switchPort)
+	for _, l1stlb := range chiplet.L1STLBs {
+		l1TLBToL2TLBConn.PlugIn(l1stlb.GetBottomPort(), 4)
 	}
 
-	for i, l2tlb := range chiplet.L2TLBs {
-		ep := multiplexer.MakeEndPointBuilder().
-			WithEngine(b.engine).
-			WithFreq(b.freq).
-			WithDevicePorts([]akita.Port{l2tlb.GetTopPort()}).
-			WithFlitByteSize(32).
-			WithNumReqPerCycle(8).
-			WithNetworkPortBufferSize(8).
-			Build(fmt.Sprintf("%s.L2TLB[%d]", chiplet.name, i))
-
-		switchPort := gpcSwitch.ConnectEndPointToSwitch(ep, 5, b.freq)
-		rt := gpcSwitch.GetRoutingTable()
-		rt.AddRoute(l2tlb.GetTopPort(), switchPort)
+	for _, l2tlb := range chiplet.L2TLBs {
+		l1TLBToL2TLBConn.PlugIn(l2tlb.GetTopPort(), 64)
 	}
 }
 
@@ -511,35 +464,23 @@ func (b *HierarchicalSMSideGPUBuilder) establishNonUniformL1TLBToL2TLBNetwork(ch
 		panic("numGPCs != len(chiplet.L2TLBs)")
 	}
 
-	gpcSwitches := make([]*multiplexer.Switch, 0)
+	gpcSwitches := make([]*ring.Switch, 0)
 
 	for i := 0; i < numGPCs; i++ {
-		gpcSwitch := multiplexer.SwitchBuilder{}.
+		gpcSwitch := ring.SwitchBuilder{}.
 			WithEngine(b.engine).
 			WithFreq(b.freq).
-			WithArbiter(multiplexer.NewRRArbiter()).
-			WithRoutingTable(multiplexer.NewMapRoutingTable()).
 			WithNumReqPerCycle(32).
 			WithBufferSizeInNumFlit(32).
+			WithLatency(10).
 			Build(fmt.Sprintf("%s.TLBSwitch[%d]", chiplet.name, i))
 
 		gpcSwitches = append(gpcSwitches, gpcSwitch)
 
-		rt := gpcSwitch.GetRoutingTable()
-
 		for j := i * numCUsPerGPC; j < (i+1)*numCUsPerGPC; j++ {
 			l1vtlb := chiplet.L1VTLBs[j]
 
-			ep := multiplexer.MakeEndPointBuilder().
-				WithEngine(b.engine).
-				WithFreq(b.freq).
-				WithDevicePorts([]akita.Port{l1vtlb.GetBottomPort()}).
-				WithNumReqPerCycle(1).
-				WithFlitByteSize(32).
-				Build(fmt.Sprintf("%s.L1VTLB[%d]", chiplet.name, i))
-
-			switchPort := gpcSwitch.ConnectEndPointToSwitch(ep, 5, b.freq)
-			rt.AddRoute(l1vtlb.GetBottomPort(), switchPort)
+			gpcSwitch.PlugIn(l1vtlb.GetBottomPort(), 4)
 		}
 
 		numSAPerGPC := b.numShaderArrayPerChiplet / numGPCs
@@ -549,47 +490,15 @@ func (b *HierarchicalSMSideGPUBuilder) establishNonUniformL1TLBToL2TLBNetwork(ch
 
 		for j := i * numSAPerGPC; j < (i+1)*numSAPerGPC; j++ {
 			l1stlb := chiplet.L1STLBs[j]
-
-			l1stlbEp := multiplexer.MakeEndPointBuilder().
-				WithEngine(b.engine).
-				WithFreq(b.freq).
-				WithDevicePorts([]akita.Port{l1stlb.GetBottomPort()}).
-				WithFlitByteSize(32).
-				WithNumReqPerCycle(1).
-				WithNetworkPortBufferSize(1).
-				Build(fmt.Sprintf("%s.L1STLB[%d]", chiplet.name, i))
-
-			switchPort := gpcSwitch.ConnectEndPointToSwitch(l1stlbEp, 5, b.freq)
-			rt.AddRoute(l1stlb.GetBottomPort(), switchPort)
-
 			l1itlb := chiplet.L1ITLBs[j]
 
-			l1itblEp := multiplexer.MakeEndPointBuilder().
-				WithEngine(b.engine).
-				WithFreq(b.freq).
-				WithDevicePorts([]akita.Port{l1itlb.GetBottomPort()}).
-				WithFlitByteSize(32).
-				WithNumReqPerCycle(1).
-				WithNetworkPortBufferSize(1).
-				Build(fmt.Sprintf("%s.L1ITLB[%d]", chiplet.name, i))
-
-			switchPort2 := gpcSwitch.ConnectEndPointToSwitch(l1itblEp, 5, b.freq)
-			rt.AddRoute(l1itlb.GetBottomPort(), switchPort2)
+			gpcSwitch.PlugIn(l1stlb.GetBottomPort(), 4)
+			gpcSwitch.PlugIn(l1itlb.GetBottomPort(), 4)
 		}
 
 		l2tlb := chiplet.L2TLBs[i]
 
-		ep := multiplexer.MakeEndPointBuilder().
-			WithEngine(b.engine).
-			WithFreq(b.freq).
-			WithDevicePorts([]akita.Port{l2tlb.GetTopPort()}).
-			WithFlitByteSize(32).
-			WithNumReqPerCycle(8).
-			WithNetworkPortBufferSize(8).
-			Build(fmt.Sprintf("%s.L2TLB[%d]", chiplet.name, i))
-
-		switchPort := gpcSwitch.ConnectEndPointToSwitch(ep, 5, b.freq)
-		rt.AddRoute(l2tlb.GetTopPort(), switchPort)
+		gpcSwitch.PlugIn(l2tlb.GetTopPort(), 64)
 	}
 
 	// Establish ring topology connections between GPC switches
@@ -597,15 +506,7 @@ func (b *HierarchicalSMSideGPUBuilder) establishNonUniformL1TLBToL2TLBNetwork(ch
 		switchA := gpcSwitches[i]
 		switchB := gpcSwitches[(i+1)%numGPCs]
 
-		portA, _ := multiplexer.ConnectSwitches(
-			switchA,
-			switchB,
-			40,
-			32,
-			b.engine,
-			b.freq,
-		)
-		switchA.GetRoutingTable().SetDefaultPort(portA)
+		switchA.PlugInDefaultNetworkPort(switchB.NetworkPort)
 	}
 }
 

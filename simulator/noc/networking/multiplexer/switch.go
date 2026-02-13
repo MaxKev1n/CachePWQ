@@ -42,7 +42,6 @@ func (s *Switch) Tick(now akita.VTimeInSec) bool {
 		madeProgress = s.sendOut(now) || madeProgress
 		madeProgress = s.forward(now) || madeProgress
 		madeProgress = s.route(now) || madeProgress
-		madeProgress = s.startProcessing(now) || madeProgress
 	}
 
 	madeProgress = s.movePipeline(now) || madeProgress
