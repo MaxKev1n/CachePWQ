@@ -10,6 +10,7 @@ import (
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/cache/writeback"
 	"gitlab.com/akita/mem/idealmemcontroller"
+	"gitlab.com/akita/mem/vm/lds"
 	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
@@ -69,6 +70,10 @@ func (b HierarchicalMemSideCaPWQGPUBuilder) Build(name string, id uint64) *mgpus
 	b.establishL1ToL2RoutingPath(chiplet)
 	b.establishL1TLBToL2TLBRoutingPath(chiplet)
 	b.establishMMUToL1RoutingPath(chiplet)
+
+	if _, ok := chiplet.MMU.(*mmu.AsyncCaPWQMMU); ok {
+		b.establishMMUToLDSRoutingPath(chiplet)
+	}
 
 	b.connectL2ToDRAM(chiplet)
 	b.connectL2TLBTOMMU(chiplet)
@@ -497,6 +502,8 @@ func (b *HierarchicalMemSideCaPWQGPUBuilder) establishMMUToL1RoutingPath(chiplet
 
 	if caPWQMMU, ok := chiplet.MMU.(*mmu.CaPWQMMU); ok {
 		caPWQMMU.CacheLowModuleFinder = lowModuleFinder
+	} else if asyncCaPWQMMU, ok := chiplet.MMU.(*mmu.AsyncCaPWQMMU); ok {
+		asyncCaPWQMMU.CacheLowModuleFinder = lowModuleFinder
 	} else {
 		panic("MMU is not CaPWQMMU")
 	}
@@ -524,10 +531,10 @@ func (b *HierarchicalMemSideCaPWQGPUBuilder) establishMMUToL1RoutingPath(chiplet
 			WithFreq(b.freq).
 			WithDevicePorts([]akita.Port{idealCache.GetMMUSidePort()}).
 			WithNumReqPerCycle(1).
-			WithFlitByteSize(32).
+			WithFlitByteSize(64).
 			Build(fmt.Sprintf("%s.L1IdealCaPWQCache[%d]", chiplet.name, i))
 
-		switchPort := mmuSwitch.ConnectEndPointToSwitch(ep, 50, b.freq)
+		switchPort := mmuSwitch.ConnectEndPointToSwitch(ep, 5, b.freq)
 		rt := mmuSwitch.GetRoutingTable()
 		rt.AddRoute(idealCache.GetMMUSidePort(), switchPort)
 
@@ -541,14 +548,63 @@ func (b *HierarchicalMemSideCaPWQGPUBuilder) establishMMUToL1RoutingPath(chiplet
 		WithEngine(b.engine).
 		WithFreq(b.freq).
 		WithDevicePorts([]akita.Port{chiplet.MMU.ToCachePort()}).
-		WithFlitByteSize(32).
+		WithFlitByteSize(64).
 		WithNumReqPerCycle(8).
 		WithNetworkPortBufferSize(8).
 		Build(fmt.Sprintf("%s.MMU", chiplet.name))
 
-	switchPort := mmuSwitch.ConnectEndPointToSwitch(ep, 50, b.freq)
+	switchPort := mmuSwitch.ConnectEndPointToSwitch(ep, 5, b.freq)
 	rt := mmuSwitch.GetRoutingTable()
 	rt.AddRoute(chiplet.MMU.ToCachePort(), switchPort)
+}
+
+func (b *HierarchicalMemSideCaPWQGPUBuilder) establishMMUToLDSRoutingPath(chiplet *Chiplet) {
+	if _, ok := chiplet.MMU.(*mmu.AsyncCaPWQMMU); !ok {
+		return
+	}
+
+	mmuSwitch := multiplexer.SwitchBuilder{}.
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithArbiter(multiplexer.NewRRArbiter()).
+		WithRoutingTable(multiplexer.NewMapRoutingTable()).
+		WithNumReqPerCycle(128).
+		WithBufferSizeInNumFlit(128).
+		Build(fmt.Sprintf("%s.MMUSwitch", chiplet.name))
+
+	idealLDS := lds.NewIdealCaPWQLDS(
+		fmt.Sprintf("%s.L1IdealCaPWQLDS", chiplet.name),
+		b.engine,
+		b.freq,
+		4,
+		28,
+	)
+
+	epLDS := multiplexer.MakeEndPointBuilder().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithDevicePorts([]akita.Port{idealLDS.GetMMUSidePort()}).
+		WithNumReqPerCycle(4).
+		WithFlitByteSize(64).
+		Build(fmt.Sprintf("%s.L1IdealCaPWQLDS", chiplet.name))
+
+	switchPortLDS := mmuSwitch.ConnectEndPointToSwitch(epLDS, 5, b.freq)
+	rt := mmuSwitch.GetRoutingTable()
+	rt.AddRoute(idealLDS.GetMMUSidePort(), switchPortLDS)
+
+	b.gpu.L1CaPWQLDS = append(b.gpu.L1CaPWQLDS, idealLDS)
+
+	epMMU := multiplexer.MakeEndPointBuilder().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithDevicePorts([]akita.Port{chiplet.MMU.(*mmu.AsyncCaPWQMMU).ToLDS}).
+		WithFlitByteSize(64).
+		WithNumReqPerCycle(16).
+		WithNetworkPortBufferSize(16).
+		Build(fmt.Sprintf("%s.MMU", chiplet.name))
+
+	switchPortMMU := mmuSwitch.ConnectEndPointToSwitch(epMMU, 5, b.freq)
+	rt.AddRoute(chiplet.MMU.(*mmu.AsyncCaPWQMMU).ToLDS, switchPortMMU)
 }
 
 func (b *HierarchicalMemSideCaPWQGPUBuilder) connectMMUToGlobalNoC(chiplet *Chiplet) {
@@ -662,13 +718,15 @@ func (b *HierarchicalMemSideCaPWQGPUBuilder) buildL2TLB(chiplet *Chiplet) {
 
 func (b *HierarchicalMemSideCaPWQGPUBuilder) buildMMU(chiplet *Chiplet) {
 	if yamlconfig.OverrideConfig == nil {
-		b.buildCAPWQMMU(chiplet)
+		panic("MMU.type must be specified in the config file")
 	} else {
 		mmuType := yamlconfig.OverrideConfig["MMU.type"]
 
 		switch mmuType {
 		case "CaPWQMMU":
 			b.buildCAPWQMMU(chiplet)
+		case "AsyncCaPWQMMU":
+			b.buildAsyncCAPWQMMU(chiplet)
 		default:
 			log.Panicf("Unsupported MMU type: %s\n", mmuType)
 		}
@@ -682,7 +740,14 @@ func (b *HierarchicalMemSideCaPWQGPUBuilder) connectL2TLBTOMMU(chiplet *Chiplet)
 	for _, l2tlb := range chiplet.L2TLBs {
 		tlbToMMUConn.PlugIn(l2tlb.GetBottomPort(), 16)
 
-		chiplet.MMU.(*mmu.CaPWQMMU).L2TLB = l2tlb.GetBottomPort()
+		switch mmu := chiplet.MMU.(type) {
+		case *mmu.CaPWQMMU:
+			mmu.L2TLB = l2tlb.GetBottomPort()
+		case *mmu.AsyncCaPWQMMU:
+			mmu.L2TLB = l2tlb.GetBottomPort()
+		default:
+			panic("MMU is not CaPWQMMU or AsyncCaPWQMMU")
+		}
 	}
 }
 

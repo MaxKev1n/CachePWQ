@@ -693,6 +693,29 @@ func (b *CommonBuilder) buildCAPWQMMU(chiplet *Chiplet) {
 	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
 }
 
+func (b *CommonBuilder) buildAsyncCAPWQMMU(chiplet *Chiplet) {
+	mmuBuilder := mmu.MakeAsyncCaPWQMMUBuilder().
+		WithEngine(b.engine).
+		WithFreq(1 * akita.GHz).
+		WithLog2PageSize(b.log2PageSize).
+		WithPageTable(b.pageTable).
+		WithMaxNumReqInFlight(16).
+		WithLog2CacheLineSize(b.log2CacheLineSize)
+
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
+		}
+
+		mmuBuilder = mmuBuilder.WithMaxNumReqInFlight(numWalkersInt)
+	}
+
+	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.AsyncCaPWQMMU", chiplet.name))
+
+	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
+}
+
 func (b *CommonBuilder) buildMPWMMU(chiplet *Chiplet) {
 	mmuBuilder := mmu.MakeMPWMMUBuilder().
 		WithEngine(b.engine).

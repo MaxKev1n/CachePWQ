@@ -33,6 +33,8 @@ const (
 	memDone
 	sentRDToL1
 	l1Done
+	sentWRToLDS
+	sentRDToLDS
 	transactionFinished
 )
 

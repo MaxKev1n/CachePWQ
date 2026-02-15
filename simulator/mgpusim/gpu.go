@@ -5,6 +5,7 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/cache/writeback"
+	"gitlab.com/akita/mem/vm/lds"
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	noc "gitlab.com/akita/noc/networking/booksim"
 
@@ -29,6 +30,7 @@ type GPU struct {
 	Dispatchers        []akita.Component
 	CUs                []akita.Component
 	L1CaPWQCache       []l1cache.Cache
+	L1CaPWQLDS         []*lds.IdealCaPWQLDS
 	L1VCaches          []l1cache.Cache
 	L1ICaches          []l1cache.Cache
 	L1SCaches          []l1cache.Cache
