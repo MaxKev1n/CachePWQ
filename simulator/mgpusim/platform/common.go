@@ -48,6 +48,8 @@ type CommonPlatformBuilder struct {
 
 	useTimeInstProfiling bool
 	useTimeEventAnalysis bool
+
+	useTLBMonitor bool
 }
 
 // Makebuilder creates a EmuBuilder with default parameters.
@@ -152,6 +154,10 @@ func (b *CommonPlatformBuilder) UseTimeInstProfiling() {
 
 func (b *CommonPlatformBuilder) UseTimeEventAnalysis() {
 	b.useTimeEventAnalysis = true
+}
+
+func (b *CommonPlatformBuilder) WithTLBMonitor() {
+	b.useTLBMonitor = true
 }
 
 // // WithNumChiplets sets the number of chiplets in the mcm GPU.

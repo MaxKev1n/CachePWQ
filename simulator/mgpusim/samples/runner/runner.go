@@ -16,6 +16,7 @@ import (
 
 	"github.com/tebeka/atexit"
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/mem/trace"
 	"gitlab.com/akita/mgpusim/yamlconfig"
 
 	// ram "gitlab.com/akita/mem/dram"
@@ -146,6 +147,8 @@ var tipFlag = flag.Bool("tip", false,
 	"Enable Time-Proportional Instruction Profiling (TIP).")
 var teaFlag = flag.Bool("tea", false,
 	"Enable Time-Proportional Event Analysis (TEA).")
+var monitorTLBFlag = flag.Bool("tlb-monitor", false,
+	"Enable the TLB monitor that tracks the number of the TLB queues.")
 
 type verificationPreEnablingBenchmark interface {
 	benchmarks.Benchmark
@@ -306,6 +309,12 @@ type TLBReqStallTracer struct {
 	tlb    tlb.TLB
 }
 
+type TLBMonitorTracer struct {
+	avgTracer *trace.TLBMonitorAverageCountTracer
+	maxTracer *trace.TLBMonitorMaxCountTracer
+	monitor   *tlb.TLBMonitor
+}
+
 // Runner is a class that helps running the benchmarks in the official samples.
 type Runner struct {
 	Engine                          akita.Engine
@@ -369,6 +378,7 @@ type Runner struct {
 	TLBSetMissTracers               []TLBSetMissTracer
 	TLBMSHRStallTracers             []TLBMSHRStallTracer
 	TLBReqStallTracers              []TLBReqStallTracer
+	TLBAverageTracers               []TLBMonitorTracer
 	Benchmarks                      []benchmarks.Benchmark
 	Timing                          bool
 	Verify                          bool
@@ -405,6 +415,7 @@ type Runner struct {
 	ReportTLBSetMissTracing         bool
 	ReportTLBMSHRStallTracing       bool
 	ReportTLBReqStalls              bool
+	ReportTLBMonitor                bool
 	UseUnifiedMemory                bool
 	UseLASPMemoryAlloc              bool
 	UseLASPHSLMemoryAlloc           bool
@@ -672,6 +683,7 @@ func (r *Runner) Init() *Runner {
 	r.addTLBSetMissTracer()
 	r.addTLBMSHRStallTracer()
 	r.addTLBReqStallTracer()
+	r.addTLBMonitorTracer()
 	r.addPageWalkerImbalanceTracker()
 	r.addL3TLBSQLTracer()
 	r.addMMUCacheReqTracer()
@@ -1123,6 +1135,12 @@ func (r *Runner) buildTimingPlatform() {
 			}
 
 			b.UseTimeEventAnalysis()
+		}
+
+		if *monitorTLBFlag {
+			b.WithTLBMonitor()
+
+			r.ReportTLBMonitor = true
 		}
 
 		b.WithAlg(*schedulingAlg)
@@ -3110,6 +3128,37 @@ func (r *Runner) addTLBReqStallTracer() {
 	}
 }
 
+func (r *Runner) addTLBMonitorTracer() {
+	if !r.ReportTLBMonitor {
+		return
+	}
+	for _, gpu := range r.GPUDriver.GPUs {
+		for _, monitor := range gpu.TLBMonitors {
+			monitorTracer := TLBMonitorTracer{
+				monitor: monitor,
+			}
+
+			avgTracer := trace.NewTLBMonitorAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "TLBMonitor"
+				})
+			tracing.CollectTrace(monitor, avgTracer)
+
+			maxTracer := trace.NewTLBMonitorMaxCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "TLBMonitor"
+				})
+			tracing.CollectTrace(monitor, maxTracer)
+
+			monitorTracer.avgTracer = avgTracer
+			monitorTracer.maxTracer = maxTracer
+
+			r.TLBAverageTracers = append(r.TLBAverageTracers,
+				monitorTracer)
+		}
+	}
+}
+
 func (r *Runner) addPageWalkerImbalanceTracker() {
 	if !r.ReportPageWalkerImbalance {
 		return
@@ -3257,6 +3306,7 @@ func (r *Runner) reportStats() {
 	r.reportTLBSetMissTracing()
 	r.reportTLBMSHRStallTracing()
 	r.reportTLBReqStalls()
+	r.reportTLBMonitor()
 	r.reportBookSimTracer()
 	r.reportMMUCacheReqLatency()
 
@@ -4210,6 +4260,52 @@ func (r *Runner) reportTLBReqStalls() {
 			tlb.Name(),
 			"remote-tlb-mshr-hit",
 			float64(tracer.GetStepCount("remote-tlb-mshr-hit")),
+		)
+	}
+}
+
+func (r *Runner) reportTLBMonitor() {
+	for _, t := range r.TLBAverageTracers {
+		m := t.monitor
+		tracer := t.avgTracer
+		counts := tracer.AverageCounts()
+
+		r.metricsCollector.Collect(
+			m.Name(),
+			"Average TLB Hits",
+			float64(counts[0]),
+		)
+		r.metricsCollector.Collect(
+			m.Name(),
+			"Average TLB MSHR Hits",
+			float64(counts[1]),
+		)
+		r.metricsCollector.Collect(
+			m.Name(),
+			"Average TLB Misses",
+			float64(counts[2]),
+		)
+	}
+
+	for _, t := range r.TLBAverageTracers {
+		m := t.monitor
+		tracer := t.maxTracer
+		counts := tracer.MaxCounts()
+
+		r.metricsCollector.Collect(
+			m.Name(),
+			"Max TLB Hits",
+			float64(counts[0]),
+		)
+		r.metricsCollector.Collect(
+			m.Name(),
+			"Max TLB MSHR Hits",
+			float64(counts[1]),
+		)
+		r.metricsCollector.Collect(
+			m.Name(),
+			"Max TLB Misses",
+			float64(counts[2]),
 		)
 	}
 }

@@ -62,6 +62,8 @@ type GPU struct {
 	InterChipletMagicNetwork *akita.DirectConnection
 
 	GPUID uint64
+
+	TLBMonitors []*tlb.TLBMonitor
 }
 
 // ExternalPorts returns external ports

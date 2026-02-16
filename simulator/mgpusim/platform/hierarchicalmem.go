@@ -76,6 +76,10 @@ func (b *HierarchicalMemSidePlatformBuilder) createGPUBuilder(
 		gpuBuilder.UseTimeEventAnalysis()
 	}
 
+	if b.useTLBMonitor {
+		gpuBuilder.WithTLBMonitor()
+	}
+
 	b.setVisTracer(gpuDriver, gpuBuilder)
 	b.setTLBTracer(gpuBuilder)
 	b.setMemTracer(gpuBuilder)

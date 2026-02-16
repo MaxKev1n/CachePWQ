@@ -537,6 +537,10 @@ func (d *Driver) processLaunchKernelCommand(
 	d.logCmdStart(cmd, now)
 	d.logTaskToGPUInitiate(now, cmd, req)
 
+	for _, monitor := range d.GPUs[queue.GPUID-1].TLBMonitors {
+		monitor.Start(now)
+	}
+
 	return true
 }
 
@@ -596,6 +600,10 @@ func (d *Driver) processLaunchKernelReturn(
 	if len(cmd.GetReqs()) == 0 {
 		cmdQueue.IsRunning = false
 		cmdQueue.Dequeue()
+
+		for _, monitor := range d.GPUs[cmdQueue.GPUID-1].TLBMonitors {
+			monitor.Stop()
+		}
 
 		d.logCmdComplete(cmd, now)
 	}

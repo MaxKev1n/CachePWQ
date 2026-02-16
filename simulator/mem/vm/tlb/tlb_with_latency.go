@@ -108,6 +108,8 @@ type LatTLB struct {
 	hysterisis   bool
 
 	gpcID int
+
+	monitorStats *MonitorStats
 }
 
 func (tlb *LatTLB) GetStalledPSV() *psv.PerfSignatureVec {
@@ -158,6 +160,15 @@ func (tlb *LatTLB) SetCommandProcessor(cp akita.Port) {
 
 func (tlb *LatTLB) SetGPCID(id int) {
 	tlb.gpcID = id
+}
+
+func (tlb *LatTLB) createMonitorStats() {
+	tlb.monitorStats = &MonitorStats{
+		name:     tlb.Name(),
+		Hits:     0,
+		MSHRHits: 0,
+		Misses:   0,
+	}
 }
 
 // Reset sets all the entries int he LatTLB to be invalid
@@ -424,6 +435,9 @@ func (tlb *LatTLB) lookup(now akita.VTimeInSec) bool {
 				"tlb-mshr-hit",
 				req.VAddr,
 			)
+
+			tlb.monitorStats.MSHRHits += 1
+
 			tlb.lookupBuffer.Pop()
 			// if tlb.stats.sendStateInfo {
 			tlb.stats.numAccess += 1
@@ -463,6 +477,9 @@ func (tlb *LatTLB) handleTranslationHit(
 	}
 	tlb.visit(setID, wayID)
 	tlb.lookupBuffer.Pop()
+
+	tlb.monitorStats.Hits += 1
+
 	// if tlb.stats.sendStateInfo {
 	tlb.stats.numAccess += 1
 	tlb.stats.accessesInCurEpoch++
@@ -500,6 +517,9 @@ func (tlb *LatTLB) handleTranslationMiss(
 	if fetched {
 		//tlb.TopPort.Retrieve(now)
 		tlb.lookupBuffer.Pop()
+
+		tlb.monitorStats.Misses += 1
+
 		// if tlb.stats.sendStateInfo {
 		tlb.stats.numAccess += 1
 		tlb.stats.accessesInCurEpoch++
