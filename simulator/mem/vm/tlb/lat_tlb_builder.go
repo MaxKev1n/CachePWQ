@@ -150,10 +150,18 @@ func (b LatTLBBuilder) Build(name string) TLB {
 	tlb.ControlPort = akita.NewLimitNumMsgPort(tlb, 1,
 		name+".ControlPort")
 	tlb.mshr = newMSHR(b.numMSHREntry)
+	tlb.extensionmshr = newMSHR(0)
 	tlb.lookupBuffer = util.NewBuffer(2 * tlb.numReqPerCycle)
 	pipelineBuilder := pipelining.MakeBuilder().WithPipelineWidth(tlb.numReqPerCycle).WithNumStage(tlb.latency).WithCyclePerStage(1).WithPostPipelineBuffer(tlb.lookupBuffer)
 	tlb.pipeline = pipelineBuilder.Build(tlb.Name() + "_pipeline")
 	tlb.reset()
+
+	tlb.monitorStats = &MonitorStats{
+		name:     tlb.Name(),
+		Hits:     0,
+		MSHRHits: 0,
+		Misses:   0,
+	}
 
 	return tlb
 }

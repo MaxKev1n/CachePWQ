@@ -713,6 +713,12 @@ func (b *HierarchicalMemSideCaPWQGPUBuilder) buildL2TLB(chiplet *Chiplet) {
 	b.gpu.L2TLBs = append(b.gpu.L2TLBs, l2TLB)
 	chiplet.L2TLBs = append(chiplet.L2TLBs, l2TLB)
 
+	if asyncCaPWQMMU, ok := chiplet.MMU.(*mmu.AsyncCaPWQMMU); ok {
+		l2TLB.(*tlb.LatTLB).SetMaxExtensionMisses(
+			asyncCaPWQMMU.GetMaxExtensionReqs(),
+		)
+	}
+
 	if b.enableVisTracing {
 		tracing.CollectTrace(l2TLB, b.visTracer)
 	}

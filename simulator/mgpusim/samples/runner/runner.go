@@ -3750,6 +3750,7 @@ func (r *Runner) reportTLBHitRate() {
 		//fmt.Println(tracer.tlb.Name())
 		tlbHit := tracer.tracer.GetStepCount("tlb-hit")
 		tlbMiss := tracer.tracer.GetStepCount("tlb-miss")
+		tlbExtendMiss := tracer.tracer.GetStepCount("tlb-extend-miss")
 		tlbMSHRHit := tracer.tracer.GetStepCount("tlb-mshr-hit")
 		//tlb := tracer.tlb.(*tlb.TLB)
 		tlbName := tracer.tlb.Name()
@@ -3757,6 +3758,8 @@ func (r *Runner) reportTLBHitRate() {
 			tlbName, "tlb-hit", float64(tlbHit))
 		r.metricsCollector.Collect(
 			tlbName, "tlb-miss", float64(tlbMiss))
+		r.metricsCollector.Collect(
+			tlbName, "tlb-extend-miss", float64(tlbExtendMiss))
 		r.metricsCollector.Collect(
 			tlbName, "tlb-mshr-hit", float64(tlbMSHRHit))
 

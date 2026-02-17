@@ -541,6 +541,10 @@ type AsyncCaPWQMMU struct {
 	drainingPWQ bool
 }
 
+func (mmu *AsyncCaPWQMMU) GetMaxExtensionReqs() int {
+	return mmu.maxInflightRequests - mmu.maxPageWalkQueueSize
+}
+
 // Tick defines how the MMU update state each cycle
 func (mmu *AsyncCaPWQMMU) Tick(now akita.VTimeInSec) bool {
 	madeProgress := false

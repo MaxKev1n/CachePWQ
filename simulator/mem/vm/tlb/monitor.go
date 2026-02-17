@@ -50,7 +50,7 @@ func (m *TLBMonitor) RegisterL2TLB(tlb *LatTLB) {
 func (m *TLBMonitor) Start(now akita.VTimeInSec) {
 	if !m.initialized {
 		for _, tlb := range m.L2TLBs {
-			tlb.createMonitorStats()
+			tlb.monitorStats.Clear()
 		}
 
 		m.initialized = true
