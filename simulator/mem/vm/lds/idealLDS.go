@@ -173,7 +173,9 @@ func (c *IdealCaPWQLDS) handleReadReq(
 		return false
 	}
 
-	c.storage = c.storage[1:]
+	if len(c.storage) != 0 {
+		c.storage = c.storage[1:]
+	}
 
 	c.postPipelineBuf.Pop()
 

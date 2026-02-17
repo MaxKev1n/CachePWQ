@@ -3792,6 +3792,28 @@ func (r *Runner) reportPWCHitRate() {
 			tracer.mmu.Name(), "page_walk_req_remote", float64(remoteMemReq))
 		r.metricsCollector.Collect(
 			tracer.mmu.Name(), "pw-level-3-remote-reqs", float64(lastLevelRemoteMemReq))
+
+		ptwL1Load := tracer.tracer.GetStepCount("page_walk_load_l1")
+		ptwL1Store := tracer.tracer.GetStepCount("page_walk_store_l1")
+
+		l1accesses := ptwL1Load + ptwL1Store
+		if l1accesses > 0 {
+			r.metricsCollector.Collect(
+				tracer.mmu.Name(), "page-walk-l1-load", float64(ptwL1Load))
+			r.metricsCollector.Collect(
+				tracer.mmu.Name(), "page-walk-l1-store", float64(ptwL1Store))
+		}
+
+		ptwLDSLoad := tracer.tracer.GetStepCount("page_walk_load_lds")
+		ptwLDSStore := tracer.tracer.GetStepCount("page_walk_store_lds")
+
+		ldsAccesses := ptwLDSLoad + ptwLDSStore
+		if ldsAccesses > 0 {
+			r.metricsCollector.Collect(
+				tracer.mmu.Name(), "page-walk-lds-load", float64(ptwLDSLoad))
+			r.metricsCollector.Collect(
+				tracer.mmu.Name(), "page-walk-lds-store", float64(ptwLDSStore))
+		}
 	}
 }
 

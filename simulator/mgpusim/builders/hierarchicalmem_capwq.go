@@ -605,6 +605,8 @@ func (b *HierarchicalMemSideCaPWQGPUBuilder) establishMMUToLDSRoutingPath(chiple
 
 	switchPortMMU := mmuSwitch.ConnectEndPointToSwitch(epMMU, 5, b.freq)
 	rt.AddRoute(chiplet.MMU.(*mmu.AsyncCaPWQMMU).ToLDS, switchPortMMU)
+
+	chiplet.MMU.(*mmu.AsyncCaPWQMMU).LDS = idealLDS.GetMMUSidePort()
 }
 
 func (b *HierarchicalMemSideCaPWQGPUBuilder) connectMMUToGlobalNoC(chiplet *Chiplet) {

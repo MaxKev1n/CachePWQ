@@ -96,6 +96,7 @@ func (b AsyncCaPWQMMUBuilder) Build(name string) MMU {
 	}
 
 	mmu.maxPageWalkQueueSize = 8 * b.maxNumReqInFlight
+	mmu.maxInflightRequests = 2 * mmu.maxPageWalkQueueSize
 	mmu.pageWalkers = make([]*AsyncCaPWQPageWalker, 0, b.maxNumReqInFlight)
 	for i := 0; i < b.maxNumReqInFlight; i++ {
 		walker := newAsyncCaPWQPageWalker(mmu, i)

@@ -529,9 +529,7 @@ func (mmu *CaPWQMMU) handlePageWalkCacheResponse(
 	rsp *mem.DataReadyRsp,
 	now akita.VTimeInSec,
 ) bool {
-	// Process the transaction in page walk queue first.
-	// TODO: Is it correct?
-	if len(mmu.pageWalkQueue) > 0 {
+	if mmu.numInflightPTWRequests >= uint64(mmu.maxPageWalkQueueSize) {
 		return false
 	}
 

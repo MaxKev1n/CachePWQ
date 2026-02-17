@@ -102,6 +102,8 @@ func (walker *AsyncCaPWQPageWalker) AcceptLDSRsp(
 		PPN:   entry.PPN,
 	}
 
+	walker.mmu.numResponseInLDS--
+
 	walker.TickLater(now)
 }
 
@@ -125,7 +127,11 @@ func (walker *AsyncCaPWQPageWalker) AcceptMemoryRsp(
 		PPN:   PPN,
 	}
 
-	if walker.mmu.forwardingToLDS {
+	if len(walker.mmu.pageWalkQueue) >= walker.mmu.maxPageWalkQueueSize {
+		walker.mmu.drainingPWQ = true
+	}
+
+	if walker.mmu.drainingPWQ {
 		walker.transaction.state = sentWRToLDS
 	}
 
@@ -166,6 +172,10 @@ func (walker *AsyncCaPWQPageWalker) AcceptL1CacheRsp(
 			walker.mmu.pageWalkQueue[:j],
 			walker.mmu.pageWalkQueue[j+1:]...,
 		)
+
+		if len(walker.mmu.pageWalkQueue) == 0 {
+			walker.mmu.drainingPWQ = false
+		}
 
 		walker.TickLater(now)
 
@@ -262,16 +272,7 @@ func (walker *AsyncCaPWQPageWalker) sendReadReqToL1(now akita.VTimeInSec) {
 		walker.mmu.pageWalkQueue,
 		trans,
 	)
-
-	if len(walker.mmu.pageWalkQueue) == 0 {
-		walker.transaction = &Transaction{
-			state: sentRDToLDS,
-		}
-
-		walker.mmu.forwardingToLDS = false
-	} else {
-		walker.transaction = nil
-	}
+	walker.transaction = nil
 
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(readReq, walker.mmu),
 		now, walker.mmu, "page_walk_load_l1")
@@ -359,6 +360,8 @@ func (walker *AsyncCaPWQPageWalker) sendWriteReqToLDS(now akita.VTimeInSec) {
 
 	walker.transaction = nil
 
+	walker.mmu.numResponseInLDS++
+
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(writeReq, walker.mmu),
 		now, walker.mmu, "page_walk_store_lds")
 
@@ -426,6 +429,13 @@ func (walker *AsyncCaPWQPageWalker) sendToMem(now akita.VTimeInSec) {
 
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(readReq, walker.mmu),
 		now, walker.mmu, "page_walk_req_local")
+
+	// load requests from LDS.
+	if walker.mmu.numResponseInLDS > 0 {
+		walker.transaction = &Transaction{
+			state: sentRDToLDS,
+		}
+	}
 
 	return
 }
@@ -521,13 +531,14 @@ type AsyncCaPWQMMU struct {
 
 	pageWalkQueue        []*Transaction
 	maxPageWalkQueueSize int
+	maxInflightRequests  int
 
 	log2CacheLineSize uint64
 
 	numInflightPTWRequests uint64
 	numResponseInLDS       uint64
 
-	forwardingToLDS bool
+	drainingPWQ bool
 }
 
 // Tick defines how the MMU update state each cycle
@@ -653,8 +664,7 @@ func (mmu *AsyncCaPWQMMU) handlePageWalkCacheResponse(
 	rsp *mem.DataReadyRsp,
 	now akita.VTimeInSec,
 ) bool {
-	// Process the transaction in page walk queue first.
-	if len(mmu.pageWalkQueue) >= mmu.maxPageWalkQueueSize {
+	if mmu.numInflightPTWRequests >= uint64(mmu.maxInflightRequests) {
 		return false
 	}
 
@@ -679,8 +689,8 @@ func (mmu *AsyncCaPWQMMU) handlePageWalkCacheResponse(
 }
 
 func (mmu *AsyncCaPWQMMU) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) bool {
-	if len(mmu.pageWalkQueue) >= mmu.maxPageWalkQueueSize {
-		mmu.forwardingToLDS = true
+	if mmu.numInflightPTWRequests > uint64(mmu.maxInflightRequests) {
+		panic(fmt.Sprintf("too many inflight PTW requests: %d", mmu.numInflightPTWRequests))
 	}
 
 	for i := range mmu.pageWalkers {
@@ -702,8 +712,8 @@ func (mmu *AsyncCaPWQMMU) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTi
 }
 
 func (mmu *AsyncCaPWQMMU) handleLDSReadResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) bool {
-	if len(mmu.pageWalkQueue) >= mmu.maxPageWalkQueueSize {
-		return false
+	if mmu.numInflightPTWRequests > uint64(mmu.maxInflightRequests) {
+		panic(fmt.Sprintf("too many inflight PTW requests: %d", mmu.numInflightPTWRequests))
 	}
 
 	if len(rsp.Info.([]lds.IdealLDSEntry)) == 0 {
