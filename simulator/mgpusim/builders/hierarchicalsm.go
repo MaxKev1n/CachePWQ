@@ -303,7 +303,7 @@ func (b *HierarchicalSMSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 			WithFlitByteSize(32).
 			WithNumReqPerCycle(16).
 			WithNetworkPortBufferSize(16).
-			Build(fmt.Sprintf("%s.L1SCache[%d]", chiplet.name, i))
+			Build(fmt.Sprintf("%s.MMU[%d]", chiplet.name, i))
 
 		mux := chiplet.gpcMux[i]
 
