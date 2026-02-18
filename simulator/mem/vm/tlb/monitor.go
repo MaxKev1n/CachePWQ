@@ -88,6 +88,8 @@ func (m *TLBMonitor) CollectL2TLBStats(
 		"",
 		tlb.monitorStats,
 	)
+
+	tlb.monitorStats.Clear()
 }
 
 type MonitorStats struct {
