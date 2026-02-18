@@ -9,9 +9,8 @@ import (
 )
 
 type pipelineItem struct {
-	taskID    string
-	msg       akita.Msg
-	outBuffer util.Buffer
+	taskID string
+	msg    akita.Msg
 }
 
 func (f pipelineItem) TaskID() string {
@@ -154,9 +153,8 @@ func (s *Switch) startProcessing(now akita.VTimeInSec) (madeProgress bool) {
 			}
 
 			pipelineItem := pipelineItem{
-				taskID:    akita.GetIDGenerator().Generate(),
-				msg:       msg,
-				outBuffer: s.sendOutBuffer,
+				taskID: akita.GetIDGenerator().Generate(),
+				msg:    msg,
 			}
 			s.pipeline.Accept(now, pipelineItem)
 			//log.Printf("%.12f, Switch %s, msg %s move to pipeline %s\n",
@@ -221,6 +219,7 @@ type SwitchBuilder struct {
 	numReqPerCycle      int
 	bufferSizeInNumFlit int
 	latency             int
+	linkWidth           int
 }
 
 // WithEngine sets the engine that the switch to build uses.
@@ -254,6 +253,12 @@ func (b SwitchBuilder) WithLatency(latency int) SwitchBuilder {
 	return b
 }
 
+// WithLinkWidth sets the link width of the switch to be built.
+func (b SwitchBuilder) WithLinkWidth(linkWidth int) SwitchBuilder {
+	b.linkWidth = linkWidth
+	return b
+}
+
 // Build creates a new switch
 func (b SwitchBuilder) Build(name string) *Switch {
 	b.engineMustBeGiven()
@@ -267,7 +272,7 @@ func (b SwitchBuilder) Build(name string) *Switch {
 
 	s.sendOutBuffer = util.NewBuffer(2 * b.numReqPerCycle)
 	pipelineBuilder := pipelining.MakeBuilder().
-		WithPipelineWidth(b.numReqPerCycle).
+		WithPipelineWidth(b.linkWidth).
 		WithNumStage(b.latency).
 		WithCyclePerStage(1).
 		WithPostPipelineBuffer(s.sendOutBuffer)

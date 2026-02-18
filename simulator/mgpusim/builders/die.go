@@ -15,6 +15,7 @@ import (
 	"gitlab.com/akita/mgpusim/timing/cu"
 	noc "gitlab.com/akita/noc/networking/booksim"
 	"gitlab.com/akita/noc/networking/multiplexer"
+	"gitlab.com/akita/noc/networking/ring"
 )
 
 type Chiplet struct {
@@ -63,6 +64,8 @@ type Chiplet struct {
 
 	name      string
 	ChipletID uint64
+
+	gpcSwitches []*ring.Switch
 }
 
 // NewChiplet returna a new Chiplet instance with only name and ID set.

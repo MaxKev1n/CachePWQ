@@ -73,7 +73,7 @@ func (b HierarchicalSMSideGPUBuilder) Build(name string, id uint64) *mgpusim.GPU
 	b.establishNonUniformL1TLBToL2TLBNetwork(chiplet)
 
 	b.connectL2ToDRAM(chiplet)
-	b.connectL2TLBTOMMU(chiplet)
+	b.establishNonUniformL2TLBToMMUNetwork(chiplet)
 	b.connectMMUToGlobalNoC(chiplet)
 
 	b.establishTPC(chiplet)
@@ -464,18 +464,17 @@ func (b *HierarchicalSMSideGPUBuilder) establishNonUniformL1TLBToL2TLBNetwork(ch
 		panic("numGPCs != len(chiplet.L2TLBs)")
 	}
 
-	gpcSwitches := make([]*ring.Switch, 0)
-
 	for i := 0; i < numGPCs; i++ {
 		gpcSwitch := ring.SwitchBuilder{}.
 			WithEngine(b.engine).
 			WithFreq(b.freq).
-			WithNumReqPerCycle(32).
-			WithBufferSizeInNumFlit(32).
+			WithNumReqPerCycle(128).
+			WithBufferSizeInNumFlit(128).
 			WithLatency(10).
+			WithLinkWidth(4).
 			Build(fmt.Sprintf("%s.TLBSwitch[%d]", chiplet.name, i))
 
-		gpcSwitches = append(gpcSwitches, gpcSwitch)
+		chiplet.gpcSwitches = append(chiplet.gpcSwitches, gpcSwitch)
 
 		for j := i * numCUsPerGPC; j < (i+1)*numCUsPerGPC; j++ {
 			l1vtlb := chiplet.L1VTLBs[j]
@@ -503,8 +502,8 @@ func (b *HierarchicalSMSideGPUBuilder) establishNonUniformL1TLBToL2TLBNetwork(ch
 
 	// Establish ring topology connections between GPC switches
 	for i := 0; i < numGPCs; i++ {
-		switchA := gpcSwitches[i]
-		switchB := gpcSwitches[(i+1)%numGPCs]
+		switchA := chiplet.gpcSwitches[i]
+		switchB := chiplet.gpcSwitches[(i+1)%numGPCs]
 
 		switchA.PlugInDefaultNetworkPort(switchB.NetworkPort)
 	}
@@ -824,14 +823,63 @@ func (b *HierarchicalSMSideGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
 	}
 }
 
-func (b *HierarchicalSMSideGPUBuilder) connectL2TLBTOMMU(chiplet *Chiplet) {
-	for i, l2tlb := range chiplet.L2TLBs {
-		tlbToMMUConn := akita.NewDirectConnection(
-			chiplet.name+fmt.Sprintf(".L2TLB[%d]-MMU[%d]", i, i),
-			b.engine, b.freq)
+func (b *HierarchicalSMSideGPUBuilder) establishUniformL2TLBToMMUNetwork(chiplet *Chiplet) {
+	numElemBits := int(math.Log2(float64(4)))
+	numTerms := (48-int(b.log2PageSize+9))/numElemBits - 1
+	interleavedLowModuleFinder := cache.NewPartitionedXORLowModuleFinder(
+		0, // meanless
+		numTerms,
+		numElemBits,
+		int(b.log2PageSize+9),
+	)
 
-		tlbToMMUConn.PlugIn(chiplet.MMUs[i].ToTopPort(), 16)
+	tlbToMMUConn := akita.NewDirectConnection(
+		fmt.Sprintf("%s.L2TLBToMMUConn", chiplet.name),
+		b.engine, b.freq)
+
+	if len(chiplet.L2TLBs) != len(chiplet.MMUs) {
+		panic("len(chiplet.L2TLBs) != len(chiplet.MMUs)")
+	}
+
+	for _, mmu := range chiplet.MMUs {
+		interleavedLowModuleFinder.LowModules = append(interleavedLowModuleFinder.LowModules,
+			mmu.ToTopPort())
+
+		tlbToMMUConn.PlugIn(mmu.ToTopPort(), 16)
+	}
+
+	for _, l2tlb := range chiplet.L2TLBs {
+		l2tlb.SetLowModuleFinder(interleavedLowModuleFinder)
+
 		tlbToMMUConn.PlugIn(l2tlb.GetBottomPort(), 4)
+	}
+}
+
+func (b *HierarchicalSMSideGPUBuilder) establishNonUniformL2TLBToMMUNetwork(chiplet *Chiplet) {
+	numElemBits := int(math.Log2(float64(4)))
+	numTerms := (48-int(b.log2PageSize+9))/numElemBits - 1
+	interleavedLowModuleFinder := cache.NewPartitionedXORLowModuleFinder(
+		0, // meanless
+		numTerms,
+		numElemBits,
+		int(b.log2PageSize+9),
+	)
+
+	if len(chiplet.L2TLBs) != len(chiplet.MMUs) {
+		panic("len(chiplet.L2TLBs) != len(chiplet.MMUs)")
+	}
+
+	for i, mmu := range chiplet.MMUs {
+		interleavedLowModuleFinder.LowModules = append(interleavedLowModuleFinder.LowModules,
+			mmu.ToTopPort())
+
+		chiplet.gpcSwitches[i].PlugIn(mmu.ToTopPort(), 16)
+	}
+
+	for i, l2tlb := range chiplet.L2TLBs {
+		l2tlb.SetLowModuleFinder(interleavedLowModuleFinder)
+
+		chiplet.gpcSwitches[i].PlugIn(l2tlb.GetBottomPort(), 4)
 	}
 }
 
