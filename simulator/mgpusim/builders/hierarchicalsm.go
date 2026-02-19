@@ -151,6 +151,9 @@ func (b *HierarchicalSMSideGPUBuilder) createGlobalNoC(chiplet *Chiplet) {
 	chiplet.GlobalNoC.MaxNumMemSidePort = ((len(chiplet.L2Caches) - 1) / maxL2PerPartition) + 1
 	chiplet.GlobalNoC.MaxNumMemSideNode = chiplet.GlobalNoC.MaxNumMemSidePort * 8
 
+	chiplet.GlobalNoC.MaxNumSMSidePort += ((len(chiplet.CUs) - 1) / maxCUsPerGPC) + 1
+	chiplet.GlobalNoC.MaxNumSMSideNode += ((len(chiplet.CUs) - 1) / maxCUsPerGPC) + 1
+
 	log.Printf("%s has %d SM side components and %d Mem side components\n",
 		chiplet.GlobalNoC.Name(), chiplet.GlobalNoC.MaxNumSMSidePort, chiplet.GlobalNoC.MaxNumMemSidePort)
 
@@ -295,20 +298,8 @@ func (b *HierarchicalSMSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 		mux.AddRoute(l1i.GetBottomPort(), localPort)
 	}
 
-	for i, mmu := range chiplet.MMUs {
-		ep := multiplexer.MakeEndPointBuilder().
-			WithEngine(b.engine).
-			WithFreq(b.freq).
-			WithDevicePorts([]akita.Port{mmu.TranslationPortPort()}).
-			WithFlitByteSize(32).
-			WithNumReqPerCycle(16).
-			WithNetworkPortBufferSize(16).
-			Build(fmt.Sprintf("%s.MMU[%d]", chiplet.name, i))
-
-		mux := chiplet.gpcMux[i]
-
-		localPort := mux.AddLowSidePort(ep)
-		mux.AddRoute(mmu.TranslationPortPort(), localPort)
+	for _, mmu := range chiplet.MMUs {
+		chiplet.GlobalNoC.PlugInSMSideMultiPort(mmu.TranslationPortPort(), 16, 1)
 	}
 }
 
