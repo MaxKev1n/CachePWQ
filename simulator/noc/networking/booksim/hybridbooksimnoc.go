@@ -27,10 +27,12 @@ type BookSimEndPoint struct {
 	nocPort akita.Port
 	outPort akita.Port
 
-	inPipeline      pipelining.Pipeline
-	inLookupBuffer  util.Buffer
-	outPipeline     pipelining.Pipeline
-	outLookupBuffer util.Buffer
+	inPipeline         pipelining.Pipeline
+	inLookupBuffer     util.Buffer
+	outPipeline        pipelining.Pipeline
+	outLookupBuffer    util.Buffer
+	remotePipeline     pipelining.Pipeline
+	remoteLookupBuffer util.Buffer
 
 	numPhysicalPorts int
 
@@ -38,6 +40,10 @@ type BookSimEndPoint struct {
 	dstRRPtr int
 
 	noc *HybridBookSimNoC
+
+	subNetworkID int
+
+	uniform bool
 }
 
 func NewBookSimEndPoint(
@@ -75,12 +81,26 @@ func NewBookSimEndPoint(
 		WithPostPipelineBuffer(ep.outLookupBuffer).
 		Build(fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nodeID) + "_out_pipeline")
 
+	ep.remoteLookupBuffer = util.NewBuffer(2 * ep.numPhysicalPorts)
+	ep.remotePipeline = pipelining.MakeBuilder().
+		WithPipelineWidth(ep.numPhysicalPorts).
+		WithNumStage(50).
+		WithCyclePerStage(1).
+		WithPostPipelineBuffer(ep.remoteLookupBuffer).
+		Build(fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nodeID) + "_remote_pipeline")
+
 	return ep
+}
+
+func (e *BookSimEndPoint) setSubNetworkID(id int) {
+	e.subNetworkID = id
 }
 
 func (e *BookSimEndPoint) Run(now akita.VTimeInSec) bool {
 	madeProgess := false
 
+	madeProgess = e.parseFromRemote(now) || madeProgess
+	madeProgess = e.remotePipeline.Tick(now) || madeProgess
 	madeProgess = e.parseFromDevice(now) || madeProgess
 	madeProgess = e.inPipeline.Tick(now) || madeProgess
 	madeProgess = e.parseFromNoC(now) || madeProgess
@@ -105,7 +125,12 @@ func (e *BookSimEndPoint) parseFromDevice(now akita.VTimeInSec) bool {
 			tracing.MsgIDAtReceiver(item, e.noc),
 		)
 
-		if !e.inPipeline.CanAccept() {
+		pipeline := e.inPipeline
+		if e.distributeToRemote(item) {
+			pipeline = e.remotePipeline
+		}
+
+		if !pipeline.CanAccept() {
 			return madeProgess
 		}
 
@@ -113,9 +138,39 @@ func (e *BookSimEndPoint) parseFromDevice(now akita.VTimeInSec) bool {
 			taskID: akita.GetIDGenerator().Generate(),
 			msg:    item,
 		}
-		e.inPipeline.Accept(now, pipelineItem)
+		pipeline.Accept(now, pipelineItem)
 
 		e.nocPort.Retrieve(now)
+		madeProgess = true
+	}
+}
+
+func (e *BookSimEndPoint) distributeToRemote(m akita.Msg) bool {
+	ep := e.noc.Route(m)
+
+	if ep.uniform || e.uniform {
+		return false
+	}
+
+	return ep.subNetworkID != e.subNetworkID
+}
+
+func (e *BookSimEndPoint) parseFromRemote(now akita.VTimeInSec) bool {
+	madeProgess := false
+
+	for {
+		item := e.remoteLookupBuffer.Peek()
+		if item == nil {
+			return madeProgess
+		}
+
+		if !e.inPipeline.CanAccept() {
+			return madeProgess
+		}
+
+		e.inPipeline.Accept(now, item.(BookSimPipelineItem))
+
+		e.remoteLookupBuffer.Pop()
 		madeProgess = true
 	}
 }
@@ -305,6 +360,54 @@ func (NoC *HybridBookSimNoC) PlugInSMSideMultiPort(
 	}
 	NoC.port2EndPoint[p] = ep
 
+	ep.uniform = true
+
+	return ep.nocPort
+}
+
+// PlugInNUMASMSideMultiPort connects an external port to a specific BookSim node
+func (NoC *HybridBookSimNoC) PlugInNUMASMSideMultiPort(
+	p akita.Port,
+	size int,
+	numPhysicalPort int,
+	subNetId int,
+) akita.Port {
+	NoC.mutex.Lock()
+	defer NoC.mutex.Unlock()
+
+	nextID := 0
+	nextEndpointID := 0
+	for i := 0; i < NoC.MaxNumSMSidePort; i++ {
+		if NoC.endpoints[i] == nil {
+			break
+		}
+
+		nextID += NoC.endpoints[i].numPhysicalPorts
+		nextEndpointID++
+	}
+
+	for _, ep := range NoC.endpoints {
+		if ep != nil && ep.outPort == p {
+			panic(fmt.Sprintf("[HybridBookSimNoC] duplicate mapping for node %d", nextID))
+		}
+	}
+
+	ep := NewBookSimEndPoint(NoC, nextID, p, size, numPhysicalPort)
+	NoC.endpoints[nextEndpointID] = ep
+
+	if p.GetConnection() == nil {
+		conn := NewBookSimConnection(fmt.Sprintf("BookSimSMSideConn[%d]", nextEndpointID), NoC.Engine, NoC.Freq)
+		conn.PlugIn(ep.nocPort, size)
+		conn.PlugIn(p, size)
+	}
+
+	if _, exists := NoC.port2EndPoint[p]; exists {
+		panic("HybridBookSimNoC: duplicate port mapping")
+	}
+	NoC.port2EndPoint[p] = ep
+
+	ep.setSubNetworkID(subNetId)
+
 	return ep.nocPort
 }
 
@@ -348,6 +451,54 @@ func (NoC *HybridBookSimNoC) PlugInMemSideMultiPort(
 	}
 	NoC.port2EndPoint[p] = ep
 
+	ep.uniform = true
+
+	return ep.nocPort
+}
+
+// PlugInNUMAMemSideMultiPort connects an external port to a specific BookSim node
+func (NoC *HybridBookSimNoC) PlugInNUMAMemSideMultiPort(
+	p akita.Port,
+	size int,
+	numPhysicalPort int,
+	subNetId int,
+) akita.Port {
+	NoC.mutex.Lock()
+	defer NoC.mutex.Unlock()
+
+	nextID := NoC.MaxNumSMSideNode
+	nextEndpointID := NoC.MaxNumSMSidePort
+	for i := NoC.MaxNumSMSidePort; i < NoC.MaxNumSMSidePort+NoC.MaxNumMemSidePort; i++ {
+		if NoC.endpoints[i] == nil {
+			break
+		}
+
+		nextID += NoC.endpoints[i].numPhysicalPorts
+		nextEndpointID++
+	}
+
+	for _, ep := range NoC.endpoints {
+		if ep != nil && ep.outPort == p {
+			panic(fmt.Sprintf("[HybridBookSimNoC] duplicate mapping for node %d", nextID))
+		}
+	}
+
+	ep := NewBookSimEndPoint(NoC, nextID, p, size, numPhysicalPort)
+	NoC.endpoints[nextEndpointID] = ep
+
+	if p.GetConnection() == nil {
+		conn := NewBookSimConnection(fmt.Sprintf("BookSimMemSideConn[%d]", nextEndpointID), NoC.Engine, NoC.Freq)
+		conn.PlugIn(ep.nocPort, size)
+		conn.PlugIn(p, size)
+	}
+
+	if _, exists := NoC.port2EndPoint[p]; exists {
+		panic("HybridBookSimNoC: duplicate port mapping")
+	}
+	NoC.port2EndPoint[p] = ep
+
+	ep.setSubNetworkID(subNetId)
+
 	return ep.nocPort
 }
 
@@ -390,7 +541,7 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 			for p := 0; p < ep.numPhysicalPorts; p++ {
 				srcNode := ep.GetSrcNodeID()
 
-				dstEp := NoC.route(msg)
+				dstEp := NoC.Route(msg)
 				if dstEp == nil {
 					panic("HybridBookSimNoC: invalid routeFn result (nil)")
 				}
@@ -498,7 +649,7 @@ func (NoC *HybridBookSimNoC) prepareFlits(msg akita.Msg) int {
 	return flits
 }
 
-func (NoC *HybridBookSimNoC) route(m akita.Msg) *BookSimEndPoint {
+func (NoC *HybridBookSimNoC) Route(m akita.Msg) *BookSimEndPoint {
 	if ep, exists := NoC.port2EndPoint[m.Meta().Dst]; exists {
 		return ep
 	}

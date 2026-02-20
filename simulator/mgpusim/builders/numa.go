@@ -456,6 +456,10 @@ func (b *NUMAGPUBuilder) establishL2Partition(chiplet *Chiplet) {
 }
 
 func (b *NUMAGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
+	if len(chiplet.gpcMux)%2 != 0 {
+		panic("number of GPC mux should be even")
+	}
+
 	for i, mux := range chiplet.gpcMux {
 		ep := multiplexer.MakeHybridEndPointBuilder().
 			WithEngine(b.engine).
@@ -471,13 +475,27 @@ func (b *NUMAGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 
 		mux.SetHighSideHybridEndPoint(ep)
 
-		nocPort := chiplet.GlobalNoC.PlugInSMSideMultiPort(ep.NetworkPort, 64, 4)
+		subNetworkID := 0
+		if i >= len(chiplet.gpcMux)/2 {
+			subNetworkID = 1
+		}
+
+		nocPort := chiplet.GlobalNoC.PlugInNUMASMSideMultiPort(
+			ep.NetworkPort,
+			64,
+			4,
+			subNetworkID,
+		)
 		for _, port := range mux.RoutingTable.GetAllSrcPorts() {
 			chiplet.GlobalNoC.AddRoute(port, ep.NetworkPort)
 		}
 		ep.PlugInNoCPort(nocPort, 64)
 
 		chiplet.GlobalNoC.AddRoute(chiplet.L2TLBs[i].GetTopPort(), ep.NetworkPort)
+	}
+
+	if len(chiplet.l2Mux)%2 != 0 {
+		panic("number of L2 mux should be even")
 	}
 
 	for i, mux := range chiplet.l2Mux {
@@ -492,7 +510,17 @@ func (b *NUMAGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 
 		mux.SetHighSideHybridEndPoint(ep)
 
-		nocPort := chiplet.GlobalNoC.PlugInMemSideMultiPort(ep.NetworkPort, 64, 8)
+		subNetworkID := 0
+		if i >= len(chiplet.l2Mux)/2 {
+			subNetworkID = 1
+		}
+
+		nocPort := chiplet.GlobalNoC.PlugInNUMAMemSideMultiPort(
+			ep.NetworkPort,
+			64,
+			8,
+			subNetworkID,
+		)
 		for _, port := range mux.RoutingTable.GetAllSrcPorts() {
 			chiplet.GlobalNoC.AddRoute(port, ep.NetworkPort)
 		}

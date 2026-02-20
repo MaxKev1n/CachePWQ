@@ -16,6 +16,28 @@ benchmarks = [
     "syr2k",
 ]
 
+low_mpki_benchmarks = [
+    "convolution2d",
+    "fastwalshtransform",
+    "jacobi1d",
+    "jacobi2d",
+    "mis",
+    "simpleconvolution",
+    "shoc-reduction",
+]
+
+high_mpki_benchmarks = [
+    "gups",
+    "kmeans",
+    "matrixtranspose",
+    "pagerank",
+    "spmv",
+    "stencil2d",
+    "syrk",
+    "syr2k",
+]
+
+
 memory_overhead = {
     "convolution2d": 3487,
     "fastwalshtransform": 2537,
