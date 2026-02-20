@@ -3828,6 +3828,9 @@ func (r *Runner) reportPWCHitRate() {
 		lastLevelRemoteMemReq := tracer.tracer.GetStepCount("pw-level-3-remote-reqs")
 		totalTransaction := pwcHit3 + pwcHit2 + pwcHit1 + pwcHit0
 
+		leftMemReq := tracer.tracer.GetStepCount("page_walk_req_left")
+		rightMemReq := tracer.tracer.GetStepCount("page_walk_req_right")
+
 		if totalTransaction == 0 {
 			continue
 		}
@@ -3846,6 +3849,10 @@ func (r *Runner) reportPWCHitRate() {
 			tracer.mmu.Name(), "page_walk_req_remote", float64(remoteMemReq))
 		r.metricsCollector.Collect(
 			tracer.mmu.Name(), "pw-level-3-remote-reqs", float64(lastLevelRemoteMemReq))
+		r.metricsCollector.Collect(
+			tracer.mmu.Name(), "page_walk_req_left", float64(leftMemReq))
+		r.metricsCollector.Collect(
+			tracer.mmu.Name(), "page_walk_req_right", float64(rightMemReq))
 
 		ptwL1Load := tracer.tracer.GetStepCount("page_walk_load_l1")
 		ptwL1Store := tracer.tracer.GetStepCount("page_walk_store_l1")

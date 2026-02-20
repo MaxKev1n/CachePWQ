@@ -84,7 +84,7 @@ func NewBookSimEndPoint(
 	ep.remoteLookupBuffer = util.NewBuffer(2 * ep.numPhysicalPorts)
 	ep.remotePipeline = pipelining.MakeBuilder().
 		WithPipelineWidth(ep.numPhysicalPorts).
-		WithNumStage(50).
+		WithNumStage(80).
 		WithCyclePerStage(1).
 		WithPostPipelineBuffer(ep.remoteLookupBuffer).
 		Build(fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nodeID) + "_remote_pipeline")

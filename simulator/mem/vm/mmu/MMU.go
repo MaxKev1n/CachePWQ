@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"regexp"
 	"strconv"
 
 	"gitlab.com/akita/akita"
@@ -154,6 +155,19 @@ func (mmu *MMUImpl) sendToMem(now akita.VTimeInSec, trans *Transaction) {
 	trans.vAddr = mmu.pageTable.NextLevel(trans.vAddr)
 	trans.msgID = readReq.ID
 	trans.state = sentToMem
+
+	l2SliceID, fail := getL2SliceNum(dstPort.Name())
+	if fail != nil {
+		log.Panicf("cannot get l2 slice num from port name %s", dstPort.Name())
+	}
+
+	if l2SliceID < 32 {
+		tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
+			now, mmu, "page_walk_req_left")
+	} else {
+		tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
+			now, mmu, "page_walk_req_right")
+	}
 
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
 		now, mmu, "page_walk_req_local")
@@ -395,4 +409,14 @@ func (mmu *MMUImpl) CanAccept() bool {
 
 func (mmu *MMUImpl) ToPageWalkCachePort() akita.Port {
 	return mmu.ToPageWalkCache
+}
+
+var l2Re = regexp.MustCompile(`L2_(\d+)`)
+
+func getL2SliceNum(s string) (int, error) {
+	m := l2Re.FindStringSubmatch(s)
+	if len(m) < 2 {
+		return 0, fmt.Errorf("not found")
+	}
+	return strconv.Atoi(m[1])
 }
