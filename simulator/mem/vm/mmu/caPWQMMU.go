@@ -671,3 +671,11 @@ func (mmu *CaPWQMMU) TranslationPortPort() akita.Port {
 func (mmu *CaPWQMMU) ToCachePort() akita.Port {
 	return mmu.ToCache
 }
+
+func (mmu *CaPWQMMU) CanAccept() bool {
+	panic("Not implemented")
+}
+
+func (mmu *CaPWQMMU) ToPageWalkCachePort() akita.Port {
+	return mmu.ToPageWalkCache
+}

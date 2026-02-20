@@ -2,7 +2,6 @@ package mmu
 
 import (
 	"gitlab.com/akita/akita"
-	"gitlab.com/akita/mem/cache/writeback"
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/akitaext"
@@ -16,7 +15,6 @@ type MMUBuilder struct {
 	pageTable                *device.PageTableImpl
 	migrationServiceProvider akita.Port
 	maxNumReqInFlight        int
-	pageWalkCacheSize        uint64
 }
 
 // MakeBuilder creates a new builder
@@ -24,8 +22,7 @@ func MakeMMUBuilder() MMUBuilder {
 	return MMUBuilder{
 		freq:              1 * akita.GHz,
 		log2PageSize:      12,
-		maxNumReqInFlight: 8,   //16,
-		pageWalkCacheSize: 512, //512 bytes
+		maxNumReqInFlight: 8, //16,
 	}
 }
 
@@ -60,12 +57,6 @@ func (b MMUBuilder) WithMaxNumReqInFlight(n int) MMUBuilder {
 	return b
 }
 
-// WithPageWalkCacheSize sets the size of the page walk cache in bytes.
-func (b MMUBuilder) WithPageWalkCacheSize(size uint64) MMUBuilder {
-	b.pageWalkCacheSize = size
-	return b
-}
-
 // Build returns a newly created MMU component
 func (b MMUBuilder) Build(name string) MMU {
 	mmu := new(MMUImpl)
@@ -95,17 +86,7 @@ func (b MMUBuilder) Build(name string) MMU {
 	}
 	mmu.nextPointer = 0
 
-	pageWalkCacheBuilder := writeback.MakePageWalkCacheBuilder().
-		WithEngine(b.engine).
-		WithLog2PageSize(b.log2PageSize).
-		WithBitsPerLevel(9).
-		WithByteSize(b.pageWalkCacheSize)
-	pageWalkCache := pageWalkCacheBuilder.Build("PageWalkCache")
-	mmu.PageWalkCache = pageWalkCache.TopPort
-	mmu.pageWalkCachePort = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToTop")
-	mmuToPageWalkCache := akita.NewDirectConnection("MMUToPageWalkCache", b.engine, b.freq)
-	mmuToPageWalkCache.PlugIn(pageWalkCache.TopPort, 4)
-	mmuToPageWalkCache.PlugIn(mmu.pageWalkCachePort, 4)
+	mmu.ToPageWalkCache = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToTop")
 
 	return mmu
 }

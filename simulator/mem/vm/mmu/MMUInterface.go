@@ -19,7 +19,9 @@ type MMU interface {
 	ToTopPort() akita.Port
 	TranslationPortPort() akita.Port
 	ToCachePort() akita.Port
+	ToPageWalkCachePort() akita.Port
 	SetLowModuleFinder(lmf cache.LowModuleFinder)
+	CanAccept() bool
 }
 
 type transactionState int

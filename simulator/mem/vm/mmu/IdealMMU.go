@@ -74,6 +74,10 @@ func (mmu *IdealMMU) TranslationPortPort() akita.Port {
 	return mmu.TranslationPort
 }
 
+func (mmu *IdealMMU) ToPageWalkCachePort() akita.Port {
+	return mmu.pageWalkCachePort
+}
+
 func (mmu *IdealMMU) ToCachePort() akita.Port {
 	panic("IdealMMU does not have ToCache port")
 }

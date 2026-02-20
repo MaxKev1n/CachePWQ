@@ -739,3 +739,11 @@ func (mmu *MPWMMU) SetCommandProcessorPort(port akita.Port) {
 func (mmu *MPWMMU) GetNumActiveWalkers() int {
 	return len(mmu.inflightMemRequests)
 }
+
+func (mmu *MPWMMU) CanAccept() bool {
+	panic("Not implemented yet")
+}
+
+func (mmu *MPWMMU) ToPageWalkCachePort() akita.Port {
+	return mmu.pageWalkCachePort
+}

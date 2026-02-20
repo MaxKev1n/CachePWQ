@@ -1099,6 +1099,57 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithBookSimTLBNoC(*TLBConfigFile)
 		b.WithBookSimDir(*booksimDir)
 		r.Engine, r.GPUDriver = b.Build()
+	case "numa":
+		b := platform.MakeNUMAPlatformBuilder()
+		if r.Parallel {
+			b.WithParallelEngine()
+		}
+
+		if *isaDebug {
+			b.WithISADebugging()
+		}
+
+		if *visTracing {
+			b.WithVisTracing()
+		}
+
+		if *memTracing {
+			b.WithMemTracing()
+		}
+
+		if *tlbTracing {
+			b.WithTLBTracing()
+		}
+
+		if *disableProgressBar {
+			b.WithoutProgressBar()
+		}
+
+		if *tipFlag {
+			b.UseTimeInstProfiling()
+		}
+
+		if *teaFlag {
+			if !*tipFlag {
+				log.Panic("TEA requires TIP to be enabled.")
+			}
+
+			b.UseTimeEventAnalysis()
+		}
+
+		if *monitorTLBFlag {
+			b.WithTLBMonitor()
+
+			r.ReportTLBMonitor = true
+		}
+
+		b.WithAlg(*schedulingAlg)
+		b.WithSchedulingPartition(*schedulingPartition)
+		b.WithMemAllocatorType(*memAllocatorType)
+		b.WithLog2PageSize(*log2PageSize)
+		b.WithBookSimGlobal(*GlobalNoCConfigFile)
+		b.WithBookSimDir(*booksimDir)
+		r.Engine, r.GPUDriver = b.Build()
 	case "hierarchicalMemSide":
 		b := platform.MakeHierarchicalMemSidePlatformBuilder()
 		if r.Parallel {

@@ -23,11 +23,13 @@ type PageWalkCache struct {
 	*akita.TickingComponent
 
 	TopPort akita.Port
+	ToMMUs  akita.Port
 
 	dirStageBuffer   util.Buffer
 	dirToBankBuffers []util.Buffer
 
 	topSender akitaext.BufferedSender
+	mmuSender akitaext.BufferedSender
 
 	lookupBuffer util.Buffer
 	pipeline     pipelining.Pipeline
@@ -57,6 +59,7 @@ func (c *PageWalkCache) runPipeline(now akita.VTimeInSec) bool {
 	madeProgress := false
 
 	madeProgress = c.runStage(now, c.topSender) || madeProgress
+	madeProgress = c.runStage(now, c.mmuSender) || madeProgress
 	for _, bs := range c.bankStages {
 		madeProgress = c.runStage(now, bs) || madeProgress
 	}

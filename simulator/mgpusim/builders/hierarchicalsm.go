@@ -606,9 +606,6 @@ func (b *HierarchicalSMSideGPUBuilder) buildL2TLB(chiplet *Chiplet) {
 			builder = builder.UseCoalescingTLBPort()
 		}
 		l2TLB := builder.Build(fmt.Sprintf("%s.L2TLB[%d]", chiplet.name, i))
-		l2TLB.SetLowModuleFinder(&cache.SingleLowModuleFinder{
-			LowModule: chiplet.MMUs[i].ToTopPort(),
-		})
 
 		b.l2TLBs = append(b.l2TLBs, l2TLB)
 		b.gpu.L2TLBs = append(b.gpu.L2TLBs, l2TLB)
@@ -791,8 +788,6 @@ func (b *HierarchicalSMSideGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
 	if 512%numGPCs != 0 {
 		log.Panicf("512 not divisible by Number of GPCs %d\n", numGPCs)
 	}
-
-	mmuBuilder = mmuBuilder.WithPageWalkCacheSize(512 / uint64(numGPCs))
 
 	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
 		numWalkersInt, err := strconv.Atoi(numWalkers)

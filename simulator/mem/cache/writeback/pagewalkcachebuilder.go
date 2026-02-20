@@ -100,11 +100,15 @@ func (b *PageWalkCacheBuilder) configureCache(cacheModule *PageWalkCache) {
 func (b *PageWalkCacheBuilder) createPorts(cache *PageWalkCache) {
 	cache.TopPort = akita.NewLimitNumMsgPort(cache,
 		cache.numReqPerCycle*2, cache.Name()+".ToTop")
+	cache.ToMMUs = akita.NewLimitNumMsgPort(cache,
+		cache.numReqPerCycle*2, cache.Name()+".ToMMUs")
 }
 
 func (b *PageWalkCacheBuilder) createPortSenders(cache *PageWalkCache) {
 	cache.topSender = akitaext.NewBufferedSender(
 		cache.TopPort, util.NewBuffer(cache.numReqPerCycle*4))
+	cache.mmuSender = akitaext.NewBufferedSender(
+		cache.ToMMUs, util.NewBuffer(cache.numReqPerCycle*4))
 }
 
 func (b *PageWalkCacheBuilder) createInternalStages(cache *PageWalkCache) {

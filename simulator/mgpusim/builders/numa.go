@@ -22,21 +22,26 @@ import (
 	"gitlab.com/akita/util/tracing"
 )
 
-type HierarchicalSMSidePrivateTLBGPUBuilder struct {
+type NUMAGPUBuilder struct {
 	*CommonBuilder
 
 	// specific componenets
+	useTLBMonitor bool
 }
 
-func MakeHierarchicalSMSidePrivateTLBGPUBuilder() HierarchicalSMSidePrivateTLBGPUBuilder {
+func (b *NUMAGPUBuilder) WithTLBMonitor() {
+	b.useTLBMonitor = true
+}
+
+func MakeNUMAGPUBuilder() NUMAGPUBuilder {
 	// TODO: should this be using new? is the object being allocated on the stack?
 	cbp := CommonBuilder{}
-	b := HierarchicalSMSidePrivateTLBGPUBuilder{CommonBuilder: &cbp}
+	b := NUMAGPUBuilder{CommonBuilder: &cbp}
 	b.SetDefaultCommonBuilderParams()
 	return b
 }
 
-func (b HierarchicalSMSidePrivateTLBGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
+func (b NUMAGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
 	b.createGPU(name, id)
 
 	if b.useTimeInstProfiling {
@@ -51,28 +56,26 @@ func (b HierarchicalSMSidePrivateTLBGPUBuilder) Build(name string, id uint64) *m
 
 	chipRdmaAddressTable := b.createChipRDMAAddrTable()
 	rdmaResponsePorts := make([]akita.Port, b.numChiplet)
-	// remoteAddressTranslationTable := b.createRemoteAddrTransTable()
-	// rtuResponsePorts := make([]akita.Port, 4)
+
 	chipletName := fmt.Sprintf("%s.chiplet_%02d", b.gpuName, 0)
 	chiplet := NewChiplet(chipletName, uint64(0))
 
 	b.BuildSAs(chiplet)
 	b.buildMemBanks(chiplet)
-	b.buildMMU(chiplet)
 	b.buildL2TLB(chiplet)
+	b.buildL3TLB(chiplet)
+	b.buildMMU(chiplet)
 
 	b.configChipRDMAEngine(chiplet, chipRdmaAddressTable, rdmaResponsePorts)
-	// b.configRemoteAddressTranslationUnit(chiplet, remoteAddressTranslationTable, rtuResponsePorts)
 
 	b.createGlobalNoC(chiplet)
 
 	b.establishL1ToL2RoutingPath(chiplet)
 	b.establishL1TLBToL2TLBRoutingPath(chiplet)
-	b.establishL1TLBToL2TLBNetwork(chiplet)
+	b.establishL2TLBToL3TLBRoutingPath(chiplet)
+	b.establishMMUToL2RoutingPath(chiplet)
 
 	b.connectL2ToDRAM(chiplet)
-	b.connectL2TLBTOMMU(chiplet)
-	b.connectMMUToGlobalNoC(chiplet)
 
 	b.establishTPC(chiplet)
 	b.establishGPC(chiplet)
@@ -85,22 +88,23 @@ func (b HierarchicalSMSidePrivateTLBGPUBuilder) Build(name string, id uint64) *m
 	b.buildPageMigrationController()
 	b.setupDMA()
 
-	// b.setupMMUs()
 	b.connectCP()
 	b.setupInterchipNetwork()
 
 	chiplet.GlobalNoC.Establish()
 
+	b.establishTLBMonitor(chiplet)
+
 	return b.gpu
 }
 
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) buildTEA() {
+func (b *NUMAGPUBuilder) buildTEA() {
 	b.TipEngine = tip.NewTimeEventAnalysisEngine(
 		b.engine,
 	)
 }
 
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) connectCP() {
+func (b *NUMAGPUBuilder) connectCP() {
 	b.internalConn = akita.NewDirectConnection(
 		b.gpuName+"InternalConn", b.engine, b.freq)
 	b.gpu.InternalConnection = b.internalConn
@@ -132,7 +136,7 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) connectCP() {
 	b.connectCPWithTLBs()
 }
 
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) createGlobalNoC(chiplet *Chiplet) {
+func (b *NUMAGPUBuilder) createGlobalNoC(chiplet *Chiplet) {
 	chiplet.GlobalNoC = noc.NewHybridBookSimNoC(
 		fmt.Sprintf("HybridGlobalNoC[%d]", chiplet.ChipletID),
 		b.engine,
@@ -149,8 +153,13 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) createGlobalNoC(chiplet *Chiple
 	chiplet.GlobalNoC.MaxNumMemSidePort = ((len(chiplet.L2Caches) - 1) / maxL2PerPartition) + 1
 	chiplet.GlobalNoC.MaxNumMemSideNode = chiplet.GlobalNoC.MaxNumMemSidePort * 8
 
-	chiplet.GlobalNoC.MaxNumSMSidePort += ((len(chiplet.CUs) - 1) / maxCUsPerGPC) + 1
-	chiplet.GlobalNoC.MaxNumSMSideNode += ((len(chiplet.CUs) - 1) / maxCUsPerGPC) + 1
+	// Monolithic Page Walk Cache
+	chiplet.GlobalNoC.MaxNumMemSidePort++
+	chiplet.GlobalNoC.MaxNumMemSideNode++
+
+	// Monolithic L3 TLB
+	chiplet.GlobalNoC.MaxNumMemSidePort += 2
+	chiplet.GlobalNoC.MaxNumMemSideNode += 2
 
 	log.Printf("%s has %d SM side components and %d Mem side components\n",
 		chiplet.GlobalNoC.Name(), chiplet.GlobalNoC.MaxNumSMSidePort, chiplet.GlobalNoC.MaxNumMemSidePort)
@@ -160,7 +169,7 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) createGlobalNoC(chiplet *Chiple
 	)
 }
 
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) establishL1ToL2RoutingPath(chiplet *Chiplet) {
+func (b *NUMAGPUBuilder) establishL1ToL2RoutingPath(chiplet *Chiplet) {
 	fmt.Println("memory address offset:", b.memAddrOffset)
 	lowModuleFinder := cache.NewStripedLocalVRemoteLowModuleFinder(b.memAddrOffset, uint64(b.numChiplet*b.numMemoryBankPerChiplet),
 		1<<b.log2MemoryBankInterleavingSize, uint64(b.numMemoryBankPerChiplet)*chiplet.ChipletID, uint64(b.numMemoryBankPerChiplet)*chiplet.ChipletID+uint64(b.numMemoryBankPerChiplet-1))
@@ -185,7 +194,31 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) establishL1ToL2RoutingPath(chip
 	chiplet.lowModuleFinderForL1 = lowModuleFinder
 }
 
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) establishTPC(chiplet *Chiplet) {
+func (b *NUMAGPUBuilder) establishL1TLBToL2TLBRoutingPath(chiplet *Chiplet) {
+	numCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/numCUsPerGPC + 1
+
+	for i := 0; i < numGPCs; i++ {
+		singeLowModuleFinder := new(cache.SingleLowModuleFinder)
+		singeLowModuleFinder.LowModule = chiplet.L2TLBs[i].GetTopPort()
+
+		for j := i * numCUsPerGPC; j < (i+1)*numCUsPerGPC; j++ {
+			chiplet.L1VTLBs[j].SetLowModuleFinder(singeLowModuleFinder)
+		}
+
+		numSAPerGPC := b.numShaderArrayPerChiplet / numGPCs
+		if b.numShaderArrayPerChiplet%numGPCs != 0 {
+			panic("numShaderArrayPerChiplet not divisible by numGPCs")
+		}
+
+		for j := i * numSAPerGPC; j < (i+1)*numSAPerGPC; j++ {
+			chiplet.L1STLBs[j].SetLowModuleFinder(singeLowModuleFinder)
+			chiplet.L1ITLBs[j].SetLowModuleFinder(singeLowModuleFinder)
+		}
+	}
+}
+
+func (b *NUMAGPUBuilder) establishTPC(chiplet *Chiplet) {
 	maxCUsPerGPC := 16
 	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
 	numTPCs := numGPCs * (maxCUsPerGPC / 2) // 2 CUs per TPC
@@ -224,9 +257,25 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) establishTPC(chiplet *Chiplet) 
 		localPort := mux.AddLowSidePort(ep)
 		mux.AddRoute(l1v.GetBottomPort(), localPort)
 	}
+
+	for i, l1vtlb := range chiplet.L1VTLBs {
+		ep := multiplexer.MakeEndPointBuilder().
+			WithEngine(b.engine).
+			WithFreq(b.freq).
+			WithDevicePorts([]akita.Port{l1vtlb.GetBottomPort()}).
+			WithNumReqPerCycle(1).
+			WithFlitByteSize(32).
+			Build(fmt.Sprintf("%s.L1VTLB[%d]", chiplet.name, i))
+
+		tpcID := i / 2
+		mux := chiplet.tpcMux[tpcID]
+
+		localPort := mux.AddLowSidePort(ep)
+		mux.AddRoute(l1vtlb.GetBottomPort(), localPort)
+	}
 }
 
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) establishGPC(chiplet *Chiplet) {
+func (b *NUMAGPUBuilder) establishGPC(chiplet *Chiplet) {
 	maxCUsPerGPC := 16
 	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
 	numTPCs := numGPCs * (maxCUsPerGPC / 2) // 2 CUs per TPC
@@ -296,12 +345,80 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) establishGPC(chiplet *Chiplet) 
 		mux.AddRoute(l1i.GetBottomPort(), localPort)
 	}
 
-	for _, mmu := range chiplet.MMUs {
-		chiplet.GlobalNoC.PlugInSMSideMultiPort(mmu.TranslationPortPort(), 16, 1)
+	for i, l1itlb := range chiplet.L1ITLBs {
+		ep := multiplexer.MakeEndPointBuilder().
+			WithEngine(b.engine).
+			WithFreq(b.freq).
+			WithDevicePorts([]akita.Port{l1itlb.GetBottomPort()}).
+			WithFlitByteSize(32).
+			WithNumReqPerCycle(1).
+			WithNetworkPortBufferSize(1).
+			Build(fmt.Sprintf("%s.L1ITLB[%d]", chiplet.name, i))
+
+		gpcID := i / numSAPerGPC
+		mux := chiplet.gpcMux[gpcID]
+
+		localPort := mux.AddLowSidePort(ep)
+		mux.AddRoute(l1itlb.GetBottomPort(), localPort)
+	}
+
+	for i, l1stlb := range chiplet.L1STLBs {
+		ep := multiplexer.MakeEndPointBuilder().
+			WithEngine(b.engine).
+			WithFreq(b.freq).
+			WithDevicePorts([]akita.Port{l1stlb.GetBottomPort()}).
+			WithFlitByteSize(32).
+			WithNumReqPerCycle(1).
+			WithNetworkPortBufferSize(1).
+			Build(fmt.Sprintf("%s.L1STLB[%d]", chiplet.name, i))
+
+		gpcID := i / numSAPerGPC
+		mux := chiplet.gpcMux[gpcID]
+
+		localPort := mux.AddLowSidePort(ep)
+		mux.AddRoute(l1stlb.GetBottomPort(), localPort)
+	}
+
+	for i, l2tlb := range chiplet.L2TLBs {
+		ep := multiplexer.MakeEndPointBuilder().
+			WithEngine(b.engine).
+			WithFreq(b.freq).
+			WithDevicePorts([]akita.Port{l2tlb.GetBottomPort()}).
+			WithFlitByteSize(32).
+			WithNumReqPerCycle(4).
+			WithNetworkPortBufferSize(4).
+			Build(fmt.Sprintf("%s.L2TLB[%d]", chiplet.name, i))
+
+		mux := chiplet.gpcMux[i]
+
+		localPort := mux.AddLowSidePort(ep)
+		mux.AddRoute(l2tlb.GetBottomPort(), localPort)
+	}
+
+	for i, mmu := range chiplet.MMUs {
+		ep := multiplexer.MakeEndPointBuilder().
+			WithEngine(b.engine).
+			WithFreq(b.freq).
+			WithDevicePorts([]akita.Port{
+				mmu.TranslationPortPort(),
+				mmu.ToPageWalkCachePort(),
+				mmu.ToTopPort(),
+			}).
+			WithFlitByteSize(32).
+			WithNumReqPerCycle(4).
+			WithNetworkPortBufferSize(4).
+			Build(fmt.Sprintf("%s.MMU[%d]", chiplet.name, i))
+
+		mux := chiplet.gpcMux[i]
+
+		localPort := mux.AddLowSidePort(ep)
+		mux.AddRoute(mmu.TranslationPortPort(), localPort)
+		mux.AddRoute(mmu.ToPageWalkCachePort(), localPort)
+		mux.AddRoute(mmu.ToTopPort(), localPort)
 	}
 }
 
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) establishL2Partition(chiplet *Chiplet) {
+func (b *NUMAGPUBuilder) establishL2Partition(chiplet *Chiplet) {
 	maxL2PerPartition := 8
 	numMux := (len(chiplet.L2Caches)-1)/maxL2PerPartition + 1
 
@@ -338,7 +455,7 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) establishL2Partition(chiplet *C
 	}
 }
 
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
+func (b *NUMAGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 	for i, mux := range chiplet.gpcMux {
 		ep := multiplexer.MakeHybridEndPointBuilder().
 			WithEngine(b.engine).
@@ -347,6 +464,9 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) connectGlobalNoC(chiplet *Chipl
 			WithFlitAssemblingBufferSize(128).
 			WithNumReqPerCycle(64).
 			WithNetworkPortBufferSize(64).
+			WithDevicePorts([]akita.Port{
+				chiplet.L2TLBs[i].GetTopPort(),
+			}).
 			Build(fmt.Sprintf("%s.GPCHighSideEndPoint[%d]", chiplet.name, i))
 
 		mux.SetHighSideHybridEndPoint(ep)
@@ -356,6 +476,8 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) connectGlobalNoC(chiplet *Chipl
 			chiplet.GlobalNoC.AddRoute(port, ep.NetworkPort)
 		}
 		ep.PlugInNoCPort(nocPort, 64)
+
+		chiplet.GlobalNoC.AddRoute(chiplet.L2TLBs[i].GetTopPort(), ep.NetworkPort)
 	}
 
 	for i, mux := range chiplet.l2Mux {
@@ -376,83 +498,37 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) connectGlobalNoC(chiplet *Chipl
 		}
 		ep.PlugInNoCPort(nocPort, 64)
 	}
+
+	chiplet.GlobalNoC.PlugInMemSideMultiPort(chiplet.L3TLBs[0].GetTopPort(), 64, 1)
+	chiplet.GlobalNoC.PlugInMemSideMultiPort(chiplet.L3TLBs[0].GetBottomPort(), 64, 1)
+	chiplet.GlobalNoC.PlugInMemSideMultiPort(
+		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort,
+		64,
+		1,
+	)
 }
 
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) establishL1TLBToL2TLBRoutingPath(chiplet *Chiplet) {
+func (b *NUMAGPUBuilder) establishL2TLBToL3TLBRoutingPath(chiplet *Chiplet) {
 	numCUsPerGPC := 16
 	numGPCs := (len(chiplet.CUs)-1)/numCUsPerGPC + 1
 
-	if numGPCs != len(chiplet.L2TLBs) {
-		panic("numGPCs != len(chiplet.L2TLBs)")
-	}
+	singleLowModuleFinder := new(cache.SingleLowModuleFinder)
+	singleLowModuleFinder.LowModule = chiplet.L3TLBs[0].GetTopPort()
 
 	for i := 0; i < numGPCs; i++ {
-		finder := &cache.SingleLowModuleFinder{}
-
-		for j := i * numCUsPerGPC; j < (i+1)*numCUsPerGPC; j++ {
-			chiplet.L1VTLBs[j].SetLowModuleFinder(finder)
-			chiplet.L1VTLBs[j].SetGPCID(i)
-		}
-
-		numSAPerGPC := b.numShaderArrayPerChiplet / numGPCs
-		if b.numShaderArrayPerChiplet%numGPCs != 0 {
-			panic("numShaderArrayPerChiplet not divisible by numGPCs")
-		}
-
-		for j := i * numSAPerGPC; j < (i+1)*numSAPerGPC; j++ {
-			chiplet.L1STLBs[j].SetLowModuleFinder(finder)
-			chiplet.L1ITLBs[j].SetLowModuleFinder(finder)
-			chiplet.L1STLBs[j].SetGPCID(i)
-			chiplet.L1ITLBs[j].SetGPCID(i)
-		}
-
-		finder.LowModule = chiplet.L2TLBs[i].GetTopPort()
-
-		chiplet.L2TLBs[i].SetTLBFinder(finder)
-		chiplet.L2TLBs[i].SetGPCID(i)
+		chiplet.L2TLBs[i].SetLowModuleFinder(singleLowModuleFinder)
 	}
+
+	chiplet.L3TLBs[0].SetTLBFinder(singleLowModuleFinder)
 }
 
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) establishL1TLBToL2TLBNetwork(chiplet *Chiplet) {
-	numCUsPerGPC := 16
-	numGPCs := (len(chiplet.CUs)-1)/numCUsPerGPC + 1
-
-	if numGPCs != len(chiplet.L2TLBs) {
-		panic("numGPCs != len(chiplet.L2TLBs)")
-	}
-
-	for i := 0; i < numGPCs; i++ {
-		l1TLBToL2TLBConn := akita.NewDirectConnection(
-			fmt.Sprintf("%s.GPC[%d].L1TLBToL2TLBConn", chiplet.name, i),
-			b.engine,
-			b.freq,
-		)
-
-		for j := i * numCUsPerGPC; j < (i+1)*numCUsPerGPC; j++ {
-			l1TLBToL2TLBConn.PlugIn(chiplet.L1VTLBs[j].GetBottomPort(), 4)
-		}
-
-		numSAPerGPC := b.numShaderArrayPerChiplet / numGPCs
-		if b.numShaderArrayPerChiplet%numGPCs != 0 {
-			panic("numShaderArrayPerChiplet not divisible by numGPCs")
-		}
-
-		for j := i * numSAPerGPC; j < (i+1)*numSAPerGPC; j++ {
-			l1TLBToL2TLBConn.PlugIn(chiplet.L1STLBs[j].GetBottomPort(), 4)
-			l1TLBToL2TLBConn.PlugIn(chiplet.L1ITLBs[j].GetBottomPort(), 4)
-		}
-
-		l1TLBToL2TLBConn.PlugIn(chiplet.L2TLBs[i].GetTopPort(), 16)
-	}
-}
-
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) connectMMUToGlobalNoC(chiplet *Chiplet) {
+func (b *NUMAGPUBuilder) establishMMUToL2RoutingPath(chiplet *Chiplet) {
 	for _, mmu := range chiplet.MMUs {
 		mmu.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
 	}
 }
 
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) buildMemBanks(chiplet *Chiplet) {
+func (b *NUMAGPUBuilder) buildMemBanks(chiplet *Chiplet) {
 	l2Builder := writeback.MakeBuilder().
 		WithEngine(b.engine).
 		WithFreq(b.freq).
@@ -505,59 +581,9 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) buildMemBanks(chiplet *Chiplet)
 	}
 }
 
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) buildMMU(chiplet *Chiplet) {
-	if yamlconfig.OverrideConfig == nil {
-		b.buildDefaultMMU(chiplet)
-	} else {
-		mmuType := yamlconfig.OverrideConfig["MMU.type"]
-
-		switch mmuType {
-		case "BaselineMMU":
-			b.buildDefaultMMU(chiplet)
-		default:
-			log.Panicf("Unsupported MMU type: %s\n", mmuType)
-		}
-	}
-}
-
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
-	maxCUsPerGPC := 16
-	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
-
-	mmuBuilder := mmu.MakeMMUBuilder().
-		WithEngine(b.engine).
-		WithFreq(1 * akita.GHz).
-		WithLog2PageSize(b.log2PageSize).
-		WithPageTable(b.pageTable).
-		WithMaxNumReqInFlight(16)
-
-	if 512%numGPCs != 0 {
-		log.Panicf("512 not divisible by Number of GPCs %d\n", numGPCs)
-	}
-
-	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
-		numWalkersInt, err := strconv.Atoi(numWalkers)
-		if err != nil {
-			log.Panicf("Invalid number of walkers %d\n", numWalkersInt)
-		}
-
-		if numWalkersInt%numGPCs != 0 {
-			log.Panicf("Number of page walkers %d not divisible by number of GPCs %d\n", numWalkersInt, numGPCs)
-		}
-
-		mmuBuilder = mmuBuilder.WithMaxNumReqInFlight(numWalkersInt / numGPCs)
-	}
-
-	for i := 0; i < numGPCs; i++ {
-		chiplet.MMUs = append(chiplet.MMUs, mmuBuilder.Build(fmt.Sprintf("%s.BaselineMMU[%d]", chiplet.name, i)))
-
-		b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMUs[i])
-	}
-}
-
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) buildL2TLB(chiplet *Chiplet) {
-	numSets := 256 // 128 // 256 // changed this here
-	numWays := 8   // 8 // changed this here
+func (b *NUMAGPUBuilder) buildL2TLB(chiplet *Chiplet) {
+	numSets := 64
+	numWays := 8
 	log2NumSets := int(math.Log2(float64(numSets)))
 
 	tlbIndexBitsStart := int(math.Log2(float64(b.remoteTLBInterleavingSize))) + int(b.log2PageSize) + 1
@@ -576,39 +602,26 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) buildL2TLB(chiplet *Chiplet) {
 		}
 		t = t << 1
 	}
-	//fmt.Println(mask)
-	maxCUsPerGPC := 16
-	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
 
-	if len(chiplet.MMUs) != numGPCs {
-		panic("numGPCs != len(chiplet.MMUs)")
-	}
+	numCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/numCUsPerGPC + 1
 
 	for i := 0; i < numGPCs; i++ {
-		if numWays%numGPCs != 0 {
-			panic("numWays not divisible by numMux")
-		}
-
 		builder := tlb.MakeLatTLBBuilder().
 			WithEngine(b.engine).
 			WithFreq(b.freq).
 			WithNumWays(numWays).
-			WithNumSets(numSets / numGPCs).
-			WithNumMSHREntry(256 / numGPCs).
+			WithNumSets(numSets).
+			WithNumMSHREntry(64).
 			WithNumReqPerCycle(4).
 			WithLog2PageSize(b.log2PageSize).
-			WithLowModule(chiplet.MMUs[i].ToTopPort()).
 			WithIndexingMask(mask).
-			WithLatency(10)
-		fmt.Println("num TLB sets:", numSets)
-		fmt.Println("num TLB ways:", numWays)
+			WithLatency(40)
+
 		if b.useCoalescingTLBPort {
 			builder = builder.UseCoalescingTLBPort()
 		}
-		l2TLB := builder.Build(fmt.Sprintf("%s.L2TLB[%d]", chiplet.name, i))
-		l2TLB.SetLowModuleFinder(&cache.SingleLowModuleFinder{
-			LowModule: chiplet.MMUs[i].ToTopPort(),
-		})
+		l2TLB := builder.Build(fmt.Sprintf("%s.GPC_%02d_L2TLB", chiplet.name, i))
 
 		b.l2TLBs = append(b.l2TLBs, l2TLB)
 		b.gpu.L2TLBs = append(b.gpu.L2TLBs, l2TLB)
@@ -620,18 +633,110 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) buildL2TLB(chiplet *Chiplet) {
 	}
 }
 
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) connectL2TLBTOMMU(chiplet *Chiplet) {
-	for i, l2tlb := range chiplet.L2TLBs {
-		tlbToMMUConn := akita.NewDirectConnection(
-			chiplet.name+fmt.Sprintf(".L2TLB-MMU[%d]", i),
-			b.engine, b.freq)
+func (b *NUMAGPUBuilder) buildL3TLB(chiplet *Chiplet) {
+	numSets := 256
+	numWays := 8
+	log2NumSets := int(math.Log2(float64(numSets)))
 
-		tlbToMMUConn.PlugIn(chiplet.MMUs[i].ToTopPort(), 64)
-		tlbToMMUConn.PlugIn(l2tlb.GetBottomPort(), 16)
+	tlbIndexBitsStart := int(math.Log2(float64(b.remoteTLBInterleavingSize))) + int(b.log2PageSize) + 1
+	tlbIndexBitsEnd := tlbIndexBitsStart + int(math.Log2(float64(b.numChiplet))) - 1
+
+	mask := uint64(0)
+	t := uint64(1) << b.log2PageSize
+	numBitsSet := 0
+	for i := int(b.log2PageSize) + 1; i <= 64; i++ {
+		if i < tlbIndexBitsStart || i > tlbIndexBitsEnd {
+			mask = mask | t
+			numBitsSet++
+			if numBitsSet == log2NumSets {
+				break
+			}
+		}
+		t = t << 1
+	}
+
+	builder := tlb.MakeLastLevelTLBBuilder().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithNumWays(numWays).
+		WithNumSets(numSets).
+		WithNumMSHREntry(256).
+		WithNumReqPerCycle(8).
+		WithLog2PageSize(b.log2PageSize).
+		WithPageWalkCacheSize(2048).
+		WithLatency(80)
+
+	if b.useCoalescingTLBPort {
+		builder = builder.UseCoalescingTLBPort()
+	}
+	l3TLB := builder.Build(fmt.Sprintf("%s.L3TLB", chiplet.name))
+
+	b.l3TLBs = append(b.l3TLBs, l3TLB)
+	b.gpu.L3TLBs = append(b.gpu.L3TLBs, l3TLB)
+	chiplet.L3TLBs = append(chiplet.L3TLBs, l3TLB)
+
+	if b.enableVisTracing {
+		tracing.CollectTrace(l3TLB, b.visTracer)
 	}
 }
 
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) setupInterchipNetwork() {
+func (b *NUMAGPUBuilder) buildMMU(chiplet *Chiplet) {
+	if yamlconfig.OverrideConfig == nil {
+		b.buildDefaultMMU(chiplet)
+	} else {
+		mmuType := yamlconfig.OverrideConfig["MMU.type"]
+
+		switch mmuType {
+		case "BaselineMMU":
+			b.buildDefaultMMU(chiplet)
+		default:
+			log.Panicf("Unsupported MMU type: %s\n", mmuType)
+		}
+	}
+}
+
+func (b *NUMAGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
+	maxNumReqInFlight := 16
+
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
+		}
+
+		maxNumReqInFlight = numWalkersInt
+	}
+
+	maxCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
+
+	if maxNumReqInFlight%numGPCs != 0 {
+		panic("numPageWalkers should be divisible by numGPCs")
+	}
+
+	for i := 0; i < numGPCs; i++ {
+		component := mmu.MakeMMUBuilder().
+			WithEngine(b.engine).
+			WithFreq(1 * akita.GHz).
+			WithLog2PageSize(b.log2PageSize).
+			WithPageTable(b.pageTable).
+			WithMaxNumReqInFlight(maxNumReqInFlight / numGPCs).
+			Build(fmt.Sprintf("%s.BaselineMMU_%02d", chiplet.name, i))
+
+		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
+
+		component.(*mmu.MMUImpl).PageWalkCache = pageWalkCachePort
+
+		chiplet.MMUs = append(chiplet.MMUs, component)
+		b.gpu.MMUs = append(b.gpu.MMUs, component)
+
+		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
+			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
+		)
+	}
+}
+
+func (b *NUMAGPUBuilder) setupInterchipNetwork() {
 	chipConnector := chipnetwork.NewInterChipletConnector().
 		WithEngine(b.engine).
 		WithSwitchLatency(360).
@@ -646,10 +751,28 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) setupInterchipNetwork() {
 	chipConnector.MakeNetwork()
 }
 
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) InterChipletPorts(c *Chiplet) []akita.Port {
+func (b *NUMAGPUBuilder) InterChipletPorts(c *Chiplet) []akita.Port {
 	ports := []akita.Port{
 		c.chipRdmaEngine.RequestPort,
 		c.chipRdmaEngine.ResponsePort,
 	}
 	return ports
+}
+
+func (b *NUMAGPUBuilder) establishTLBMonitor(c *Chiplet) {
+	if !b.useTLBMonitor {
+		return
+	}
+
+	tlbMonitor := tlb.NewTLBMonitor(
+		fmt.Sprintf("%s.TLBMonitor", b.gpuName),
+		b.engine,
+		1*akita.MHz,
+	)
+
+	for _, l2tlb := range c.L2TLBs {
+		tlbMonitor.RegisterL2TLB(l2tlb.(*tlb.LatTLB))
+	}
+
+	b.gpu.TLBMonitors = append(b.gpu.TLBMonitors, tlbMonitor)
 }

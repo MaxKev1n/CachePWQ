@@ -26,9 +26,9 @@ type MMUImpl struct {
 
 	ToTop akita.Port
 
-	pageWalkCachePort akita.Port
-	PageWalkCache     akita.Port
-	topSender         akitaext.BufferedSender
+	ToPageWalkCache akita.Port
+	PageWalkCache   akita.Port
+	topSender       akitaext.BufferedSender
 
 	TranslationPort akita.Port
 	lowModuleFinder cache.LowModuleFinder
@@ -73,8 +73,6 @@ func (mmu *MMUImpl) walkPageTable(now akita.VTimeInSec) bool {
 		}
 
 		switch inflightTrans.state {
-		case newTransaction:
-			mmu.sendToPageWalkCache(now, inflightTrans)
 		case pageWalkCacheDone:
 			mmu.sendToMem(now, inflightTrans)
 		case memDone:
@@ -90,20 +88,21 @@ func (mmu *MMUImpl) walkPageTable(now akita.VTimeInSec) bool {
 }
 
 func (mmu *MMUImpl) parseFromPageWalkCache(now akita.VTimeInSec) bool {
-	madeProgress := false
-	item := mmu.pageWalkCachePort.Peek()
-	if item != nil {
-		switch msg := item.(type) {
-		case *mem.DataReadyRsp:
-			mmu.handlePageWalkCacheResponse(msg, now)
-		case *mem.WriteDoneRsp:
-		default:
-			panic("unknown message type")
-		}
-		madeProgress = true
+	item := mmu.ToPageWalkCache.Peek()
+	if item == nil {
+		return false
 	}
-	mmu.pageWalkCachePort.Retrieve(now)
-	return madeProgress
+
+	switch item.(type) {
+	case *mem.WriteDoneRsp:
+		mmu.ToPageWalkCache.Retrieve(now)
+
+		return true
+	default:
+		panic("unknown message type")
+	}
+
+	return false
 }
 
 func (mmu *MMUImpl) parseFromMem(now akita.VTimeInSec) bool {
@@ -120,26 +119,6 @@ func (mmu *MMUImpl) parseFromMem(now akita.VTimeInSec) bool {
 	}
 	mmu.TranslationPort.Retrieve(now)
 	return madeProgress
-}
-
-func (mmu *MMUImpl) sendToPageWalkCache(now akita.VTimeInSec, trans *Transaction) {
-	transState := trans.state
-	if transState != newTransaction {
-		panic("this state shouldn't be here!")
-	}
-
-	readReq := mem.ReadReqBuilder{}.
-		WithSendTime(now).
-		WithSrc(mmu.pageWalkCachePort).
-		WithDst(mmu.PageWalkCache).
-		WithPID(trans.req.PID).
-		WithAddress(mmu.pageTable.AlignToPage(trans.req.VAddr)).
-		WithByteSize(8).
-		Build()
-
-	trans.msgID = readReq.ID
-	mmu.pageWalkCachePort.Send(readReq)
-	trans.state = sentToPageWalkCache
 }
 
 func (mmu *MMUImpl) sendToMem(now akita.VTimeInSec, trans *Transaction) {
@@ -178,30 +157,6 @@ func (mmu *MMUImpl) sendToMem(now akita.VTimeInSec, trans *Transaction) {
 
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
 		now, mmu, "page_walk_req_local")
-}
-
-func (mmu *MMUImpl) handlePageWalkCacheResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) {
-	for i := range mmu.pageWalkers {
-		if mmu.pageWalkers[i].inflightTrans == nil {
-			continue
-		}
-
-		trans := mmu.pageWalkers[i].inflightTrans
-		if trans.msgID == rsp.RespondTo {
-			if rsp.Data != nil {
-				rspData := binary.LittleEndian.Uint64(rsp.Data)
-				trans.PPN = rspData & ^uint64(3)
-				level := int(rspData & uint64(3))
-				trans.vAddr = mmu.pageTable.MoveToLevel(trans.vAddr, level+1)
-				trans.level = level + 1
-			}
-
-			trans.state = pageWalkCacheDone
-
-			tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
-				now, mmu, "pwc-hit-level"+strconv.Itoa(trans.level))
-		}
-	}
 }
 
 func (mmu *MMUImpl) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) {
@@ -255,14 +210,14 @@ func (mmu *MMUImpl) fillPageWalkCache(
 
 	writeReq := mem.WriteReqBuilder{}.
 		WithSendTime(now).
-		WithSrc(mmu.pageWalkCachePort).
+		WithSrc(mmu.ToPageWalkCache).
 		WithDst(mmu.PageWalkCache).
 		WithPID(trans.req.PID).
 		WithAddress(mmu.pageTable.AlignToPage(trans.req.VAddr) | level).
 		WithData(data).
 		Build()
 
-	err := mmu.pageWalkCachePort.Send(writeReq)
+	err := mmu.ToPageWalkCache.Send(writeReq)
 	if err != nil {
 		return false
 	}
@@ -371,10 +326,24 @@ func (mmu *MMUImpl) parseFromTop(now akita.VTimeInSec) bool {
 				req:   req,
 				level: 0,
 				msgID: "invalid",
-				state: newTransaction,
+				state: pageWalkCacheDone,
 				vAddr: rearrangedVAddr,
 				PPN:   root,
 			}
+
+			if req.Data != nil {
+				rspData := binary.LittleEndian.Uint64(req.Data)
+				translationInPipeline.PPN = rspData & ^uint64(3)
+				level := int(rspData & uint64(3))
+				translationInPipeline.vAddr = mmu.pageTable.MoveToLevel(
+					translationInPipeline.vAddr,
+					level+1,
+				)
+				translationInPipeline.level = level + 1
+			}
+
+			tracing.AddTaskStep(tracing.MsgIDAtReceiver(translationInPipeline.req, mmu),
+				now, mmu, "pwc-hit-level"+strconv.Itoa(translationInPipeline.level))
 
 			walker.inflightTrans = &translationInPipeline
 
@@ -412,4 +381,18 @@ func (mmu *MMUImpl) TranslationPortPort() akita.Port {
 
 func (mmu *MMUImpl) ToCachePort() akita.Port {
 	panic("Baseline MMU does not support ToCachePort")
+}
+
+func (mmu *MMUImpl) CanAccept() bool {
+	for i := range mmu.pageWalkers {
+		if len(mmu.pageWalkers[i].queue) < mmu.queueCapacity {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (mmu *MMUImpl) ToPageWalkCachePort() akita.Port {
+	return mmu.ToPageWalkCache
 }

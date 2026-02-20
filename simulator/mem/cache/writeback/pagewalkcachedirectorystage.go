@@ -130,11 +130,11 @@ func (ds *pageWalkCacheDirectoryStage) doWriteHit(
 	ds.cache.directory.Visit(block)
 	done := mem.WriteDoneRspBuilder{}.
 		WithSendTime(now).
-		WithSrc(ds.cache.TopPort).
+		WithSrc(ds.cache.ToMMUs).
 		WithDst(trans.write.Src).
 		WithRspTo(trans.write.ID).
 		Build()
-	ds.cache.topSender.Send(done)
+	ds.cache.mmuSender.Send(done)
 	//pipeline
 	ds.cache.lookupBuffer.Pop()
 	// ds.cache.dirStageBuffer.Pop()

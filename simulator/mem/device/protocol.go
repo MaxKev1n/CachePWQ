@@ -26,6 +26,7 @@ type TranslationReq struct {
 	VAddr       uint64
 	PID         ca.PID
 	DeviceID    uint64
+	Data        []byte
 	TLBID       int
 	PartitionID int
 	PSV         *psv.PerfSignatureVec
@@ -44,6 +45,7 @@ type TranslationReqBuilder struct {
 	vAddr       uint64
 	pid         ca.PID
 	deviceID    uint64
+	data        []byte
 	tlbID       int
 	partitionID int
 	GPCID       int
@@ -105,6 +107,12 @@ func (b TranslationReqBuilder) WithGPCID(gpcID int) TranslationReqBuilder {
 	return b
 }
 
+// WithData sets the data of the request to build.
+func (b TranslationReqBuilder) WithData(data []byte) TranslationReqBuilder {
+	b.data = data
+	return b
+}
+
 // Build creats a new TranslationReq
 func (b TranslationReqBuilder) Build() *TranslationReq {
 	r := &TranslationReq{}
@@ -116,6 +124,7 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 	r.VAddr = b.vAddr
 	r.PID = b.pid
 	r.DeviceID = b.deviceID
+	r.Data = b.data
 	r.TLBID = b.tlbID
 	r.PartitionID = b.partitionID
 	r.GPCID = b.GPCID
