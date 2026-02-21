@@ -171,6 +171,16 @@ func (mmu *MMUImpl) sendToMem(now akita.VTimeInSec, trans *Transaction) {
 
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
 		now, mmu, "page_walk_req_local")
+
+	tracing.StartTask(
+		readReq.ID,
+		"",
+		now,
+		mmu,
+		"walker_mem_latency",
+		reflect.TypeOf(readReq).String(),
+		readReq,
+	)
 }
 
 func (mmu *MMUImpl) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) {
@@ -181,22 +191,6 @@ func (mmu *MMUImpl) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSe
 
 		trans := mmu.pageWalkers[i].inflightTrans
 		if trans.msgID == rsp.RespondTo {
-			rspInfo := rsp.Info.(*mem.DataReadyRspInfo)
-			accessResult := rspInfo.AccessResult
-			src := rspInfo.Src
-			taskStep := fmt.Sprintf("chiplet-%s-level-%d-%s", getChipletNum(src), trans.level, getAccessResultString(accessResult))
-
-			tracing.AddTaskStep(
-				trans.msgID+"MMU-mem-latency",
-				now, mmu,
-				taskStep,
-			)
-			tracing.EndTask(
-				trans.msgID+"MMU-mem-latency",
-				now,
-				mmu,
-			)
-
 			trans.PPN = binary.LittleEndian.Uint64(rsp.Data)
 			trans.state = memDone
 			if trans.level+1 == 4 {
@@ -205,6 +199,8 @@ func (mmu *MMUImpl) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSe
 				mmu.fillPageWalkCache(now, i)
 			}
 			trans.level++
+
+			tracing.EndTask(rsp.RespondTo, now, mmu)
 		}
 	}
 }

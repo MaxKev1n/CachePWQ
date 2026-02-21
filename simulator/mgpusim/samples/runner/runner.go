@@ -64,8 +64,6 @@ var rtuCoalesceReportFlag = flag.Bool("report-rtu-coalesce", false,
 	"Report the average amount of coalescing possible at the RTU.")
 var pagewalkLatencyReportFlag = flag.Bool("report-pagewalk-latency", false,
 	"Report the average page walk latency.")
-var mmuConditionalStatsReportFlag = flag.Bool("report-mmu-conditional", false,
-	"Report the mmu stats about how much is remote and how much is local.")
 var activeWalkerReportFlag = flag.Bool("report-active-walkers", false,
 	"Report the average acitve page walker count.")
 var dramLatencyReportFlag = flag.Bool("report-dram-latency", false,
@@ -189,11 +187,6 @@ type L2PipelineLatencyTracer struct {
 type AddressTranslatorLatencyTracer struct {
 	tracer            *tracing.ConditionalAverageTimeTracer
 	addressTranslator akita.Named
-}
-
-type MMUMemoryLatencyTracer struct {
-	tracer *tracing.ConditionalAverageTimeTracer
-	mmu    mmu.MMU
 }
 
 type TLBHitRateTracer struct {
@@ -332,8 +325,8 @@ type Runner struct {
 	RemoteDownTLBLatencyTracers     []TLBLatencyTracer
 	L2PipelineLatencyTracers        []L2PipelineLatencyTracer
 	TLBPipelineLatencyTracers       []TLBPipelineLatencyTracer
-	MMUMemoryLatencyTracers         []MMUMemoryLatencyTracer
 	PageWalkLatencyTracers          []PageWalkLatencyTracer
+	PageWalkLatencyHistogramTracers []*trace.WalkerMemLatencyTracer
 	DRAMLatencyTracers              []DRAMLatencyTracer
 	AddressTranslatorLatencyTracers []AddressTranslatorLatencyTracer
 	CacheHitRateTracers             []cacheHitRateTracer
@@ -388,7 +381,6 @@ type Runner struct {
 	ReportMemoryAccessSource        bool
 	ReportTLBLatency                bool
 	ReportTLBConditionalStats       bool
-	ReportMMUConditionalStats       bool
 	ReportPageWalkLatency           bool
 	ReportL1CaPWQCacheLens          bool
 	ReportDRAMLatency               bool
@@ -473,10 +465,6 @@ func (r *Runner) ParseFlag() *Runner {
 		r.ReportTLBConditionalStats = true
 	}
 
-	if *mmuConditionalStatsReportFlag {
-		r.ReportMMUConditionalStats = true
-	}
-
 	if *pagewalkLatencyReportFlag {
 		r.ReportPageWalkLatency = true
 	}
@@ -559,7 +547,6 @@ func (r *Runner) ParseFlag() *Runner {
 		r.ReportMemoryAccessSource = true
 		r.ReportTLBLatency = true
 		r.ReportTLBConditionalStats = true
-		r.ReportMMUConditionalStats = true
 		r.ReportPageWalkLatency = true
 		r.ReportL1CaPWQCacheLens = true
 		r.ReportDRAMLatency = true
@@ -668,7 +655,6 @@ func (r *Runner) Init() *Runner {
 	r.addDRAMTracer()
 	r.addL1CaPWQCacheLensTracer()
 	r.addPageWalkLatencyTracer()
-	r.addMMUConditionalTracer()
 	r.addAddressTranslatorLatencyTracer()
 	r.addCacheHitRateTracer()
 	r.addPWCHitRateTracer()
@@ -2370,21 +2356,16 @@ func (r *Runner) addPageWalkLatencyTracer() {
 				PageWalkLatencyTracer{tracer: tracer, mmu: mmu})
 			tracing.CollectTrace(mmu, tracer)
 		}
-	}
-}
-
-func (r *Runner) addMMUConditionalTracer() {
-	if !r.ReportMMUConditionalStats {
-		return
-	}
-	for _, gpu := range r.GPUDriver.GPUs {
 		for _, mmu := range gpu.MMUs {
-			tracer := tracing.NewConditionalAverageTimeTracer(
+			tracer := trace.NewWalkerMemLatencyTracer(
 				func(task tracing.Task) bool {
-					return task.Kind == "MMU_mem_latency"
-				})
-			r.MMUMemoryLatencyTracers = append(r.MMUMemoryLatencyTracers,
-				MMUMemoryLatencyTracer{tracer: tracer, mmu: mmu})
+					return task.Kind == "walker_mem_latency"
+				},
+				20,
+			)
+			tracer.TracedComponentName = mmu.Name()
+			r.PageWalkLatencyHistogramTracers = append(r.PageWalkLatencyHistogramTracers,
+				tracer)
 			tracing.CollectTrace(mmu, tracer)
 		}
 	}
@@ -3340,7 +3321,6 @@ func (r *Runner) reportStats() {
 	r.reportTLBLatency()
 	r.reportPageWalkLatency()
 	r.reportL1CaPWQCacheLens()
-	r.reportMMUConditionalStats()
 	r.reportActiveWalkerCount()
 	r.reportDRAMLatency()
 	r.reportTLBHitRate()
@@ -3665,26 +3645,17 @@ func (r *Runner) reportPageWalkLatency() {
 		)
 	}
 
-}
+	for _, tracer := range r.PageWalkLatencyHistogramTracers {
+		if tracer.TotalCount() == 0 {
+			continue
+		}
 
-func (r *Runner) reportMMUConditionalStats() {
-	for _, tracer := range r.MMUMemoryLatencyTracers {
-		mmuTracer := tracer.tracer
-		for _, stepName := range mmuTracer.GetStepNames() {
-			if mmuTracer.AverageTime(stepName) == 0 {
-				continue
-			}
-
+		histogram := tracer.Histogram()
+		for _, count := range histogram {
 			r.metricsCollector.Collect(
-				tracer.mmu.Name(),
-				stepName+"-latency",
-				float64(mmuTracer.AverageTime(stepName)),
-			)
-
-			r.metricsCollector.Collect(
-				tracer.mmu.Name(),
-				stepName+"-num",
-				float64(mmuTracer.TotalCount(stepName)),
+				tracer.TracedComponentName,
+				"req_latency_histogram_"+strconv.Itoa(int(count.Bin)),
+				count.Count,
 			)
 		}
 	}

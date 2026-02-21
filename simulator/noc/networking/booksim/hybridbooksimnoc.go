@@ -68,7 +68,7 @@ func NewBookSimEndPoint(
 	ep.inLookupBuffer = util.NewBuffer(2 * ep.numPhysicalPorts)
 	ep.inPipeline = pipelining.MakeBuilder().
 		WithPipelineWidth(ep.numPhysicalPorts).
-		WithNumStage(40).
+		WithNumStage(50).
 		WithCyclePerStage(1).
 		WithPostPipelineBuffer(ep.inLookupBuffer).
 		Build(fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nodeID) + "_in_pipeline")
@@ -76,7 +76,7 @@ func NewBookSimEndPoint(
 	ep.outLookupBuffer = util.NewBuffer(2 * ep.numPhysicalPorts)
 	ep.outPipeline = pipelining.MakeBuilder().
 		WithPipelineWidth(ep.numPhysicalPorts).
-		WithNumStage(40).
+		WithNumStage(50).
 		WithCyclePerStage(1).
 		WithPostPipelineBuffer(ep.outLookupBuffer).
 		Build(fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nodeID) + "_out_pipeline")
@@ -84,7 +84,7 @@ func NewBookSimEndPoint(
 	ep.remoteLookupBuffer = util.NewBuffer(2 * ep.numPhysicalPorts)
 	ep.remotePipeline = pipelining.MakeBuilder().
 		WithPipelineWidth(ep.numPhysicalPorts).
-		WithNumStage(80).
+		WithNumStage(200).
 		WithCyclePerStage(1).
 		WithPostPipelineBuffer(ep.remoteLookupBuffer).
 		Build(fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nodeID) + "_remote_pipeline")
