@@ -47,6 +47,7 @@ type CommonPlatformBuilder struct {
 	booksimDir    string
 
 	useTLBMonitor bool
+	useCacheTEA   bool
 }
 
 // Makebuilder creates a EmuBuilder with default parameters.
@@ -147,6 +148,10 @@ func (b *CommonPlatformBuilder) WithBookSimDir(dir string) {
 
 func (b *CommonPlatformBuilder) WithTLBMonitor() {
 	b.useTLBMonitor = true
+}
+
+func (b *CommonPlatformBuilder) WithCacheTEA() {
+	b.useCacheTEA = true
 }
 
 // // WithNumChiplets sets the number of chiplets in the mcm GPU.

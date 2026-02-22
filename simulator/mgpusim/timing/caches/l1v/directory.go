@@ -4,15 +4,23 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
+	"gitlab.com/akita/mem/profile"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/tracing"
 )
 
 type directory struct {
 	cache *Cache
+
+	status profile.CachePSVStatus
+
+	numExecutedReqs uint64
 }
 
 func (d *directory) Tick(now akita.VTimeInSec) bool {
+	d.status = profile.BASE
+	d.numExecutedReqs = 0
+
 	item := d.cache.dirBuf.Peek()
 	if item == nil {
 		return false
@@ -54,6 +62,7 @@ func (d *directory) processMSHRHit(
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
 
 	d.cache.dirBuf.Pop()
+	d.numExecutedReqs++
 
 	if trans.read != nil {
 		tracing.AddTaskStep(trans.id, now, d.cache, "read-mshr-hit")
@@ -85,6 +94,7 @@ func (d *directory) processReadHit(
 	bankBuf.Push(trans)
 
 	d.cache.dirBuf.Pop()
+	d.numExecutedReqs++
 	tracing.AddTaskStep(trans.id, now, d.cache, "read-hit")
 
 	return true
@@ -94,6 +104,8 @@ func (d *directory) processReadMiss(
 	now akita.VTimeInSec,
 	trans *transaction,
 ) bool {
+	d.status = profile.MISS
+
 	read := trans.read
 	addr := read.Address
 	blockSize := uint64(1 << d.cache.log2BlockSize)
@@ -113,7 +125,10 @@ func (d *directory) processReadMiss(
 	}
 
 	d.cache.dirBuf.Pop()
+	d.numExecutedReqs++
 	tracing.AddTaskStep(trans.id, now, d.cache, "read-miss")
+
+	d.status = profile.BASE
 
 	return true
 }
@@ -179,6 +194,8 @@ func (d *directory) partialWriteMiss(
 	now akita.VTimeInSec,
 	trans *transaction,
 ) bool {
+	d.status = profile.MISS
+
 	write := trans.write
 	addr := write.Address
 	blockSize := uint64(1 << d.cache.log2BlockSize)
@@ -212,7 +229,10 @@ func (d *directory) partialWriteMiss(
 	}
 
 	d.cache.dirBuf.Pop()
+	d.numExecutedReqs++
 	tracing.AddTaskStep(trans.id, now, d.cache, "write-miss")
+
+	d.status = profile.BASE
 
 	return true
 }
@@ -221,12 +241,21 @@ func (d *directory) fullLineWriteMiss(
 	now akita.VTimeInSec,
 	trans *transaction,
 ) bool {
+	d.status = profile.MISS
+
 	write := trans.write
 	addr := write.Address
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	block := d.cache.directory.FindVictim(cacheLineID)
-	return d.processWriteHit(now, trans, block)
+
+	if !d.processWriteHit(now, trans, block) {
+		return false
+	}
+
+	d.status = profile.BASE
+
+	return true
 }
 
 func (d *directory) writeBottom(now akita.VTimeInSec, trans *transaction) bool {
@@ -290,6 +319,7 @@ func (d *directory) processWriteHit(
 	bankBuf.Push(trans)
 
 	d.cache.dirBuf.Pop()
+	d.numExecutedReqs++
 
 	return true
 }
@@ -341,4 +371,8 @@ func (d *directory) getBankBuf(block *cache.Block) util.Buffer {
 	blockID := block.SetID*numWaysPerSet + block.WayID
 	bankID := blockID % len(d.cache.bankBufs)
 	return d.cache.bankBufs[bankID]
+}
+
+func (d *directory) Attribute() profile.CachePSVStatus {
+	return d.status
 }

@@ -8,6 +8,7 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/device"
+	"gitlab.com/akita/mem/profile"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -514,4 +515,16 @@ func (t *DefaultAddressTranslator) CheckBottomPort(port akita.Port) bool {
 
 func (t *DefaultAddressTranslator) GetName() string {
 	return t.Name()
+}
+
+func (t *DefaultAddressTranslator) Attribute() profile.CachePSVStatus {
+	if len(t.transactions) == 0 {
+		return profile.IDLE
+	}
+
+	return profile.TRANSLATION
+}
+
+func (t *DefaultAddressTranslator) SetProvider(provider profile.CachePSVComponent) {
+	panic("No provider")
 }

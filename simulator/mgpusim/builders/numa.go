@@ -12,9 +12,11 @@ import (
 	"gitlab.com/akita/mem/cache/writeback"
 	"gitlab.com/akita/mem/idealmemcontroller"
 	"gitlab.com/akita/mem/monitor"
+	"gitlab.com/akita/mem/vm/addresstranslator"
 	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
+	"gitlab.com/akita/mgpusim/timing/caches/l1v"
 	"gitlab.com/akita/mgpusim/yamlconfig"
 	noc "gitlab.com/akita/noc/networking/booksim"
 	"gitlab.com/akita/noc/networking/chipnetwork"
@@ -27,10 +29,15 @@ type NUMAGPUBuilder struct {
 
 	// specific componenets
 	useTLBMonitor bool
+	useCacheTEA   bool
 }
 
 func (b *NUMAGPUBuilder) WithTLBMonitor() {
 	b.useTLBMonitor = true
+}
+
+func (b *NUMAGPUBuilder) WithCacheTEA() {
+	b.useCacheTEA = true
 }
 
 func MakeNUMAGPUBuilder() NUMAGPUBuilder {
@@ -86,6 +93,7 @@ func (b NUMAGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
 	chiplet.GlobalNoC.Establish()
 
 	b.establishTLBMonitor(chiplet)
+	b.establishCacheTEA(chiplet)
 
 	return b.gpu
 }
@@ -785,4 +793,22 @@ func (b *NUMAGPUBuilder) establishTLBMonitor(c *Chiplet) {
 	}
 
 	b.gpu.TLBMonitors = append(b.gpu.TLBMonitors, tlbMonitor)
+}
+
+func (b *NUMAGPUBuilder) establishCacheTEA(c *Chiplet) {
+	if !b.useCacheTEA {
+		return
+	}
+
+	if len(c.L1VAddrTranslator) != len(c.L1VCaches) {
+		log.Panicf("number of L1VAddrTranslator should be the same as number of L1VCaches")
+	}
+
+	for i := 0; i < len(c.L1VCaches); i++ {
+		l1VCache := c.L1VCaches[i]
+		l1VAT := c.L1VAddrTranslator[i]
+
+		l1VCache.(*l1v.Cache).SetProvider(l1VAT.(*addresstranslator.DefaultAddressTranslator))
+		l1VCache.(*l1v.Cache).EnableCacheTEA()
+	}
 }

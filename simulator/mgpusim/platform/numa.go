@@ -72,6 +72,10 @@ func (b *NUMAPlatformBuilder) createGPUBuilder(
 		gpuBuilder.WithTLBMonitor()
 	}
 
+	if b.useCacheTEA {
+		gpuBuilder.WithCacheTEA()
+	}
+
 	b.setVisTracer(gpuDriver, gpuBuilder)
 	b.setTLBTracer(gpuBuilder)
 	b.setMemTracer(gpuBuilder)

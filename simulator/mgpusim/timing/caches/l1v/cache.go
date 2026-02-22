@@ -4,7 +4,9 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
+	"gitlab.com/akita/mem/profile"
 	"gitlab.com/akita/util"
+	"gitlab.com/akita/util/tracing"
 )
 
 // A Cache is a customized L1 cache the for R9nano GPUs.
@@ -38,6 +40,9 @@ type Cache struct {
 	postCoalesceTransactions []*transaction
 
 	isPaused bool
+
+	enableAttribute bool
+	provider        profile.CachePSVComponent
 }
 
 // SetLowModuleFinder sets the finder that tells which remote port can serve
@@ -56,7 +61,17 @@ func (c *Cache) Tick(now akita.VTimeInSec) bool {
 
 	madeProgress = c.controlStage.Tick(now) || madeProgress
 
+	if c.enableAttribute {
+		c.Attribute(now)
+
+		return true
+	}
+
 	return madeProgress
+}
+
+func (c *Cache) EnableCacheTEA() {
+	c.enableAttribute = true
 }
 
 func (c *Cache) runPipeline(now akita.VTimeInSec) bool {
@@ -133,4 +148,52 @@ func (c *Cache) CheckTopPort(port akita.Port) bool {
 
 func (c *Cache) CheckBottomPort(port akita.Port) bool {
 	return port == c.BottomPort
+}
+
+func (c *Cache) Attribute(now akita.VTimeInSec) {
+	if c.directoryStage.numExecutedReqs == uint64(c.numReqPerCycle) {
+		tracing.StartTask(
+			"",
+			"",
+			now,
+			c,
+			"cache_utilization",
+			"base",
+			float64(c.numReqPerCycle),
+		)
+
+		return
+	}
+
+	status := profile.BASE
+
+	if len(c.coalesceStage.toCoalesce) == 0 {
+		item := c.TopPort.Peek()
+		if item == nil {
+			status = c.provider.Attribute()
+		}
+	} else {
+		if c.dirBuf.CanPush() {
+			status = profile.BASE
+		} else {
+			status = c.directoryStage.status
+		}
+	}
+
+	cycle := float64(uint64(c.numReqPerCycle)-c.directoryStage.numExecutedReqs) /
+		float64(c.numReqPerCycle)
+
+	tracing.StartTask(
+		"",
+		"",
+		now,
+		c,
+		"cache_utilization",
+		profile.CachePSVStatusNames[status],
+		cycle,
+	)
+}
+
+func (c *Cache) SetProvider(provider profile.CachePSVComponent) {
+	c.provider = provider
 }

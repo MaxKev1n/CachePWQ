@@ -17,6 +17,7 @@ import (
 	"github.com/tebeka/atexit"
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem/monitor"
+	"gitlab.com/akita/mem/profile"
 	"gitlab.com/akita/mem/trace"
 	"gitlab.com/akita/mgpusim/yamlconfig"
 
@@ -142,6 +143,8 @@ var booksimDir = flag.String("booksim-dir", "",
 	"Specify the path to the booksim directory.")
 var monitorTLBFlag = flag.Bool("tlb-monitor", false,
 	"Enable the TLB monitor that tracks the number of the TLB queues.")
+var cacheUtilizationFlag = flag.Bool("cache-utilization", false,
+	"Enable the cache utilization tracer that tracks the utilization of the cache.")
 
 type verificationPreEnablingBenchmark interface {
 	benchmarks.Benchmark
@@ -161,6 +164,11 @@ type cacheLatencyTracer struct {
 
 type cacheHitRateTracer struct {
 	tracer *tracing.StepCountTracer
+	cache  akita.Component
+}
+
+type cacheUtilizationTracer struct {
+	tracer *profile.CacheUtilizationTracer
 	cache  akita.Component
 }
 
@@ -325,6 +333,7 @@ type Runner struct {
 	DRAMLatencyTracers              []DRAMLatencyTracer
 	AddressTranslatorLatencyTracers []AddressTranslatorLatencyTracer
 	CacheHitRateTracers             []cacheHitRateTracer
+	cacheUtilizationTracers         []cacheUtilizationTracer
 	RTUCoalescingTracers            [][][][]*tracing.AverageCountTracer
 	TLBHitRateTracers               []TLBHitRateTracer
 	PWCHitRateTracers               []PWCHitRateTracer
@@ -403,6 +412,7 @@ type Runner struct {
 	ReportTLBMSHRStallTracing       bool
 	ReportTLBReqStalls              bool
 	ReportTLBMonitor                bool
+	ReportCacheUtilization          bool
 	UseUnifiedMemory                bool
 	UseLASPMemoryAlloc              bool
 	UseLASPHSLMemoryAlloc           bool
@@ -652,6 +662,7 @@ func (r *Runner) Init() *Runner {
 	r.addPageWalkLatencyTracer()
 	r.addAddressTranslatorLatencyTracer()
 	r.addCacheHitRateTracer()
+	r.addCacheUtilizationTracer()
 	r.addPWCHitRateTracer()
 	r.addRDMAEngineTracer()
 	r.addCDMAEngineTracer()
@@ -1098,6 +1109,12 @@ func (r *Runner) buildTimingPlatform() {
 			b.WithTLBMonitor()
 
 			r.ReportTLBMonitor = true
+		}
+
+		if *cacheUtilizationFlag {
+			b.WithCacheTEA()
+
+			r.ReportCacheUtilization = true
 		}
 
 		b.WithAlg(*schedulingAlg)
@@ -2411,6 +2428,24 @@ func (r *Runner) addCacheHitRateTracer() {
 	}
 }
 
+func (r *Runner) addCacheUtilizationTracer() {
+	if !r.ReportCacheUtilization {
+		return
+	}
+
+	for _, gpu := range r.GPUDriver.GPUs {
+		for _, cache := range gpu.L1VCaches {
+			tracer := profile.NewCacheUtilizationTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "cache_utilization"
+				})
+			r.cacheUtilizationTracers = append(r.cacheUtilizationTracers,
+				cacheUtilizationTracer{tracer: tracer, cache: cache})
+			tracing.CollectTrace(cache, tracer)
+		}
+	}
+}
+
 func (r *Runner) addTLBHitRateTracer() {
 	if !r.ReportTLBHitRate {
 		return
@@ -3228,6 +3263,7 @@ func (r *Runner) reportStats() {
 	r.reportInstCount()
 	r.reportCacheLatency()
 	r.reportCacheHitRate()
+	r.reportCacheUtilization()
 	r.reportMemoryAccessSource()
 	r.reportTLBLatency()
 	r.reportPageWalkLatency()
@@ -3675,6 +3711,30 @@ func (r *Runner) reportCacheHitRate() {
 			tracer.cache.Name(), "write-miss", float64(writeMiss))
 		r.metricsCollector.Collect(
 			tracer.cache.Name(), "write-mshr-hit", float64(writeMSHRHit))
+	}
+}
+
+func (r *Runner) reportCacheUtilization() {
+	for _, tracer := range r.cacheUtilizationTracers {
+		idle := tracer.tracer.GetStepCount("idle")
+		base := tracer.tracer.GetStepCount("base")
+		translation := tracer.tracer.GetStepCount("translation")
+		miss := tracer.tracer.GetStepCount("miss")
+
+		totalAttribution := idle + base + translation + miss
+
+		if totalAttribution == 0 {
+			continue
+		}
+
+		r.metricsCollector.Collect(
+			tracer.cache.Name(), "idle", float64(idle))
+		r.metricsCollector.Collect(
+			tracer.cache.Name(), "base", float64(base))
+		r.metricsCollector.Collect(
+			tracer.cache.Name(), "translation", float64(translation))
+		r.metricsCollector.Collect(
+			tracer.cache.Name(), "miss", float64(miss))
 	}
 }
 
