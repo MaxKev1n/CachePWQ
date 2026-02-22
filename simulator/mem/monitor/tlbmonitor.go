@@ -1,14 +1,20 @@
-package tlb
+package monitor
 
 import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/util/tracing"
 )
 
+type TLBMonitorComponent interface {
+	InitMonitorStats()
+	ClearMonitorStats()
+	GetMonitorStats() *MonitorStats
+}
+
 type TLBMonitor struct {
 	*akita.TickingComponent
 
-	L2TLBs []*LatTLB
+	L3TLBs []TLBMonitorComponent
 
 	running     bool
 	initialized bool
@@ -34,8 +40,8 @@ func (m *TLBMonitor) Tick(now akita.VTimeInSec) bool {
 		return false
 	}
 
-	for _, tlb := range m.L2TLBs {
-		m.CollectL2TLBStats(now, tlb)
+	for _, tlb := range m.L3TLBs {
+		m.CollectComponentStats(now, tlb)
 	}
 
 	m.numEpoches++
@@ -43,14 +49,15 @@ func (m *TLBMonitor) Tick(now akita.VTimeInSec) bool {
 	return true
 }
 
-func (m *TLBMonitor) RegisterL2TLB(tlb *LatTLB) {
-	m.L2TLBs = append(m.L2TLBs, tlb)
+func (m *TLBMonitor) RegisterL3TLB(tlb TLBMonitorComponent) {
+	tlb.InitMonitorStats()
+	m.L3TLBs = append(m.L3TLBs, tlb)
 }
 
 func (m *TLBMonitor) Start(now akita.VTimeInSec) {
 	if !m.initialized {
-		for _, tlb := range m.L2TLBs {
-			tlb.monitorStats.Clear()
+		for _, tlb := range m.L3TLBs {
+			tlb.ClearMonitorStats()
 		}
 
 		m.initialized = true
@@ -62,19 +69,19 @@ func (m *TLBMonitor) Start(now akita.VTimeInSec) {
 }
 
 func (m *TLBMonitor) Stop() {
-	for _, tlb := range m.L2TLBs {
-		tlb.monitorStats.Clear()
+	for _, tlb := range m.L3TLBs {
+		tlb.ClearMonitorStats()
 	}
 
 	m.running = false
 }
 
-func (m *TLBMonitor) CollectL2TLBStats(
+func (m *TLBMonitor) CollectComponentStats(
 	now akita.VTimeInSec,
-	tlb *LatTLB,
+	component TLBMonitorComponent,
 ) {
 	if m.numEpoches == 0 {
-		tlb.monitorStats.Clear()
+		component.ClearMonitorStats()
 
 		return
 	}
@@ -86,14 +93,14 @@ func (m *TLBMonitor) CollectL2TLBStats(
 		m,
 		"TLBMonitor",
 		"",
-		tlb.monitorStats,
+		component.GetMonitorStats(),
 	)
 
-	tlb.monitorStats.Clear()
+	component.ClearMonitorStats()
 }
 
 type MonitorStats struct {
-	name string
+	Name string
 
 	Hits     uint64
 	MSHRHits uint64

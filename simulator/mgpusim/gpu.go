@@ -5,6 +5,7 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/cache/writeback"
+	"gitlab.com/akita/mem/monitor"
 	"gitlab.com/akita/mem/vm/lds"
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	noc "gitlab.com/akita/noc/networking/booksim"
@@ -63,7 +64,7 @@ type GPU struct {
 
 	GPUID uint64
 
-	TLBMonitors []*tlb.TLBMonitor
+	TLBMonitors []*monitor.TLBMonitor
 }
 
 // ExternalPorts returns external ports

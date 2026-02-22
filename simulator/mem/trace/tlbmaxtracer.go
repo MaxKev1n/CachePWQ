@@ -3,7 +3,7 @@ package trace
 import (
 	"sync"
 
-	"gitlab.com/akita/mem/vm/tlb"
+	"gitlab.com/akita/mem/monitor"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -50,7 +50,7 @@ func (t *TLBMonitorMaxCountTracer) StartTask(task tracing.Task) {
 		return
 	}
 	t.lock.Lock()
-	stat, ok := task.Detail.(*tlb.MonitorStats)
+	stat, ok := task.Detail.(*monitor.MonitorStats)
 	if !ok {
 		panic("task detail is not TLBMonitorStat")
 	}

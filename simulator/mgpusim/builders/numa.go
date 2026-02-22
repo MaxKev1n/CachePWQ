@@ -11,6 +11,7 @@ import (
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/cache/writeback"
 	"gitlab.com/akita/mem/idealmemcontroller"
+	"gitlab.com/akita/mem/monitor"
 	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
@@ -773,14 +774,14 @@ func (b *NUMAGPUBuilder) establishTLBMonitor(c *Chiplet) {
 		return
 	}
 
-	tlbMonitor := tlb.NewTLBMonitor(
+	tlbMonitor := monitor.NewTLBMonitor(
 		fmt.Sprintf("%s.TLBMonitor", b.gpuName),
 		b.engine,
 		1*akita.MHz,
 	)
 
-	for _, l2tlb := range c.L2TLBs {
-		tlbMonitor.RegisterL2TLB(l2tlb.(*tlb.LatTLB))
+	for _, l3tlb := range c.L3TLBs {
+		tlbMonitor.RegisterL3TLB(l3tlb.(monitor.TLBMonitorComponent))
 	}
 
 	b.gpu.TLBMonitors = append(b.gpu.TLBMonitors, tlbMonitor)

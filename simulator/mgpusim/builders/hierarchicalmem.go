@@ -83,8 +83,6 @@ func (b HierarchicalMemSideGPUBuilder) Build(name string, id uint64) *mgpusim.GP
 
 	chiplet.GlobalNoC.Establish()
 
-	b.establishTLBMonitor(chiplet)
-
 	return b.gpu
 }
 
@@ -581,22 +579,4 @@ func (b *HierarchicalMemSideGPUBuilder) InterChipletPorts(c *Chiplet) []akita.Po
 		c.chipRdmaEngine.ResponsePort,
 	}
 	return ports
-}
-
-func (b *HierarchicalMemSideGPUBuilder) establishTLBMonitor(c *Chiplet) {
-	if !b.useTLBMonitor {
-		return
-	}
-
-	tlbMonitor := tlb.NewTLBMonitor(
-		fmt.Sprintf("%s.TLBMonitor", b.gpuName),
-		b.engine,
-		1*akita.MHz,
-	)
-
-	for _, l2tlb := range c.L2TLBs {
-		tlbMonitor.RegisterL2TLB(l2tlb.(*tlb.LatTLB))
-	}
-
-	b.gpu.TLBMonitors = append(b.gpu.TLBMonitors, tlbMonitor)
 }

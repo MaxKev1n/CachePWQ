@@ -156,12 +156,5 @@ func (b LatTLBBuilder) Build(name string) TLB {
 	tlb.pipeline = pipelineBuilder.Build(tlb.Name() + "_pipeline")
 	tlb.reset()
 
-	tlb.monitorStats = &MonitorStats{
-		name:     tlb.Name(),
-		Hits:     0,
-		MSHRHits: 0,
-		Misses:   0,
-	}
-
 	return tlb
 }

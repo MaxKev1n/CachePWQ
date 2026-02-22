@@ -108,8 +108,6 @@ type LatTLB struct {
 	hysterisis   bool
 
 	gpcID int
-
-	monitorStats *MonitorStats
 }
 
 func (tlb *LatTLB) SetMaxExtensionMisses(num int) {
@@ -411,8 +409,6 @@ func (tlb *LatTLB) lookup(now akita.VTimeInSec) bool {
 				req.VAddr,
 			)
 
-			tlb.monitorStats.MSHRHits += 1
-
 			tlb.lookupBuffer.Pop()
 			// if tlb.stats.sendStateInfo {
 			tlb.stats.numAccess += 1
@@ -453,8 +449,6 @@ func (tlb *LatTLB) handleTranslationHit(
 	tlb.visit(setID, wayID)
 	tlb.lookupBuffer.Pop()
 
-	tlb.monitorStats.Hits += 1
-
 	// if tlb.stats.sendStateInfo {
 	tlb.stats.numAccess += 1
 	tlb.stats.accessesInCurEpoch++
@@ -490,8 +484,6 @@ func (tlb *LatTLB) handleTranslationMiss(
 	if fetched {
 		//tlb.TopPort.Retrieve(now)
 		tlb.lookupBuffer.Pop()
-
-		tlb.monitorStats.Misses += 1
 
 		// if tlb.stats.sendStateInfo {
 		tlb.stats.numAccess += 1
@@ -536,8 +528,6 @@ func (tlb *LatTLB) handleTranslationExtendMiss(
 	if fetched {
 		//tlb.TopPort.Retrieve(now)
 		tlb.lookupBuffer.Pop()
-
-		tlb.monitorStats.Misses += 1
 
 		// if tlb.stats.sendStateInfo {
 		tlb.stats.numAccess += 1

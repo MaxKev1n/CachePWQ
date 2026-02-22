@@ -16,6 +16,7 @@ import (
 
 	"github.com/tebeka/atexit"
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/mem/monitor"
 	"gitlab.com/akita/mem/trace"
 	"gitlab.com/akita/mgpusim/yamlconfig"
 
@@ -299,7 +300,7 @@ type TLBReqStallTracer struct {
 type TLBMonitorTracer struct {
 	avgTracer *trace.TLBMonitorAverageCountTracer
 	maxTracer *trace.TLBMonitorMaxCountTracer
-	monitor   *tlb.TLBMonitor
+	monitor   *monitor.TLBMonitor
 }
 
 // Runner is a class that helps running the benchmarks in the official samples.

@@ -163,12 +163,5 @@ func (b LastLevelTLBBuilder) Build(name string) TLB {
 
 	tlb.inflightPageWalkCacheReqs = make(map[string]*device.TranslationReq)
 
-	tlb.monitorStats = &MonitorStats{
-		name:     tlb.Name(),
-		Hits:     0,
-		MSHRHits: 0,
-		Misses:   0,
-	}
-
 	return tlb
 }

@@ -14,6 +14,7 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/device"
+	"gitlab.com/akita/mem/monitor"
 	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/mem/vm/tlb/internal"
 	"gitlab.com/akita/util"
@@ -69,13 +70,30 @@ type LastLevelTLB struct {
 
 	gpcID int
 
-	monitorStats *MonitorStats
+	monitorStats *monitor.MonitorStats
 
 	inflightPageWalkCacheReqs map[string]*device.TranslationReq
 
 	MMUs []mmu.MMU
 
 	rrPtr int
+}
+
+func (tlb *LastLevelTLB) InitMonitorStats() {
+	tlb.monitorStats = &monitor.MonitorStats{
+		Name:     tlb.Name(),
+		Hits:     0,
+		MSHRHits: 0,
+		Misses:   0,
+	}
+}
+
+func (tlb *LastLevelTLB) ClearMonitorStats() {
+	tlb.monitorStats.Clear()
+}
+
+func (tlb *LastLevelTLB) GetMonitorStats() *monitor.MonitorStats {
+	return tlb.monitorStats
 }
 
 func (tlb *LastLevelTLB) SetMaxExtensionMisses(num int) {
