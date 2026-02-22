@@ -143,52 +143,6 @@ func (wb *writeBufferStage) fetchFromBottom(
 
 	if trans.mshrEntry != nil {
 		trans.mshrEntry.ReadReq = read
-
-		if trans.read != nil {
-			if trans.read.PSV != nil {
-				read.PSV = trans.read.PSV
-				read.PSV.AddItem(
-					&trans.read.PSV.L2Cache,
-					read,
-					trans.read,
-					nil,
-				)
-			}
-		} else {
-			if trans.write.PSV != nil {
-				read.PSV = trans.write.PSV
-				read.PSV.AddItem(
-					&trans.write.PSV.L2Cache,
-					read,
-					trans.write,
-					nil,
-				)
-			}
-		}
-
-		for _, req := range trans.mshrEntry.Requests[1:] {
-			entry := req.(*transaction)
-
-			if entry.read != nil {
-				if entry.read.PSV != nil {
-					entry.read.PSV.AddItem(
-						&entry.read.PSV.L2Cache,
-						read,
-						entry.read,
-						read.PSV,
-					)
-				}
-			} else {
-				if entry.write.PSV != nil {
-					entry.write.PSV.AddItem(
-						&entry.write.PSV.L2Cache,
-						read,
-						entry.write,
-						read.PSV,
-					)
-				}
-			}
-		}
 	}
 
 	return true

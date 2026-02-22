@@ -8,7 +8,6 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mgpusim/insts"
 	"gitlab.com/akita/mgpusim/timing/wavefront"
-	"gitlab.com/akita/util/psv"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -152,16 +151,6 @@ func (s *SchedulerImpl) DoFetch(now akita.VTimeInSec) bool {
 			s.cu.InFlightInstFetch = append(s.cu.InFlightInstFetch, info)
 			wf.IsFetching = true
 
-			if wf.PSV != nil {
-				req.PSV = wf.PSV
-				req.PSV.AddItem(
-					&req.PSV.IFU,
-					req,
-					nil,
-					nil,
-				)
-			}
-
 			madeProgress = true
 
 			tracing.StartTask(req.ID+"_fetch", wf.UID,
@@ -207,13 +196,6 @@ func (s *SchedulerImpl) DoIssue(now akita.VTimeInSec) bool {
 
 func (s *SchedulerImpl) issueToInternal(wf *wavefront.Wavefront, now akita.VTimeInSec) bool {
 	wf.SetDynamicInst(wf.InstToIssue)
-
-	if s.cu.tipEngine != nil {
-		s.cu.tipEngine.GenerateNewPSV(
-			s.cu.Name(),
-			wf,
-		)
-	}
 
 	wf.InstToIssue = nil
 	s.internalExecuting = append(s.internalExecuting, wf)
@@ -414,20 +396,4 @@ func (s *SchedulerImpl) Flush() {
 
 func (s *SchedulerImpl) GetName() string {
 	return s.cu.Name() + ".Scheduler"
-}
-
-func (s *SchedulerImpl) Attribute(
-	unit int,
-) psv.Result {
-	if unit == int(insts.ExeUnitSpecial) {
-		return psv.SUCCESS
-	}
-
-	issueToUnit := s.getUnitToIssueTo(insts.ExeUnit(unit))
-
-	if issueToUnit.CanAcceptWave() {
-		return psv.SUCCESS
-	}
-
-	return psv.FAIL
 }

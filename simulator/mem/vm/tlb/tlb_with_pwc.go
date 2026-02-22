@@ -18,7 +18,6 @@ import (
 	"gitlab.com/akita/mem/vm/tlb/internal"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/pipelining"
-	"gitlab.com/akita/util/psv"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -81,10 +80,6 @@ type LastLevelTLB struct {
 
 func (tlb *LastLevelTLB) SetMaxExtensionMisses(num int) {
 	tlb.extensionmshr = newMSHR(num)
-}
-
-func (tlb *LastLevelTLB) GetStalledPSV() *psv.PerfSignatureVec {
-	panic("Does not support PSV yet")
 }
 
 // GetPipeline gets the pipeline in the LastLevelTLB
@@ -912,10 +907,4 @@ func (tlb *LastLevelTLB) CheckTopPort(port akita.Port) bool {
 
 func (tlb *LastLevelTLB) CheckBottomPort(port akita.Port) bool {
 	return port == tlb.BottomPort
-}
-
-func (tlb *LastLevelTLB) Attribute(
-	msg akita.Msg,
-) (psv.Result, akita.Msg) {
-	panic("not implemented yet")
 }

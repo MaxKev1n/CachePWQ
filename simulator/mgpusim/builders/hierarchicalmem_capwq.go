@@ -15,7 +15,6 @@ import (
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
-	"gitlab.com/akita/mgpusim/tip"
 	"gitlab.com/akita/mgpusim/yamlconfig"
 	noc "gitlab.com/akita/noc/networking/booksim"
 	"gitlab.com/akita/noc/networking/chipnetwork"
@@ -39,14 +38,6 @@ func MakeHierarchicalMemSideCaPWQGPUBuilder() HierarchicalMemSideCaPWQGPUBuilder
 
 func (b HierarchicalMemSideCaPWQGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
 	b.createGPU(name, id)
-
-	if b.useTimeInstProfiling {
-		b.buildTEA()
-	}
-
-	if b.useTimeEventAnalysis {
-		b.TipEngine.UseTimeEventAnalysis()
-	}
 
 	b.buildCP()
 
@@ -118,21 +109,11 @@ func (b *HierarchicalMemSideCaPWQGPUBuilder) BuildSAs(chiplet *Chiplet) {
 		saBuilder.withTLBTracer(b.tlbTracer)
 	}
 
-	if b.useTimeInstProfiling {
-		saBuilder.withTipEngine(b.TipEngine)
-	}
-
 	for i := 0; i < b.numShaderArrayPerChiplet; i++ {
 		saName := fmt.Sprintf("%s.SA_%02d", chiplet.name, i)
 		sa := saBuilder.Build(saName, i)
 		b.collectSAComponents(sa, chiplet)
 	}
-}
-
-func (b *HierarchicalMemSideCaPWQGPUBuilder) buildTEA() {
-	b.TipEngine = tip.NewTimeEventAnalysisEngine(
-		b.engine,
-	)
 }
 
 func (b *HierarchicalMemSideCaPWQGPUBuilder) connectCP() {
@@ -658,10 +639,6 @@ func (b *HierarchicalMemSideCaPWQGPUBuilder) buildMemBanks(chiplet *Chiplet) {
 		})
 		if b.enableVisTracing {
 			tracing.CollectTrace(l2, b.visTracer)
-		}
-
-		if b.useTimeEventAnalysis {
-			b.TipEngine.L2Caches = append(b.TipEngine.L2Caches, l2)
 		}
 	}
 }

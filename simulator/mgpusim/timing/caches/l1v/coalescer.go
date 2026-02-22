@@ -186,27 +186,6 @@ func (c *coalescer) coalesceRead() *transaction {
 		WithPID(c.toCoalesce[0].PID()).
 		Build()
 
-	if c.toCoalesce[0].read.PSV != nil {
-		coalescedRead.PSV = c.toCoalesce[0].read.PSV
-		coalescedRead.PSV.AddItem(
-			&coalescedRead.PSV.L1Coalescer,
-			coalescedRead,
-			c.toCoalesce[0].read,
-			nil,
-		)
-	}
-
-	for i, t := range c.toCoalesce[1:] {
-		if t.read.PSV != nil {
-			t.read.PSV.AddItem(
-				&t.read.PSV.L1Coalescer,
-				coalescedRead,
-				c.toCoalesce[i].read,
-				coalescedRead.PSV,
-			)
-		}
-	}
-
 	return &transaction{
 		id:                      akita.GetIDGenerator().Generate(),
 		read:                    coalescedRead,

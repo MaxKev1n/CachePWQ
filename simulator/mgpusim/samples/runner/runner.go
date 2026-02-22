@@ -139,12 +139,6 @@ var TLBConfigFile = flag.String("tlb-noc-config-file", "",
 	"Specify the path to a booksim config file to configure the TLB NoC.")
 var booksimDir = flag.String("booksim-dir", "",
 	"Specify the path to the booksim directory.")
-var nocFileName = flag.String("noc-file-name", "",
-	"Specify the name of the output noc trace file.")
-var tipFlag = flag.Bool("tip", false,
-	"Enable Time-Proportional Instruction Profiling (TIP).")
-var teaFlag = flag.Bool("tea", false,
-	"Enable Time-Proportional Event Analysis (TEA).")
 var monitorTLBFlag = flag.Bool("tlb-monitor", false,
 	"Enable the TLB monitor that tracks the number of the TLB queues.")
 
@@ -1065,18 +1059,6 @@ func (r *Runner) buildTimingPlatform() {
 			b.WithoutProgressBar()
 		}
 
-		if *tipFlag {
-			b.UseTimeInstProfiling()
-		}
-
-		if *teaFlag {
-			if !*tipFlag {
-				log.Panic("TEA requires TIP to be enabled.")
-			}
-
-			b.UseTimeEventAnalysis()
-		}
-
 		b.WithAlg(*schedulingAlg)
 		b.WithSchedulingPartition(*schedulingPartition)
 		b.WithMemAllocatorType(*memAllocatorType)
@@ -1109,18 +1091,6 @@ func (r *Runner) buildTimingPlatform() {
 
 		if *disableProgressBar {
 			b.WithoutProgressBar()
-		}
-
-		if *tipFlag {
-			b.UseTimeInstProfiling()
-		}
-
-		if *teaFlag {
-			if !*tipFlag {
-				log.Panic("TEA requires TIP to be enabled.")
-			}
-
-			b.UseTimeEventAnalysis()
 		}
 
 		if *monitorTLBFlag {
@@ -1162,18 +1132,6 @@ func (r *Runner) buildTimingPlatform() {
 			b.WithoutProgressBar()
 		}
 
-		if *tipFlag {
-			b.UseTimeInstProfiling()
-		}
-
-		if *teaFlag {
-			if !*tipFlag {
-				log.Panic("TEA requires TIP to be enabled.")
-			}
-
-			b.UseTimeEventAnalysis()
-		}
-
 		if *monitorTLBFlag {
 			b.WithTLBMonitor()
 
@@ -1213,18 +1171,6 @@ func (r *Runner) buildTimingPlatform() {
 			b.WithoutProgressBar()
 		}
 
-		if *tipFlag {
-			b.UseTimeInstProfiling()
-		}
-
-		if *teaFlag {
-			if !*tipFlag {
-				log.Panic("TEA requires TIP to be enabled.")
-			}
-
-			b.UseTimeEventAnalysis()
-		}
-
 		b.WithAlg(*schedulingAlg)
 		b.WithSchedulingPartition(*schedulingPartition)
 		b.WithMemAllocatorType(*memAllocatorType)
@@ -1256,18 +1202,6 @@ func (r *Runner) buildTimingPlatform() {
 
 		if *disableProgressBar {
 			b.WithoutProgressBar()
-		}
-
-		if *tipFlag {
-			b.UseTimeInstProfiling()
-		}
-
-		if *teaFlag {
-			if !*tipFlag {
-				log.Panic("TEA requires TIP to be enabled.")
-			}
-
-			b.UseTimeEventAnalysis()
 		}
 
 		b.WithAlg(*schedulingAlg)
@@ -1303,18 +1237,6 @@ func (r *Runner) buildTimingPlatform() {
 			b.WithoutProgressBar()
 		}
 
-		if *tipFlag {
-			b.UseTimeInstProfiling()
-		}
-
-		if *teaFlag {
-			if !*tipFlag {
-				log.Panic("TEA requires TIP to be enabled.")
-			}
-
-			b.UseTimeEventAnalysis()
-		}
-
 		b.WithAlg(*schedulingAlg)
 		b.WithSchedulingPartition(*schedulingPartition)
 		b.WithMemAllocatorType(*memAllocatorType)
@@ -1346,18 +1268,6 @@ func (r *Runner) buildTimingPlatform() {
 
 		if *disableProgressBar {
 			b.WithoutProgressBar()
-		}
-
-		if *tipFlag {
-			b.UseTimeInstProfiling()
-		}
-
-		if *teaFlag {
-			if !*tipFlag {
-				log.Panic("TEA requires TIP to be enabled.")
-			}
-
-			b.UseTimeEventAnalysis()
 		}
 
 		b.WithAlg(*schedulingAlg)

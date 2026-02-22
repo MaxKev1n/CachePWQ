@@ -6,7 +6,6 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mgpusim/emu"
 	"gitlab.com/akita/mgpusim/insts"
-	"gitlab.com/akita/mgpusim/tip"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/pipelining"
 	"gitlab.com/akita/util/tracing"
@@ -28,8 +27,6 @@ type Builder struct {
 
 	visTracer        tracing.Tracer
 	enableVisTracing bool
-
-	tipEngine *tip.TimeEventAnalysisEngine
 }
 
 // MakeBuilder returns a default builder object
@@ -91,14 +88,6 @@ func (b Builder) WithVisTracer(t tracing.Tracer) Builder {
 	return b
 }
 
-// WithTipEngine enables the time-event analysis feature in the CU.
-func (b Builder) WithTipEngine(
-	tipEngine *tip.TimeEventAnalysisEngine,
-) Builder {
-	b.tipEngine = tipEngine
-	return b
-}
-
 // Build returns a newly constructed compute unit according to the
 // configuration.
 func (b *Builder) Build(name string) *ComputeUnit {
@@ -111,13 +100,6 @@ func (b *Builder) Build(name string) *ComputeUnit {
 
 	b.alu = emu.NewALU(nil)
 	b.scratchpadPreparer = NewScratchpadPreparerImpl(cu)
-
-	if b.tipEngine != nil {
-		b.scratchpadPreparer.(*ScratchpadPreparerImpl).
-			EquipTipEngine(b.tipEngine)
-
-		cu.tipEngine = b.tipEngine
-	}
 
 	for i := 0; i < 4; i++ {
 		cu.WfPools = append(cu.WfPools, NewWavefrontPool(10))

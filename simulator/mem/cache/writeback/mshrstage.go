@@ -47,40 +47,8 @@ func (s *mshrStage) processOneReq(now akita.VTimeInSec) bool {
 
 		if trans.read != nil {
 			s.respondRead(now, trans.read, mshrEntry.Data)
-
-			if trans.read.PSV != nil {
-				if mshrEntry.ReadReq.PSV == trans.read.PSV {
-					trans.read.PSV.RemoveItem(
-						&trans.read.PSV.L2Cache,
-						mshrEntry.ReadReq,
-						nil,
-					)
-				} else {
-					trans.read.PSV.RemoveItem(
-						&trans.read.PSV.L2Cache,
-						mshrEntry.ReadReq,
-						mshrEntry.ReadReq.PSV,
-					)
-				}
-			}
 		} else {
 			s.respondWrite(now, trans.write)
-
-			if trans.write.PSV != nil {
-				if mshrEntry.ReadReq.PSV == trans.write.PSV {
-					trans.write.PSV.RemoveItem(
-						&trans.write.PSV.L2Cache,
-						mshrEntry.ReadReq,
-						nil,
-					)
-				} else {
-					trans.write.PSV.RemoveItem(
-						&trans.write.PSV.L2Cache,
-						mshrEntry.ReadReq,
-						mshrEntry.ReadReq.PSV,
-					)
-				}
-			}
 		}
 
 		mshrEntry.Requests = mshrEntry.Requests[1:]

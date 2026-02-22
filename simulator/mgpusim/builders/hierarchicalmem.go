@@ -12,7 +12,6 @@ import (
 	"gitlab.com/akita/mem/idealmemcontroller"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
-	"gitlab.com/akita/mgpusim/tip"
 	noc "gitlab.com/akita/noc/networking/booksim"
 	"gitlab.com/akita/noc/networking/chipnetwork"
 	"gitlab.com/akita/noc/networking/multiplexer"
@@ -40,14 +39,6 @@ func MakeHierarchicalMemSideGPUBuilder() HierarchicalMemSideGPUBuilder {
 
 func (b HierarchicalMemSideGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
 	b.createGPU(name, id)
-
-	if b.useTimeInstProfiling {
-		b.buildTEA()
-	}
-
-	if b.useTimeEventAnalysis {
-		b.TipEngine.UseTimeEventAnalysis()
-	}
 
 	b.buildCP()
 
@@ -95,12 +86,6 @@ func (b HierarchicalMemSideGPUBuilder) Build(name string, id uint64) *mgpusim.GP
 	b.establishTLBMonitor(chiplet)
 
 	return b.gpu
-}
-
-func (b *HierarchicalMemSideGPUBuilder) buildTEA() {
-	b.TipEngine = tip.NewTimeEventAnalysisEngine(
-		b.engine,
-	)
 }
 
 func (b *HierarchicalMemSideGPUBuilder) connectCP() {
@@ -510,10 +495,6 @@ func (b *HierarchicalMemSideGPUBuilder) buildMemBanks(chiplet *Chiplet) {
 		})
 		if b.enableVisTracing {
 			tracing.CollectTrace(l2, b.visTracer)
-		}
-
-		if b.useTimeEventAnalysis {
-			b.TipEngine.L2Caches = append(b.TipEngine.L2Caches, l2)
 		}
 	}
 }

@@ -20,11 +20,9 @@ import (
 	"gitlab.com/akita/mgpusim/rdma"
 	"gitlab.com/akita/mgpusim/remotetranslation"
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
-	"gitlab.com/akita/mgpusim/timing/caches/l1v"
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
 	"gitlab.com/akita/mgpusim/timing/cp"
 	"gitlab.com/akita/mgpusim/timing/cu"
-	"gitlab.com/akita/mgpusim/tip"
 	"gitlab.com/akita/mgpusim/yamlconfig"
 	"gitlab.com/akita/noc/networking/chipnetwork"
 	"gitlab.com/akita/util/tracing"
@@ -122,11 +120,6 @@ type CommonBuilder struct {
 	booksimMemory string
 	booksimTLB    string
 	booksimDir    string
-
-	useTimeInstProfiling bool
-	useTimeEventAnalysis bool
-
-	TipEngine *tip.TimeEventAnalysisEngine
 }
 
 // MakeCommonBuilder provides a GPU builder that can builds the MCM GPU.
@@ -288,14 +281,6 @@ func (b *CommonBuilder) WithBookSimDir(dir string) {
 	b.booksimDir = dir
 }
 
-func (b *CommonBuilder) UseTimeInstProfiling() {
-	b.useTimeInstProfiling = true
-}
-
-func (b *CommonBuilder) UseTimeEventAnalysis() {
-	b.useTimeEventAnalysis = true
-}
-
 // CalculateMemoryParameters calculates
 // -> memoryPerChiplet
 // -> memoryPerBank
@@ -327,10 +312,6 @@ func (b *CommonBuilder) buildCP() {
 
 	if b.enableVisTracing {
 		builder = builder.WithVisTracer(b.visTracer)
-	}
-
-	if b.TipEngine != nil {
-		builder = builder.WithTipEngine(b.TipEngine)
 	}
 
 	b.cp = builder.Build(b.gpuName + ".CommandProcessor")
@@ -372,10 +353,6 @@ func (b *CommonBuilder) BuildSAs(chiplet *Chiplet) {
 		saBuilder.withTLBTracer(b.tlbTracer)
 	}
 
-	if b.useTimeInstProfiling {
-		saBuilder.withTipEngine(b.TipEngine)
-	}
-
 	for i := 0; i < b.numShaderArrayPerChiplet; i++ {
 		saName := fmt.Sprintf("%s.SA_%02d", chiplet.name, i)
 		sa := saBuilder.Build(saName, i)
@@ -391,20 +368,6 @@ func (b *CommonBuilder) collectSAComponents(
 		b.gpu.CUs = append(b.gpu.CUs, cu)
 		b.cus = append(b.cus, cu)
 		chiplet.CUs = append(chiplet.CUs, cu)
-	}
-
-	if b.TipEngine != nil {
-		for index, core := range sa.cus {
-			b.TipEngine.RegisterCU(
-				core.Name(),
-				core.VectorMemUnit.(*cu.VectorMemoryUnit),
-				sa.l1vROBs[index],
-				sa.l1vATs[index].(*addresstranslator.DefaultAddressTranslator),
-				sa.l1vTLBs[index].(*tlb.TLBImpl),
-				sa.l1vCaches[index].(*l1v.Cache),
-				core.Scheduler.(*cu.SchedulerImpl),
-			)
-		}
 	}
 
 	for _, rob := range sa.l1vROBs {
@@ -504,10 +467,6 @@ func (b *CommonBuilder) buildMemBanks(chiplet *Chiplet) {
 		})
 		if b.enableVisTracing {
 			tracing.CollectTrace(l2, b.visTracer)
-		}
-
-		if b.useTimeEventAnalysis {
-			b.TipEngine.L2Caches = append(b.TipEngine.L2Caches, l2)
 		}
 	}
 }
@@ -612,10 +571,6 @@ func (b *CommonBuilder) buildL2TLB(chiplet *Chiplet) {
 
 	if b.enableVisTracing {
 		tracing.CollectTrace(l2TLB, b.visTracer)
-	}
-
-	if b.useTimeEventAnalysis {
-		b.TipEngine.L2TLB = l2TLB.(*tlb.LatTLB)
 	}
 }
 

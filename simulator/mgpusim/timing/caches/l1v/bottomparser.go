@@ -124,59 +124,10 @@ func (p *bottomParser) finalizeMSHRTrans(
 				offset := read.Address - mshrEntry.Block.Tag
 				preCTrans.data = data[offset : offset+read.AccessByteSize]
 				preCTrans.done = true
-
-				if read.PSV != nil {
-					if trans.read.PSV == read.PSV {
-						read.PSV.RemoveItem(
-							&read.PSV.L1Coalescer,
-							trans.read,
-							nil,
-						)
-					} else {
-						read.PSV.RemoveItem(
-							&read.PSV.L1Coalescer,
-							trans.read,
-							trans.read.PSV,
-						)
-					}
-				}
 			}
-
-			if trans.read.PSV != nil {
-				if mshrEntry.ReadReq.PSV == trans.read.PSV {
-					trans.read.PSV.RemoveItem(
-						&trans.read.PSV.L1Cache,
-						mshrEntry.ReadReq,
-						nil,
-					)
-				} else {
-					trans.read.PSV.RemoveItem(
-						&trans.read.PSV.L1Cache,
-						mshrEntry.ReadReq,
-						mshrEntry.ReadReq.PSV,
-					)
-				}
-			}
-
 		} else {
 			for _, preCTrans := range trans.preCoalesceTransactions {
 				preCTrans.done = true
-			}
-
-			if trans.write.PSV != nil {
-				if mshrEntry.ReadReq.PSV == trans.write.PSV {
-					trans.write.PSV.RemoveItem(
-						&trans.write.PSV.L1Cache,
-						mshrEntry.ReadReq,
-						nil,
-					)
-				} else {
-					trans.write.PSV.RemoveItem(
-						&trans.write.PSV.L1Cache,
-						mshrEntry.ReadReq,
-						mshrEntry.ReadReq.PSV,
-					)
-				}
 			}
 		}
 		p.removeTransaction(trans)

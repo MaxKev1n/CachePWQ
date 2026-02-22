@@ -12,7 +12,6 @@ import (
 	"gitlab.com/akita/mem/vm/tlb/internal"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/pipelining"
-	"gitlab.com/akita/util/psv"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -63,10 +62,6 @@ type TLBImpl struct {
 	GlobalIndex int
 
 	gpcID int
-}
-
-func (tlb *TLBImpl) GetStalledPSV() *psv.PerfSignatureVec {
-	panic("Does not support PSV yet")
 }
 
 // GetNumSets gets the number of sets in the TLB
@@ -167,22 +162,6 @@ func (tlb *TLBImpl) respondMSHREntry(now akita.VTimeInSec) bool {
 	mshrEntry := tlb.respondingMSHREntry
 	page := mshrEntry.page
 	req := mshrEntry.Requests[0]
-
-	if req.PSV != nil {
-		if req.PSV == mshrEntry.reqToBottom.PSV {
-			req.PSV.RemoveItem(
-				&req.PSV.L1TLB,
-				mshrEntry.reqToBottom,
-				nil,
-			)
-		} else {
-			req.PSV.RemoveItem(
-				&req.PSV.L1TLB,
-				mshrEntry.reqToBottom,
-				mshrEntry.reqToBottom.PSV,
-			)
-		}
-	}
 
 	var accessResult device.AccessResult
 	if mshrEntry.NumResponded() == 0 {
@@ -340,15 +319,6 @@ func (tlb *TLBImpl) processTLBMSHRHit(
 	// return false
 	mshrEntry.Requests = append(mshrEntry.Requests, req)
 
-	if req.PSV != nil {
-		req.PSV.AddItem(
-			&req.PSV.L1TLB,
-			mshrEntry.reqToBottom,
-			req,
-			mshrEntry.reqToBottom.PSV,
-		)
-	}
-
 	return true
 	/*	tracing.AddTaskStep(
 		tracing.MsgIDAtReceiver(req /*mshrEntry.Requests[0], tlb),
@@ -374,16 +344,6 @@ func (tlb *TLBImpl) fetchBottom(now akita.VTimeInSec, req *device.TranslationReq
 	err := tlb.BottomPort.Send(fetchBottom)
 	if err != nil {
 		return false
-	}
-
-	if req.PSV != nil {
-		fetchBottom.PSV = req.PSV
-		fetchBottom.PSV.AddItem(
-			&fetchBottom.PSV.L1TLB,
-			fetchBottom,
-			req,
-			nil,
-		)
 	}
 
 	mshrEntry := tlb.mshr.Add(req.PID, req.VAddr)
@@ -616,30 +576,4 @@ func (tlb *TLBImpl) CheckTopPort(port akita.Port) bool {
 
 func (tlb *TLBImpl) CheckBottomPort(port akita.Port) bool {
 	return port == tlb.BottomPort
-}
-
-func (tlb *TLBImpl) Attribute(
-	msg akita.Msg,
-) (psv.Result, akita.Msg) {
-	// Search whether it need to attribute to L1 TLB
-	if msg != nil {
-		perfVec := msg.(*device.TranslationReq).PSV
-		for _, item := range perfVec.L1TLB {
-			if item.SrcMsg == msg {
-				return psv.FAIL, item.Msg
-			}
-		}
-	}
-
-	if tlb.pipeline.CanAccept() {
-		return psv.SUCCESS, nil
-	}
-
-	if tlb.mshr.IsFull() {
-		oldestEntry := tlb.mshr.AllEntries()[0]
-
-		return psv.FAIL, oldestEntry.reqToBottom
-	}
-
-	return psv.SUCCESS, nil
 }

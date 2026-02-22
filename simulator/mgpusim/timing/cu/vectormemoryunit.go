@@ -4,12 +4,10 @@ import (
 	"log"
 
 	"gitlab.com/akita/akita"
-	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mgpusim/insts"
 	"gitlab.com/akita/mgpusim/timing/wavefront"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/pipelining"
-	"gitlab.com/akita/util/psv"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -42,20 +40,6 @@ type VectorMemoryUnit struct {
 	isIdle bool
 
 	reachLimitation bool
-}
-
-func (u *VectorMemoryUnit) GetStalledPSV() *psv.PerfSignatureVec {
-	item := u.postTransactionPipelineBuffer.Peek()
-	if item == nil {
-		return nil
-	}
-
-	info := item.(VectorMemAccessInfo)
-	if info.Read != nil {
-		return info.Read.PSV
-	}
-
-	return info.Write.PSV
 }
 
 // NewVectorMemoryUnit creates a new Vector Memory Unit.
@@ -197,12 +181,7 @@ func (u *VectorMemoryUnit) executeFlatLoad(
 	}
 
 	wave.OutstandingVectorMemAccess++
-	wave.OutstandingVectorInst[wave.PC]++
 	wave.OutstandingScalarMemAccess++
-	wave.OutstandingScalarInst[wave.PC]++
-
-	wave.OutstandingVectorPSV[wave.PSV] = struct{}{}
-	wave.OutstandingScalarPSV[wave.PSV] = struct{}{}
 
 	for i, t := range transactions {
 		u.cu.InFlightVectorMemAccess = append(u.cu.InFlightVectorMemAccess, t)
@@ -214,11 +193,6 @@ func (u *VectorMemoryUnit) executeFlatLoad(
 		t.Read.Src = u.cu.ToVectorMem
 		t.Read.PID = wave.PID()
 		u.transactionsWaiting = append(u.transactionsWaiting, t)
-
-		if wave.PSV != nil {
-			t.Read.PSV = wave.PSV
-			wave.PSV.AddItem(&wave.PSV.VMEM, t.Read, nil, nil)
-		}
 	}
 
 	u.reachLimitation = false
@@ -255,12 +229,7 @@ func (u *VectorMemoryUnit) executeFlatStore(
 	}
 
 	wave.OutstandingVectorMemAccess++
-	wave.OutstandingVectorInst[wave.PC]++
 	wave.OutstandingScalarMemAccess++
-	wave.OutstandingScalarInst[wave.PC]++
-
-	wave.OutstandingVectorPSV[wave.PSV] = struct{}{}
-	wave.OutstandingScalarPSV[wave.PSV] = struct{}{}
 
 	for i, t := range transactions {
 		u.cu.InFlightVectorMemAccess = append(u.cu.InFlightVectorMemAccess, t)
@@ -272,11 +241,6 @@ func (u *VectorMemoryUnit) executeFlatStore(
 		t.Write.Src = u.cu.ToVectorMem
 		t.Write.PID = wave.PID()
 		u.transactionsWaiting = append(u.transactionsWaiting, t)
-
-		if wave.PSV != nil {
-			t.Write.PSV = wave.PSV
-			wave.PSV.AddItem(&wave.PSV.VMEM, t.Write, nil, nil)
-		}
 	}
 
 	u.reachLimitation = false
@@ -355,25 +319,4 @@ func (u *VectorMemoryUnit) CheckTopPort(port akita.Port) bool {
 
 func (u *VectorMemoryUnit) CheckBottomPort(port akita.Port) bool {
 	return port == u.cu.ToVectorMem
-}
-
-func (u *VectorMemoryUnit) Attribute(
-	msg akita.Msg,
-) (psv.Result, akita.Msg) {
-	// Search whether it need to attribute to VMem
-	if msg != nil {
-		perfVec := msg.(mem.AccessReq).GetPSV()
-		for _, item := range perfVec.VMEM {
-			if item.SrcMsg == msg {
-				log.Printf("find in VMem, attribute to AddressTranslator")
-				return psv.FAIL, item.Msg
-			}
-		}
-	}
-
-	if !u.transactionPipeline.CanAccept() || u.reachLimitation {
-		return psv.FAIL, nil
-	}
-
-	return psv.SUCCESS, nil
 }

@@ -7,7 +7,6 @@ import (
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/akitaext"
 	"gitlab.com/akita/util/pipelining"
-	"gitlab.com/akita/util/psv"
 )
 
 type cacheState int
@@ -69,10 +68,6 @@ type Cache struct {
 
 	state                cacheState
 	inFlightTransactions []*transaction
-}
-
-func (c *Cache) GetStalledPSV() *psv.PerfSignatureVec {
-	panic("Does not support PSV yet")
 }
 
 func (c *Cache) GetPipeline() pipelining.Pipeline {
@@ -159,33 +154,4 @@ func (c *Cache) CheckTopPort(port akita.Port) bool {
 
 func (c *Cache) CheckBottomPort(port akita.Port) bool {
 	return port == c.BottomPort
-}
-
-func (c *Cache) Attribute(
-	msg akita.Msg,
-) (psv.Result, akita.Msg) {
-	// Search whether it need to attribute to L2 Cache
-	if msg != nil {
-		perfVec := msg.(mem.AccessReq).GetPSV()
-		for _, item := range perfVec.L2Cache {
-			if item.SrcMsg == msg {
-				return psv.FAIL, item.Msg
-			}
-		}
-	}
-
-	if c.pipeline.CanAccept() {
-		return psv.SUCCESS, nil
-	}
-
-	if c.mshr.IsFull() {
-		return psv.FAIL, nil
-	}
-
-	if c.writeBuffer.tooManyInflightFetches() ||
-		c.writeBuffer.tooManyInflightEvictions() {
-		return psv.FAIL, nil
-	}
-
-	return psv.SUCCESS, nil
 }

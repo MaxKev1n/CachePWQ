@@ -68,14 +68,6 @@ func (b *HierarchicalMemSidePlatformBuilder) createGPUBuilder(
 	gpuBuilder.WithBooksimGlobal(b.booksimGlobal)
 	gpuBuilder.WithBookSimDir(b.booksimDir)
 
-	if b.useTimeInstProfiling {
-		gpuBuilder.UseTimeInstProfiling()
-	}
-
-	if b.useTimeEventAnalysis {
-		gpuBuilder.UseTimeEventAnalysis()
-	}
-
 	if b.useTLBMonitor {
 		gpuBuilder.WithTLBMonitor()
 	}

@@ -3,7 +3,6 @@ package mem
 import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/util/ca"
-	"gitlab.com/akita/util/psv"
 )
 
 var accessReqByteOverhead = 12
@@ -25,8 +24,6 @@ type AccessReq interface {
 	GetAddress() uint64
 	GetByteSize() uint64
 	GetPID() ca.PID
-	GetPSV() *psv.PerfSignatureVec
-	SetPSV(*psv.PerfSignatureVec)
 	// GetAccessInfo() interface{}
 }
 
@@ -45,7 +42,6 @@ type ReadReq struct {
 	PID                ca.PID
 	CanWaitForCoalesce bool
 	Info               interface{}
-	PSV                *psv.PerfSignatureVec
 }
 
 // Meta returns the message meta.
@@ -71,16 +67,6 @@ func (r *ReadReq) GetPID() ca.PID {
 // TaskID returns the ID of the request.
 func (r *ReadReq) TaskID() string {
 	return r.ID
-}
-
-// GetPSV returns the performance signature vector associated with the request.
-func (r *ReadReq) GetPSV() *psv.PerfSignatureVec {
-	return r.PSV
-}
-
-// SetPSV sets the performance signature vector associated with the request.
-func (r *ReadReq) SetPSV(p *psv.PerfSignatureVec) {
-	r.PSV = p
 }
 
 // GetAccessInfo returns the process ID that the request is working on.
@@ -178,7 +164,6 @@ type WriteReq struct {
 	PID                ca.PID
 	CanWaitForCoalesce bool
 	Info               interface{}
-	PSV                *psv.PerfSignatureVec
 }
 
 // Meta returns the meta data attached to a request.
@@ -204,16 +189,6 @@ func (r *WriteReq) GetPID() ca.PID {
 // TaskID returns the ID of the request.
 func (r *WriteReq) TaskID() string {
 	return r.ID
-}
-
-// GetPSV returns the performance signature vector associated with the request.
-func (r *WriteReq) GetPSV() *psv.PerfSignatureVec {
-	return r.PSV
-}
-
-// SetPSV sets the performance signature vector associated with the request.
-func (r *WriteReq) SetPSV(p *psv.PerfSignatureVec) {
-	r.PSV = p
 }
 
 // GetAccessInfo returns the process ID that the request is working on.

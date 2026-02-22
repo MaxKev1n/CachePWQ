@@ -4,7 +4,6 @@ package device
 import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/util/ca"
-	"gitlab.com/akita/util/psv"
 )
 
 var accessReqByteOverhead = 12
@@ -29,7 +28,6 @@ type TranslationReq struct {
 	Data        []byte
 	TLBID       int
 	PartitionID int
-	PSV         *psv.PerfSignatureVec
 	GPCID       int
 }
 

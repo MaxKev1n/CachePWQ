@@ -14,7 +14,6 @@ import (
 	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
-	"gitlab.com/akita/mgpusim/tip"
 	"gitlab.com/akita/mgpusim/yamlconfig"
 	noc "gitlab.com/akita/noc/networking/booksim"
 	"gitlab.com/akita/noc/networking/chipnetwork"
@@ -38,14 +37,6 @@ func MakeHierarchicalSMSidePrivateTLBGPUBuilder() HierarchicalSMSidePrivateTLBGP
 
 func (b HierarchicalSMSidePrivateTLBGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
 	b.createGPU(name, id)
-
-	if b.useTimeInstProfiling {
-		b.buildTEA()
-	}
-
-	if b.useTimeEventAnalysis {
-		b.TipEngine.UseTimeEventAnalysis()
-	}
 
 	b.buildCP()
 
@@ -92,12 +83,6 @@ func (b HierarchicalSMSidePrivateTLBGPUBuilder) Build(name string, id uint64) *m
 	chiplet.GlobalNoC.Establish()
 
 	return b.gpu
-}
-
-func (b *HierarchicalSMSidePrivateTLBGPUBuilder) buildTEA() {
-	b.TipEngine = tip.NewTimeEventAnalysisEngine(
-		b.engine,
-	)
 }
 
 func (b *HierarchicalSMSidePrivateTLBGPUBuilder) connectCP() {
@@ -497,10 +482,6 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) buildMemBanks(chiplet *Chiplet)
 		})
 		if b.enableVisTracing {
 			tracing.CollectTrace(l2, b.visTracer)
-		}
-
-		if b.useTimeEventAnalysis {
-			b.TipEngine.L2Caches = append(b.TipEngine.L2Caches, l2)
 		}
 	}
 }

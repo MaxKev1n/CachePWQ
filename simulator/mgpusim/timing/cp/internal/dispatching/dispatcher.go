@@ -9,7 +9,6 @@ import (
 	"gitlab.com/akita/mgpusim/kernels"
 	"gitlab.com/akita/mgpusim/protocol"
 	"gitlab.com/akita/mgpusim/timing/cp/internal/resource"
-	"gitlab.com/akita/mgpusim/tip"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -50,8 +49,6 @@ type DispatcherImpl struct {
 
 	showProgressBar bool
 	progressBar     *mpb.Bar
-
-	TipEngine *tip.TimeEventAnalysisEngine
 }
 
 // Name returns the name of the dispatcher
@@ -200,10 +197,6 @@ func (d *DispatcherImpl) completeKernel(now akita.VTimeInSec) (
 
 	if err == nil {
 		d.dispatching = nil
-
-		if d.TipEngine != nil {
-			d.TipEngine.DumpLog()
-		}
 
 		tracing.TraceReqComplete(req, now, d.cp)
 

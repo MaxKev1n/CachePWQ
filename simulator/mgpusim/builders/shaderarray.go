@@ -15,7 +15,6 @@ import (
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
 	"gitlab.com/akita/mgpusim/timing/caches/smside"
 	"gitlab.com/akita/mgpusim/timing/cu"
-	"gitlab.com/akita/mgpusim/tip"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -56,8 +55,6 @@ type shaderArrayBuilder struct {
 	pageTable device.PageTable
 
 	config string
-
-	tipEngine *tip.TimeEventAnalysisEngine
 }
 
 func makeShaderArrayBuilder() shaderArrayBuilder {
@@ -118,12 +115,6 @@ func (b *shaderArrayBuilder) withPageTable(pt device.PageTable) {
 
 func (b *shaderArrayBuilder) withConfig(config string) {
 	b.config = config
-}
-
-func (b *shaderArrayBuilder) withTipEngine(
-	tipEngine *tip.TimeEventAnalysisEngine,
-) {
-	b.tipEngine = tipEngine
 }
 
 func (b *shaderArrayBuilder) Build(name string, i int) shaderArray {
@@ -344,10 +335,6 @@ func (b *shaderArrayBuilder) buildCUs(sa *shaderArray) {
 		WithEngine(b.engine).
 		WithFreq(b.freq).
 		WithLog2CachelineSize(b.log2CacheLineSize)
-
-	if b.tipEngine != nil {
-		cuBuilder = cuBuilder.WithTipEngine(b.tipEngine)
-	}
 
 	for i := 0; i < b.numCU; i++ {
 		cuName := fmt.Sprintf("%s.CU_%02d", b.name, i)

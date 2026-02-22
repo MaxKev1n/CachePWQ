@@ -5,7 +5,6 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/util"
-	"gitlab.com/akita/util/psv"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -53,26 +52,6 @@ func (d *directory) processMSHRHit(
 	mshrEntry *cache.MSHREntry,
 ) bool {
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
-
-	if trans.read != nil {
-		if trans.read.PSV != nil {
-			trans.read.PSV.AddItem(
-				&trans.read.PSV.L1Cache,
-				mshrEntry.ReadReq,
-				trans.read,
-				mshrEntry.ReadReq.PSV,
-			)
-		}
-	} else {
-		if trans.write.PSV != nil {
-			trans.write.PSV.AddItem(
-				&trans.write.PSV.L1Cache,
-				mshrEntry.ReadReq,
-				trans.write,
-				mshrEntry.ReadReq.PSV,
-			)
-		}
-	}
 
 	d.cache.dirBuf.Pop()
 
@@ -339,28 +318,6 @@ func (d *directory) fetchFromBottom(
 		return false
 	}
 
-	if trans.read != nil {
-		if trans.read.PSV != nil {
-			readToBottom.PSV = trans.read.PSV
-			readToBottom.PSV.AddItem(
-				&trans.read.PSV.L1Cache,
-				readToBottom,
-				trans.read,
-				nil,
-			)
-		}
-	} else {
-		if trans.write.PSV != nil {
-			readToBottom.PSV = trans.write.PSV
-			readToBottom.PSV.AddItem(
-				&trans.write.PSV.L1Cache,
-				readToBottom,
-				trans.write,
-				nil,
-			)
-		}
-	}
-
 	tracing.TraceReqInitiate(readToBottom, now, d.cache, trans.id)
 	trans.readToBottom = readToBottom
 	trans.block = victim
@@ -384,25 +341,4 @@ func (d *directory) getBankBuf(block *cache.Block) util.Buffer {
 	blockID := block.SetID*numWaysPerSet + block.WayID
 	bankID := blockID % len(d.cache.bankBufs)
 	return d.cache.bankBufs[bankID]
-}
-
-func (d *directory) tryToAttribute(
-	msg akita.Msg,
-) (psv.Result, akita.Msg) {
-	if msg != nil {
-		perfVec := msg.(mem.AccessReq).GetPSV()
-		for _, item := range perfVec.L1Cache {
-			if item.SrcMsg == msg {
-				return psv.FAIL, item.Msg
-			}
-		}
-	}
-
-	if d.cache.mshr.IsFull() {
-		oldestMSHR := d.cache.mshr.AllEntries()[0]
-
-		return psv.FAIL, oldestMSHR.ReadReq
-	}
-
-	return psv.SUCCESS, nil
 }
