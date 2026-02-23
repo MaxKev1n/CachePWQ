@@ -1,8 +1,10 @@
 package gups
 
 import (
+	"encoding/binary"
 	"log"
 	"math/rand"
+	"os"
 
 	"gitlab.com/akita/mgpusim/driver"
 	"gitlab.com/akita/mgpusim/insts"
@@ -46,7 +48,7 @@ func NewBenchmark(driver *driver.Driver) *Benchmark {
 	b.context = driver.Init()
 	b.loadProgram()
 	b.ThreadBlockSize = 32 // take from gups_kernel.cl
-	b.NThreadBlocks = 128  // take from gups_kernel.cl
+	b.NThreadBlocks = 1024 // take from gups_kernel.cl
 	b.TableSize = 1024 * b.ThreadBlockSize * b.NThreadBlocks
 	// b.TableSize = 1024 * b.ThreadBlockSize * b.NThreadBlocks
 	return b
@@ -163,9 +165,9 @@ func (b *Benchmark) initMem() {
 	b.HostStarts = make([]uint64, b.NThreadBlocks*b.ThreadBlockSize)
 	b.NUpdates = 1 * b.NThreadBlocks * b.ThreadBlockSize
 
-	for i := uint64(0); i < b.ThreadBlockSize*b.NThreadBlocks; i++ {
-		b.HostStarts[i] = HPCC_Starts(int64((b.NUpdates/b.NThreadBlocks/b.ThreadBlockSize)*i)) % b.TableSize
-	}
+	b.HostStarts, _ = readUint64SliceFromFile("starts.bin")
+
+	log.Printf("Starts: %v\n", b.HostStarts)
 
 	if b.useUnifiedMemory {
 		panic("hello??")
@@ -213,4 +215,43 @@ func (b *Benchmark) exec() {
 // Verify verifies
 func (b *Benchmark) Verify() {
 	log.Printf("How will it pass if it is not implemented at all?")
+}
+
+func saveUint64SliceToFile(filename string, data []uint64) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// 使用 binary.Write 写入数据
+	for _, v := range data {
+		err := binary.Write(file, binary.LittleEndian, v)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func readUint64SliceFromFile(filename string) ([]uint64, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var data []uint64
+	for {
+		var v uint64
+		err := binary.Read(file, binary.LittleEndian, &v)
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			return nil, err
+		}
+		data = append(data, v)
+	}
+	return data, nil
 }

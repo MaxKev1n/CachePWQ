@@ -28,7 +28,7 @@ func MakeIdealMMUBuilder() IdealMMUBuilder {
 	return IdealMMUBuilder{
 		freq:         1 * akita.GHz,
 		log2PageSize: 12,
-		latency:      28,
+		latency:      200,
 	}
 }
 
@@ -140,6 +140,8 @@ func (b IdealMMUBuilder) Build(name string) MMU {
 	} else {
 		panic("no page table!")
 	}
+
+	mmu.ToPageWalkCache = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToPageWalkCache")
 
 	mmu.sendStateInfo = false
 	return mmu

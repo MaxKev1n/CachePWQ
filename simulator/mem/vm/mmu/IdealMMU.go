@@ -31,9 +31,9 @@ type IdealMMU struct {
 	ControlPort      akita.Port
 	CommandProcessor akita.Port
 
-	pageWalkCachePort akita.Port
-	PageWalkCache     akita.Port
-	topSender         akitaext.BufferedSender
+	ToPageWalkCache akita.Port
+	PageWalkCache   akita.Port
+	topSender       akitaext.BufferedSender
 
 	TranslationPort akita.Port
 	lowModuleFinder cache.LowModuleFinder
@@ -75,7 +75,7 @@ func (mmu *IdealMMU) TranslationPortPort() akita.Port {
 }
 
 func (mmu *IdealMMU) ToPageWalkCachePort() akita.Port {
-	return mmu.pageWalkCachePort
+	return mmu.ToPageWalkCache
 }
 
 func (mmu *IdealMMU) ToCachePort() akita.Port {

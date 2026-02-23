@@ -43,6 +43,8 @@ type Cache struct {
 
 	enableAttribute bool
 	provider        profile.CachePSVComponent
+
+	directoryStatus []profile.CachePSVStatus
 }
 
 // SetLowModuleFinder sets the finder that tells which remote port can serve
@@ -114,6 +116,8 @@ func (c *Cache) tickDirectoryStage(now akita.VTimeInSec) bool {
 	madeProgress := false
 	for i := 0; i < c.numReqPerCycle; i++ {
 		madeProgress = c.directoryStage.Tick(now) || madeProgress
+
+		c.directoryStatus[i] = c.directoryStage.status
 	}
 	return madeProgress
 }
@@ -159,39 +163,44 @@ func (c *Cache) Attribute(now akita.VTimeInSec) {
 			c,
 			"cache_utilization",
 			"base",
-			float64(c.numReqPerCycle),
+			1.0,
 		)
 
 		return
 	}
 
-	status := profile.BASE
-
-	if len(c.coalesceStage.toCoalesce) == 0 {
-		item := c.TopPort.Peek()
-		if item == nil {
-			status = c.provider.Attribute()
-		}
-	} else {
-		if c.dirBuf.CanPush() {
-			status = profile.BASE
-		} else {
-			status = c.directoryStage.status
-		}
+	if c.directoryStage.numExecutedReqs > 0 {
+		tracing.StartTask(
+			"",
+			"",
+			now,
+			c,
+			"cache_utilization",
+			"base",
+			float64(c.directoryStage.numExecutedReqs)/float64(c.numReqPerCycle),
+		)
 	}
 
-	cycle := float64(uint64(c.numReqPerCycle)-c.directoryStage.numExecutedReqs) /
-		float64(c.numReqPerCycle)
+	remainingReqs := int(c.numReqPerCycle) - int(c.directoryStage.numExecutedReqs)
+	for i := remainingReqs - 1; i >= 0; i-- {
+		status := profile.BASE
 
-	tracing.StartTask(
-		"",
-		"",
-		now,
-		c,
-		"cache_utilization",
-		profile.CachePSVStatusNames[status],
-		cycle,
-	)
+		if len(c.coalesceStage.toCoalesce) == 0 && c.TopPort.Peek() == nil {
+			status = c.provider.Attribute()
+		} else if !c.dirBuf.CanPush() {
+			status = c.directoryStatus[i]
+		}
+
+		tracing.StartTask(
+			"",
+			"",
+			now,
+			c,
+			"cache_utilization",
+			profile.CachePSVStatusNames[status],
+			1.0/float64(c.numReqPerCycle),
+		)
+	}
 }
 
 func (c *Cache) SetProvider(provider profile.CachePSVComponent) {

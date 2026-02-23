@@ -354,14 +354,14 @@ type Runner struct {
 	RTUAccessTracers                []RTUAccessTracer
 	DRAMTransactionCounters         []dramTransactionCountTracer
 	RemoteTLBLatencyTracers         []RemoteTLBLatencyTracer
-	L2TLBBufLenTracers              []*tracing.AverageCountTracer
-	L2TLBBufLenG0Tracers            []*tracing.AverageCountTracer
-	L2TLBCoalesceAddrTracers        []*tracing.AverageCountTracer
-	L2TLBCoalesceTracers            []*tracing.AverageCountTracer
-	L2TLBMSHRLenTracers             []*tracing.AverageCountTracer
-	L2TLBMSHRUniqLenTracers         []*tracing.AverageCountTracer
-	L2TLBMSHRLenG0Tracers           []*tracing.AverageCountTracer
-	L2TLBMSHRUniqLenG0Tracers       []*tracing.AverageCountTracer
+	L3TLBBufLenTracers              []*tracing.AverageCountTracer
+	L3TLBBufLenG0Tracers            []*tracing.AverageCountTracer
+	L3TLBCoalesceAddrTracers        []*tracing.AverageCountTracer
+	L3TLBCoalesceTracers            []*tracing.AverageCountTracer
+	L3TLBMSHRLenTracers             []*tracing.AverageCountTracer
+	L3TLBMSHRUniqLenTracers         []*tracing.AverageCountTracer
+	L3TLBMSHRLenG0Tracers           []*tracing.AverageCountTracer
+	L3TLBMSHRUniqLenG0Tracers       []*tracing.AverageCountTracer
 	ActivePageWalkerTracers         []ActivePageWalkerTracer
 	ActiveMMUSecondaryQueueTracers  []*tracing.AverageCountTracer
 	MaxMMUSecondaryQueueTracers     []*tracing.MaximumCountTracer
@@ -653,7 +653,7 @@ func (r *Runner) Init() *Runner {
 	r.addMemoryAccessSourceTracer()
 	r.addTLBLatencyTracer()
 	r.addTLBCoalesceTracer()
-	r.addL2TLBMSHRLenTracer()
+	r.addL3TLBMSHRLenTracer()
 	r.addRTUCoalesceTracer()
 	r.addTLBHitRateTracer()
 	r.addDRAMLatencyTracer()
@@ -2089,77 +2089,77 @@ func (r *Runner) addTLBCoalesceTracer() {
 	}
 
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "buflen"
 				})
-			r.L2TLBBufLenTracers = append(r.L2TLBBufLenTracers, tracer)
+			r.L3TLBBufLenTracers = append(r.L3TLBBufLenTracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "bufleng0"
 				})
-			r.L2TLBBufLenG0Tracers = append(r.L2TLBBufLenG0Tracers, tracer)
+			r.L3TLBBufLenG0Tracers = append(r.L3TLBBufLenG0Tracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "coalesceaddr"
 				})
-			r.L2TLBCoalesceAddrTracers = append(r.L2TLBCoalesceAddrTracers, tracer)
+			r.L3TLBCoalesceAddrTracers = append(r.L3TLBCoalesceAddrTracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "coalesce"
 				})
-			r.L2TLBCoalesceTracers = append(r.L2TLBCoalesceTracers, tracer)
+			r.L3TLBCoalesceTracers = append(r.L3TLBCoalesceTracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
 	}
 }
 
-func (r *Runner) addL2TLBMSHRLenTracer() {
+func (r *Runner) addL3TLBMSHRLenTracer() {
 	if !r.ReportL3TLBMSHRLen {
 		return
 	}
 
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRlen"
 				})
-			r.L2TLBMSHRLenTracers = append(r.L2TLBMSHRLenTracers, tracer)
+			r.L3TLBMSHRLenTracers = append(r.L3TLBMSHRLenTracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRlen_g0"
 				})
-			r.L2TLBMSHRLenG0Tracers = append(r.L2TLBMSHRLenG0Tracers, tracer)
+			r.L3TLBMSHRLenG0Tracers = append(r.L3TLBMSHRLenG0Tracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRuniq"
 				})
-			r.L2TLBMSHRUniqLenTracers = append(r.L2TLBMSHRUniqLenTracers, tracer)
+			r.L3TLBMSHRUniqLenTracers = append(r.L3TLBMSHRUniqLenTracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewAverageCountTracer(
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRuniq_g0"
 				})
-			r.L2TLBMSHRUniqLenG0Tracers = append(r.L2TLBMSHRUniqLenG0Tracers, tracer)
+			r.L3TLBMSHRUniqLenG0Tracers = append(r.L3TLBMSHRUniqLenG0Tracers, tracer)
 			tracing.CollectTrace(tlb, tracer)
 		}
 	}
@@ -3457,42 +3457,42 @@ func (r *Runner) reportTLBLatency() {
 		)
 	}
 
-	for i, tracer := range r.L2TLBBufLenTracers {
+	for i, tracer := range r.L3TLBBufLenTracers {
 		if tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L2TLB"+strconv.Itoa(i),
+			"L3TLB"+strconv.Itoa(i),
 			"average_buf_len",
 			float64(tracer.AverageCount()),
 		)
 	}
-	for i, tracer := range r.L2TLBBufLenG0Tracers {
+	for i, tracer := range r.L3TLBBufLenG0Tracers {
 		if tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L2TLB"+strconv.Itoa(i),
+			"L3TLB"+strconv.Itoa(i),
 			"average_buf_len_g0",
 			float64(tracer.AverageCount()),
 		)
 	}
-	for i, tracer := range r.L2TLBCoalesceAddrTracers {
+	for i, tracer := range r.L3TLBCoalesceAddrTracers {
 		if tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L2TLB"+strconv.Itoa(i),
+			"L3TLB"+strconv.Itoa(i),
 			"coalesce_addr",
 			float64(tracer.AverageCount()),
 		)
 	}
-	for i, tracer := range r.L2TLBCoalesceTracers {
+	for i, tracer := range r.L3TLBCoalesceTracers {
 		if tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L2TLB"+strconv.Itoa(i),
+			"L3TLB"+strconv.Itoa(i),
 			"coalesce",
 			float64(tracer.AverageCount()),
 		)
@@ -3510,44 +3510,44 @@ func (r *Runner) reportTLBLatency() {
 		)
 	}
 
-	for i, tracer := range r.L2TLBMSHRLenTracers {
+	for i, tracer := range r.L3TLBMSHRLenTracers {
 		if tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L2TLB"+strconv.Itoa(i),
+			"L3TLB"+strconv.Itoa(i),
 			"average_mshr_len",
 			float64(tracer.AverageCount()),
 		)
 	}
-	for i, tracer := range r.L2TLBMSHRLenG0Tracers {
+	for i, tracer := range r.L3TLBMSHRLenG0Tracers {
 		if tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L2TLB"+strconv.Itoa(i),
+			"L3TLB"+strconv.Itoa(i),
 			"average_mshr_len_g0",
 			float64(tracer.AverageCount()),
 		)
 	}
 
-	for i, tracer := range r.L2TLBMSHRUniqLenTracers {
+	for i, tracer := range r.L3TLBMSHRUniqLenTracers {
 		if tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L2TLB"+strconv.Itoa(i),
+			"L3TLB"+strconv.Itoa(i),
 			"average_mshr_uniq_len",
 			float64(tracer.AverageCount()),
 		)
 	}
 
-	for i, tracer := range r.L2TLBMSHRUniqLenG0Tracers {
+	for i, tracer := range r.L3TLBMSHRUniqLenG0Tracers {
 		if tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L2TLB"+strconv.Itoa(i),
+			"L3TLB"+strconv.Itoa(i),
 			"average_mshr_uniq_len_g0",
 			float64(tracer.AverageCount()),
 		)

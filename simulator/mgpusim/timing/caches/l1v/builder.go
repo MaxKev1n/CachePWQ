@@ -6,6 +6,7 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
+	"gitlab.com/akita/mem/profile"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/pipelining"
 	"gitlab.com/akita/util/tracing"
@@ -190,6 +191,7 @@ func (b *Builder) buildStages(c *Cache) {
 		bankStages:   c.bankStages,
 		coalescer:    c.coalesceStage,
 	}
+	c.directoryStatus = make([]profile.CachePSVStatus, b.numReqPerCycle)
 }
 
 func (b *Builder) assertAllRequiredInformationIsAvailable() {

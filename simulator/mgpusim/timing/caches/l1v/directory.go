@@ -372,7 +372,3 @@ func (d *directory) getBankBuf(block *cache.Block) util.Buffer {
 	bankID := blockID % len(d.cache.bankBufs)
 	return d.cache.bankBufs[bankID]
 }
-
-func (d *directory) Attribute() profile.CachePSVStatus {
-	return d.status
-}

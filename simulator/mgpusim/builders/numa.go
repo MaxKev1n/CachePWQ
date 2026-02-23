@@ -707,6 +707,8 @@ func (b *NUMAGPUBuilder) buildMMU(chiplet *Chiplet) {
 		switch mmuType {
 		case "BaselineMMU":
 			b.buildDefaultMMU(chiplet)
+		case "IdealMMU":
+			b.buildIdealMMU(chiplet)
 		default:
 			log.Panicf("Unsupported MMU type: %s\n", mmuType)
 		}
@@ -744,6 +746,54 @@ func (b *NUMAGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
 		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
 
 		component.(*mmu.MMUImpl).PageWalkCache = pageWalkCachePort
+
+		chiplet.MMUs = append(chiplet.MMUs, component)
+		b.gpu.MMUs = append(b.gpu.MMUs, component)
+
+		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
+			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
+		)
+	}
+}
+
+func (b *NUMAGPUBuilder) buildIdealMMU(chiplet *Chiplet) {
+	pageWalkLatency := 200
+	maxActiveWalkers := 0
+
+	if latency, ok := yamlconfig.OverrideConfig["MMU.walkLatency"]; ok {
+		latencyInt, err := strconv.Atoi(latency)
+		if err != nil {
+			log.Panicf("Invalid walk latency: %s\n", latency)
+		}
+
+		pageWalkLatency = latencyInt
+	}
+
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %v\n", numWalkersInt)
+		}
+
+		maxActiveWalkers = numWalkersInt
+	}
+
+	maxCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
+
+	if maxActiveWalkers%numGPCs != 0 {
+		panic("numPageWalkers should be divisible by numGPCs")
+	}
+
+	for i := 0; i < numGPCs; i++ {
+		component := mmu.MakeIdealMMUBuilder().
+			WithEngine(b.engine).
+			WithFreq(1 * akita.GHz).
+			WithLog2PageSize(b.log2PageSize).
+			WithPageTable(b.pageTable).
+			WithLatency(pageWalkLatency).
+			WithMaxActiveTransactions(uint64(maxActiveWalkers / numGPCs)).
+			Build(fmt.Sprintf("%s.IdealMMU_%02d", chiplet.name, i))
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)

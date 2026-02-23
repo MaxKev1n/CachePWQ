@@ -86,7 +86,7 @@ func (b MMUBuilder) Build(name string) MMU {
 	}
 	mmu.nextPointer = 0
 
-	mmu.ToPageWalkCache = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToTop")
+	mmu.ToPageWalkCache = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToPageWalkCache")
 
 	return mmu
 }
