@@ -71,6 +71,10 @@ func (b *Benchmark) SetLASPMemoryAlloc() {
 	b.useLASPMemoryAlloc = true
 }
 
+func (b *Benchmark) SetLASPHSLMemoryAlloc() {
+	panic("LASP HSL memory alloc is not supported yet")
+}
+
 func (b *Benchmark) loadProgram() {
 	hsacoBytes := _escFSMustByte(false, "/kernels.hsaco")
 

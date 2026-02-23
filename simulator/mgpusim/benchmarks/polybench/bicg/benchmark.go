@@ -44,6 +44,14 @@ type Benchmark struct {
 	useUnifiedMemory bool
 }
 
+func (b *Benchmark) SetLASPMemoryAlloc() {
+	panic("LASP memory alloc is not supported yet")
+}
+
+func (b *Benchmark) SetLASPHSLMemoryAlloc() {
+	panic("LASP HSL memory alloc is not supported yet")
+}
+
 // NewBenchmark makes a new benchmark
 func NewBenchmark(driver *driver.Driver) *Benchmark {
 	b := new(Benchmark)
