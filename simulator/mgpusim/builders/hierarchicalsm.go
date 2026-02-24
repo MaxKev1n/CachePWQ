@@ -717,44 +717,6 @@ func (b *HierarchicalSMSideGPUBuilder) buildCAPWQMMU(chiplet *Chiplet) {
 	}
 }
 
-func (b *HierarchicalSMSideGPUBuilder) buildMPWMMU(chiplet *Chiplet) {
-	maxCUsPerGPC := 16
-	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
-
-	mmuBuilder := mmu.MakeMPWMMUBuilder().
-		WithEngine(b.engine).
-		WithFreq(1 * akita.GHz).
-		WithLog2PageSize(b.log2PageSize).
-		WithPageTable(b.pageTable).
-		WithNumChiplets(uint64(b.numChiplet)).
-		WithMaxNumReqInFlight(16)
-
-	if 512%numGPCs != 0 {
-		log.Panicf("512 not divisible by Number of GPCs %d\n", numGPCs)
-	}
-
-	mmuBuilder = mmuBuilder.WithPageWalkCacheSize(512 / uint64(numGPCs))
-
-	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
-		numWalkersInt, err := strconv.Atoi(numWalkers)
-		if err != nil {
-			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
-		}
-
-		if numWalkersInt%numGPCs != 0 {
-			log.Panicf("Number of page walkers %d not divisible by number of GPCs %d\n", numWalkersInt, numGPCs)
-		}
-
-		mmuBuilder = mmuBuilder.WithMaxNumReqInFlight(numWalkersInt / numGPCs)
-	}
-
-	for i := 0; i < numGPCs; i++ {
-		chiplet.MMUs = append(chiplet.MMUs, mmuBuilder.Build(fmt.Sprintf("%s.MPWMMU[%d]", chiplet.name, i)))
-
-		b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMUs[i])
-	}
-}
-
 func (b *HierarchicalSMSideGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
 	maxCUsPerGPC := 16
 	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
