@@ -86,6 +86,7 @@ func (b CaPWQMMUBuilder) Build(name string) MMU {
 	mmu.ToTop = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToTop")
 	mmu.ToCache = akita.NewLimitNumMsgPort(mmu, 16, name+".ToCache")
 	mmu.TranslationPort = akita.NewLimitNumMsgPort(mmu, 16, name+".TranslationPort")
+	mmu.translationSender = akitaext.NewBufferedSender(mmu.TranslationPort, util.NewBuffer(16))
 
 	mmu.topSender = akitaext.NewBufferedSender(mmu.ToTop, util.NewBuffer(16))
 	if b.pageTable != nil {
@@ -109,7 +110,7 @@ func (b CaPWQMMUBuilder) Build(name string) MMU {
 		WithByteSize(b.pageWalkCacheSize)
 	pageWalkCache := pageWalkCacheBuilder.Build("PageWalkCache")
 	mmu.PageWalkCache = pageWalkCache.TopPort
-	mmu.ToPageWalkCache = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToTop")
+	mmu.ToPageWalkCache = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToPageWalkCache")
 	mmuToPageWalkCache := akita.NewDirectConnection("MMUToPageWalkCache", b.engine, b.freq)
 	mmuToPageWalkCache.PlugIn(pageWalkCache.TopPort, 4)
 	mmuToPageWalkCache.PlugIn(mmu.ToPageWalkCache, 4)

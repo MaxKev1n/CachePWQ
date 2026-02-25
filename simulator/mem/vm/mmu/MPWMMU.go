@@ -22,6 +22,8 @@ type MPWWalkerStatus struct {
 type MPWPageWalker struct {
 	status *MPWWalkerStatus
 	queue  []*Transaction
+
+	batchedTransactions []*Transaction
 }
 
 // MPWMMU is the default mmu implementation. It is also an akita Component.
@@ -83,9 +85,11 @@ func (mmu *MPWMMU) walkPageTable(now akita.VTimeInSec) bool {
 
 		switch status.state {
 		case pageWalkCacheDone:
+			mmu.generateMemReqs(walker)
+		case batchMemReqs:
 			mmu.sendToMem(now, walker)
 		case memDone:
-			mmu.sendToMem(now, walker)
+			mmu.generateMemReqs(walker)
 		case transactionFinished:
 			mmu.removeFromWalker(walker)
 		}
@@ -154,7 +158,7 @@ func (mmu *MPWMMU) parseFromMem(now akita.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (mmu *MPWMMU) sendToMem(now akita.VTimeInSec, walker *MPWPageWalker) {
+func (mmu *MPWMMU) generateMemReqs(walker *MPWPageWalker) {
 	transState := walker.status.state
 	if transState != pageWalkCacheDone && transState != memDone {
 		panic("this state shouldn't be here!")
@@ -164,7 +168,9 @@ func (mmu *MPWMMU) sendToMem(now akita.VTimeInSec, walker *MPWPageWalker) {
 		panic("there are still requests in flight!")
 	}
 
-	var batchedTransactions []*Transaction
+	if len(walker.batchedTransactions) != 0 {
+		panic("there are still batched transactions!")
+	}
 
 	batchedLevel := 0
 	requestVector := make(map[int]struct{})
@@ -174,13 +180,9 @@ func (mmu *MPWMMU) sendToMem(now akita.VTimeInSec, walker *MPWPageWalker) {
 			continue
 		}
 
-		if _, exist := requestVector[i]; exist {
-			continue
-		}
-
 		trans := walker.queue[i]
 
-		if len(batchedTransactions) == 0 {
+		if len(walker.batchedTransactions) == 0 {
 			batchedLevel = trans.level
 		}
 
@@ -188,67 +190,83 @@ func (mmu *MPWMMU) sendToMem(now akita.VTimeInSec, walker *MPWPageWalker) {
 			continue
 		}
 
-		batchedTransactions = append(batchedTransactions, trans)
+		walker.batchedTransactions = append(
+			walker.batchedTransactions, trans)
 
 		requestVector[i] = struct{}{}
 	}
 
-	if mmu.translationSender.CanSend(len(batchedTransactions)) {
-		for _, trans := range batchedTransactions {
-			PPN := trans.PPN
-			PPNWithOffset := mmu.pageTable.AddOffset(PPN, trans.vAddr)
+	walker.status.state = batchMemReqs
+	walker.status.requestVector = requestVector
+}
 
-			srcPort := mmu.TranslationPort
-			readReqInfo := &mem.ReadReqInfo{ReturnAccessInfo: true}
-			dstPort := mmu.lowModuleFinder.Find(PPNWithOffset)
+func (mmu *MPWMMU) sendToMem(now akita.VTimeInSec, walker *MPWPageWalker) {
+	transState := walker.status.state
+	if transState != batchMemReqs {
+		panic("this state shouldn't be here!")
+	}
 
-			readReq := mem.ReadReqBuilder{}.
-				WithSendTime(now).
-				WithSrc(srcPort).
-				WithDst(dstPort).
-				WithPID(trans.req.PID).
-				WithAddress(PPNWithOffset).
-				WithByteSize(8).
-				WithInfo(readReqInfo).
-				Build()
+	if !mmu.translationSender.CanSend(1) {
+		return
+	}
 
-			readReq.PTW = true
+	trans := walker.batchedTransactions[0]
 
-			mmu.translationSender.Send(readReq)
+	PPN := trans.PPN
+	PPNWithOffset := mmu.pageTable.AddOffset(PPN, trans.vAddr)
 
-			trans.vAddr = mmu.pageTable.NextLevel(trans.vAddr)
-			trans.msgID = readReq.ID
-			trans.state = sentToMem
+	srcPort := mmu.TranslationPort
+	readReqInfo := &mem.ReadReqInfo{ReturnAccessInfo: true}
+	dstPort := mmu.lowModuleFinder.Find(PPNWithOffset)
 
-			l2SliceID, fail := getL2SliceNum(dstPort.Name())
-			if fail != nil {
-				log.Panicf("cannot get l2 slice num from port name %s", dstPort.Name())
-			}
+	readReq := mem.ReadReqBuilder{}.
+		WithSendTime(now).
+		WithSrc(srcPort).
+		WithDst(dstPort).
+		WithPID(trans.req.PID).
+		WithAddress(PPNWithOffset).
+		WithByteSize(8).
+		WithInfo(readReqInfo).
+		Build()
 
-			if l2SliceID < 32 {
-				tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
-					now, mmu, "page_walk_req_left")
-			} else {
-				tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
-					now, mmu, "page_walk_req_right")
-			}
+	readReq.PTW = true
 
-			tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
-				now, mmu, "page_walk_req_local")
+	mmu.translationSender.Send(readReq)
 
-			tracing.StartTask(
-				readReq.ID,
-				"",
-				now,
-				mmu,
-				"walker_mem_latency",
-				reflect.TypeOf(readReq).String(),
-				readReq,
-			)
-		}
+	trans.vAddr = mmu.pageTable.NextLevel(trans.vAddr)
+	trans.msgID = readReq.ID
+	trans.state = sentToMem
 
+	l2SliceID, fail := getL2SliceNum(dstPort.Name())
+	if fail != nil {
+		log.Panicf("cannot get l2 slice num from port name %s", dstPort.Name())
+	}
+
+	if l2SliceID < 32 {
+		tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
+			now, mmu, "page_walk_req_left")
+	} else {
+		tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
+			now, mmu, "page_walk_req_right")
+	}
+
+	tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, mmu),
+		now, mmu, "page_walk_req_local")
+
+	tracing.StartTask(
+		readReq.ID,
+		"",
+		now,
+		mmu,
+		"walker_mem_latency",
+		reflect.TypeOf(readReq).String(),
+		readReq,
+	)
+
+	walker.batchedTransactions = walker.batchedTransactions[1:]
+
+	if len(walker.batchedTransactions) == 0 {
 		walker.status.state = sentToMem
-		walker.status.requestVector = requestVector
 	}
 }
 

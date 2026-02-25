@@ -30,6 +30,7 @@ const (
 	newTransaction transactionState = iota
 	sentToPageWalkCache
 	pageWalkCacheDone
+	batchMemReqs
 	sentToMem
 	sentWRToL1
 	memDone

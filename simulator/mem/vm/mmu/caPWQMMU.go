@@ -297,6 +297,10 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1(now akita.VTimeInSec) {
 func (walker *CaPWQPageWalker) sendToMem(now akita.VTimeInSec) {
 	trans := walker.transaction
 
+	if !walker.mmu.translationSender.CanSend(1) {
+		return
+	}
+
 	if trans.state != sentWRToL1 {
 		panic("this state shouldn't be here!")
 	}
@@ -320,10 +324,7 @@ func (walker *CaPWQPageWalker) sendToMem(now akita.VTimeInSec) {
 
 	readReq.PTW = true
 
-	err := srcPort.Send(readReq)
-	if err != nil {
-		return
-	}
+	walker.mmu.translationSender.Send(readReq)
 
 	walker.transaction = nil
 
@@ -409,8 +410,9 @@ type CaPWQMMU struct {
 	PageWalkCache   akita.Port
 	topSender       akitaext.BufferedSender
 
-	TranslationPort akita.Port
-	lowModuleFinder cache.LowModuleFinder
+	TranslationPort   akita.Port
+	translationSender akitaext.BufferedSender
+	lowModuleFinder   cache.LowModuleFinder
 
 	ToCache              akita.Port
 	CacheLowModuleFinder cache.LowModuleFinder
@@ -432,6 +434,7 @@ func (mmu *CaPWQMMU) Tick(now akita.VTimeInSec) bool {
 	madeProgress := false
 
 	madeProgress = mmu.topSender.Tick(now) || madeProgress
+	madeProgress = mmu.translationSender.Tick(now) || madeProgress
 	madeProgress = mmu.parseFromL1(now) || madeProgress
 	madeProgress = mmu.parseFromMem(now) || madeProgress
 	madeProgress = mmu.parseFromPageWalkCache(now) || madeProgress
