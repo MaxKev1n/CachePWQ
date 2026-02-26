@@ -13,11 +13,15 @@ import (
 	"gitlab.com/akita/mem/idealmemcontroller"
 	"gitlab.com/akita/mem/monitor"
 	"gitlab.com/akita/mem/vm/addresstranslator"
+	"gitlab.com/akita/mem/vm/lds"
 	"gitlab.com/akita/mem/vm/mmu"
+	"gitlab.com/akita/mem/vm/mmu/asyncCaPWQ"
 	"gitlab.com/akita/mem/vm/mmu/baseline"
+	"gitlab.com/akita/mem/vm/mmu/caPWQ"
 	"gitlab.com/akita/mem/vm/mmu/mpw"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
+	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	"gitlab.com/akita/mgpusim/timing/caches/l1v"
 	"gitlab.com/akita/mgpusim/yamlconfig"
 	noc "gitlab.com/akita/noc/networking/booksim"
@@ -713,6 +717,10 @@ func (b *NUMAGPUBuilder) buildMMU(chiplet *Chiplet) {
 			b.buildIdealMMU(chiplet)
 		case "MPWMMU":
 			b.buildMPWMMU(chiplet)
+		case "CaPWQMMU":
+			b.buildCaPWQMMU(chiplet)
+		case "AsyncCaPWQMMU":
+			b.buildAsyncCaPWQMMU(chiplet)
 		default:
 			log.Panicf("Unsupported MMU type: %s\n", mmuType)
 		}
@@ -725,7 +733,7 @@ func (b *NUMAGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
 	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
 		numWalkersInt, err := strconv.Atoi(numWalkers)
 		if err != nil {
-			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
+			log.Panicf("Invalid number of walkers %v\n", numWalkersInt)
 		}
 
 		maxNumReqInFlight = numWalkersInt
@@ -766,7 +774,7 @@ func (b *NUMAGPUBuilder) buildMPWMMU(chiplet *Chiplet) {
 	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
 		numWalkersInt, err := strconv.Atoi(numWalkers)
 		if err != nil {
-			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
+			log.Panicf("Invalid number of walkers %v\n", numWalkersInt)
 		}
 
 		maxNumReqInFlight = numWalkersInt
@@ -808,7 +816,7 @@ func (b *NUMAGPUBuilder) buildIdealMMU(chiplet *Chiplet) {
 	if latency, ok := yamlconfig.OverrideConfig["MMU.walkLatency"]; ok {
 		latencyInt, err := strconv.Atoi(latency)
 		if err != nil {
-			log.Panicf("Invalid walk latency: %s\n", latency)
+			log.Panicf("Invalid walk latency: %v\n", latency)
 		}
 
 		pageWalkLatency = latencyInt
@@ -846,6 +854,226 @@ func (b *NUMAGPUBuilder) buildIdealMMU(chiplet *Chiplet) {
 		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
 			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
 		)
+	}
+}
+
+func (b *NUMAGPUBuilder) buildCaPWQMMU(chiplet *Chiplet) {
+	maxNumReqInFlight := 16
+
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %v\n", numWalkersInt)
+		}
+
+		maxNumReqInFlight = numWalkersInt
+	}
+
+	maxCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
+
+	if maxNumReqInFlight%numGPCs != 0 {
+		panic("numPageWalkers should be divisible by numGPCs")
+	}
+
+	for i := 0; i < numGPCs; i++ {
+		component := caPWQ.MakeCaPWQMMUBuilder().
+			WithEngine(b.engine).
+			WithFreq(1 * akita.GHz).
+			WithLog2PageSize(b.log2PageSize).
+			WithPageTable(b.pageTable).
+			WithMaxNumReqInFlight(maxNumReqInFlight / numGPCs).
+			Build(fmt.Sprintf("%s.CaPWQMMU_%02d", chiplet.name, i))
+
+		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
+
+		component.(*caPWQ.CaPWQMMU).PageWalkCache = pageWalkCachePort
+		component.(*caPWQ.CaPWQMMU).L3TLB = chiplet.L3TLBs[0].GetBottomPort()
+
+		chiplet.MMUs = append(chiplet.MMUs, component)
+		b.gpu.MMUs = append(b.gpu.MMUs, component)
+
+		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
+			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
+		)
+	}
+
+	b.establishMMUToL1RoutingPath(chiplet)
+}
+
+func (b *NUMAGPUBuilder) buildAsyncCaPWQMMU(chiplet *Chiplet) {
+	maxNumReqInFlight := 16
+
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %v\n", numWalkersInt)
+		}
+
+		maxNumReqInFlight = numWalkersInt
+	}
+
+	maxCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
+
+	if maxNumReqInFlight%numGPCs != 0 {
+		panic("numPageWalkers should be divisible by numGPCs")
+	}
+
+	for i := 0; i < numGPCs; i++ {
+		component := asyncCaPWQ.MakeAsyncCaPWQMMUBuilder().
+			WithEngine(b.engine).
+			WithFreq(1 * akita.GHz).
+			WithLog2PageSize(b.log2PageSize).
+			WithPageTable(b.pageTable).
+			WithMaxNumReqInFlight(maxNumReqInFlight / numGPCs).
+			Build(fmt.Sprintf("%s.AsyncCaPWQMMU_%02d", chiplet.name, i))
+
+		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
+
+		component.(*asyncCaPWQ.AsyncCaPWQMMU).PageWalkCache = pageWalkCachePort
+		component.(*asyncCaPWQ.AsyncCaPWQMMU).L3TLB = chiplet.L3TLBs[0].GetBottomPort()
+
+		chiplet.MMUs = append(chiplet.MMUs, component)
+		b.gpu.MMUs = append(b.gpu.MMUs, component)
+
+		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
+			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
+		)
+	}
+
+	b.establishMMUToL1RoutingPath(chiplet)
+	b.establishMMUToLDSRoutingPath(chiplet)
+}
+
+func (b *NUMAGPUBuilder) establishMMUToLDSRoutingPath(chiplet *Chiplet) {
+	numCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/numCUsPerGPC + 1
+
+	if len(chiplet.MMUs) != numGPCs {
+		panic("number of MMUs should be the same as number of GPCs")
+	}
+
+	for i := 0; i < numGPCs; i++ {
+		mmuSwitch := multiplexer.SwitchBuilder{}.
+			WithEngine(b.engine).
+			WithFreq(b.freq).
+			WithArbiter(multiplexer.NewRRArbiter()).
+			WithRoutingTable(multiplexer.NewMapRoutingTable()).
+			WithNumReqPerCycle(32).
+			WithBufferSizeInNumFlit(32).
+			Build(fmt.Sprintf("%s.MMUSwitch_%02d", chiplet.name, i))
+
+		idealLDS := lds.NewIdealCaPWQLDS(
+			fmt.Sprintf("%s.L1IdealCaPWQLDS_%02d", chiplet.name, i),
+			b.engine,
+			b.freq,
+			4,
+			28,
+		)
+
+		epLDS := multiplexer.MakeEndPointBuilder().
+			WithEngine(b.engine).
+			WithFreq(b.freq).
+			WithDevicePorts([]akita.Port{idealLDS.GetMMUSidePort()}).
+			WithNumReqPerCycle(4).
+			WithFlitByteSize(64).
+			Build(fmt.Sprintf("%s.L1IdealCaPWQLDS_%02d", chiplet.name, i))
+
+		switchPortLDS := mmuSwitch.ConnectEndPointToSwitch(epLDS, 5, b.freq)
+		rt := mmuSwitch.GetRoutingTable()
+		rt.AddRoute(idealLDS.GetMMUSidePort(), switchPortLDS)
+
+		b.gpu.L1CaPWQLDS = append(b.gpu.L1CaPWQLDS, idealLDS)
+
+		epMMU := multiplexer.MakeEndPointBuilder().
+			WithEngine(b.engine).
+			WithFreq(b.freq).
+			WithDevicePorts([]akita.Port{chiplet.MMUs[i].(*asyncCaPWQ.AsyncCaPWQMMU).ToLDS}).
+			WithFlitByteSize(64).
+			WithNumReqPerCycle(16).
+			WithNetworkPortBufferSize(16).
+			Build(fmt.Sprintf("%s.MMU_%02d", chiplet.name, i))
+
+		switchPortMMU := mmuSwitch.ConnectEndPointToSwitch(epMMU, 5, b.freq)
+		rt.AddRoute(chiplet.MMUs[i].(*asyncCaPWQ.AsyncCaPWQMMU).ToLDS, switchPortMMU)
+
+		chiplet.MMUs[i].(*asyncCaPWQ.AsyncCaPWQMMU).LDS = idealLDS.GetMMUSidePort()
+	}
+}
+
+func (b *NUMAGPUBuilder) establishMMUToL1RoutingPath(chiplet *Chiplet) {
+	numCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/numCUsPerGPC + 1
+
+	if len(chiplet.MMUs) != numGPCs {
+		panic("number of MMUs should be the same as number of GPCs")
+	}
+
+	for i := 0; i < numGPCs; i++ {
+		lowModuleFinder := cache.NewXORLowModuleFinder(
+			len(chiplet.L1VCaches)/numCUsPerGPC,
+			4,
+			int(math.Log2(float64(len(chiplet.L1VCaches)/numCUsPerGPC))),
+			int(b.log2PageSize))
+
+		switch mmu := chiplet.MMUs[i].(type) {
+		case *caPWQ.CaPWQMMU:
+			mmu.CacheLowModuleFinder = lowModuleFinder
+		case *asyncCaPWQ.AsyncCaPWQMMU:
+			mmu.CacheLowModuleFinder = lowModuleFinder
+		default:
+			panic("MMU is not CaPWQMMU")
+		}
+
+		mmuSwitch := multiplexer.SwitchBuilder{}.
+			WithEngine(b.engine).
+			WithFreq(b.freq).
+			WithArbiter(multiplexer.NewRRArbiter()).
+			WithRoutingTable(multiplexer.NewMapRoutingTable()).
+			WithNumReqPerCycle(32).
+			WithBufferSizeInNumFlit(32).
+			Build(fmt.Sprintf("%s.MMUSwitch", chiplet.name))
+
+		for j := i * numCUsPerGPC; j < (i+1)*numCUsPerGPC; j++ {
+			idealCache := l1cache.NewIdealCaPWQCache(
+				fmt.Sprintf("%s.L1IdealCaPWQCache_%02d", chiplet.name, j),
+				b.engine,
+				b.freq,
+				2,
+				28,
+			)
+
+			ep := multiplexer.MakeEndPointBuilder().
+				WithEngine(b.engine).
+				WithFreq(b.freq).
+				WithDevicePorts([]akita.Port{idealCache.GetMMUSidePort()}).
+				WithNumReqPerCycle(1).
+				WithFlitByteSize(64).
+				Build(fmt.Sprintf("%s.L1IdealCaPWQCache_%02d", chiplet.name, j))
+
+			switchPort := mmuSwitch.ConnectEndPointToSwitch(ep, 5, b.freq)
+			rt := mmuSwitch.GetRoutingTable()
+			rt.AddRoute(idealCache.GetMMUSidePort(), switchPort)
+
+			lowModuleFinder.LowModules = append(lowModuleFinder.LowModules,
+				idealCache.GetMMUSidePort())
+
+			b.gpu.L1CaPWQCache = append(b.gpu.L1CaPWQCache, idealCache)
+		}
+
+		ep := multiplexer.MakeEndPointBuilder().
+			WithEngine(b.engine).
+			WithFreq(b.freq).
+			WithDevicePorts([]akita.Port{chiplet.MMUs[i].ToCachePort()}).
+			WithFlitByteSize(64).
+			WithNumReqPerCycle(8).
+			WithNetworkPortBufferSize(8).
+			Build(fmt.Sprintf("%s.MMU_%02d", chiplet.name, i))
+
+		switchPort := mmuSwitch.ConnectEndPointToSwitch(ep, 5, b.freq)
+		rt := mmuSwitch.GetRoutingTable()
+		rt.AddRoute(chiplet.MMUs[i].ToCachePort(), switchPort)
 	}
 }
 

@@ -728,9 +728,9 @@ func (b *HierarchicalMemSideCaPWQGPUBuilder) connectL2TLBTOMMU(chiplet *Chiplet)
 
 		switch mmu := chiplet.MMU.(type) {
 		case *caPWQ.CaPWQMMU:
-			mmu.L2TLB = l2tlb.GetBottomPort()
+			mmu.L3TLB = l2tlb.GetBottomPort()
 		case *asyncCaPWQ.AsyncCaPWQMMU:
-			mmu.L2TLB = l2tlb.GetBottomPort()
+			mmu.L3TLB = l2tlb.GetBottomPort()
 		default:
 			panic("MMU is not CaPWQMMU or AsyncCaPWQMMU")
 		}
