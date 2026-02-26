@@ -9,7 +9,6 @@ import (
 	"gitlab.com/akita/mem/cache/writeback"
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mem/vm/mmu"
-	"gitlab.com/akita/mem/vm/mmu/baseline"
 	"gitlab.com/akita/mem/vm/tlb"
 
 	"gitlab.com/akita/mem/idealmemcontroller"
