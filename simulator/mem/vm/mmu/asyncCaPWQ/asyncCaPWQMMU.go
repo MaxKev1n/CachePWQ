@@ -1,4 +1,4 @@
-package mmu
+package asyncCaPWQ
 
 import (
 	"encoding/binary"
@@ -12,15 +12,47 @@ import (
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mem/vm"
 	"gitlab.com/akita/mem/vm/lds"
+	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/util/akitaext"
+	"gitlab.com/akita/util/ca"
 	"gitlab.com/akita/util/tracing"
 )
+
+type transactionState int
+
+const (
+	newTransaction transactionState = iota
+	pageWalkCacheDone
+	sentWRToL1
+	memDone
+	sentRDToL1
+	l1Done
+	sentWRToLDS
+	sentRDToLDS
+	transactionFinished
+)
+
+type transactionImpl struct {
+	akita.MsgMeta
+
+	req               *device.TranslationReq
+	memReq            *mem.ReadReq
+	page              device.Page
+	level             int
+	msgID             string
+	state             transactionState
+	Address           uint64
+	PPN               uint64
+	vAddr             uint64
+	remoteMemAccesses int
+	pid               ca.PID
+}
 
 type AsyncCaPWQPageWalker struct {
 	*akita.TickingComponent
 
 	mmu         *AsyncCaPWQMMU
-	transaction *Transaction
+	transaction *transactionImpl
 	info        uint64
 }
 
@@ -60,7 +92,7 @@ func (walker *AsyncCaPWQPageWalker) AcceptPageWalkCacheRsp(
 	}
 
 	// Initialize a transaction
-	transaction := &Transaction{
+	transaction := &transactionImpl{
 		state:   newTransaction,
 		Address: rsp.Info.(uint64),
 		pid:     rsp.PID,
@@ -96,7 +128,7 @@ func (walker *AsyncCaPWQPageWalker) AcceptLDSRsp(
 	}
 
 	walker.info = entry.Address
-	walker.transaction = &Transaction{
+	walker.transaction = &transactionImpl{
 		state: memDone,
 		pid:   entry.PID,
 		PPN:   entry.PPN,
@@ -121,7 +153,7 @@ func (walker *AsyncCaPWQPageWalker) AcceptMemoryRsp(
 	}
 
 	walker.info = rsp.Info.(*mem.DataReadyRspInfo).Address
-	walker.transaction = &Transaction{
+	walker.transaction = &transactionImpl{
 		state: memDone,
 		pid:   rsp.PID,
 		PPN:   PPN,
@@ -432,7 +464,7 @@ func (walker *AsyncCaPWQPageWalker) sendToMem(now akita.VTimeInSec) {
 
 	// load requests from LDS.
 	if walker.mmu.numResponseInLDS > 0 {
-		walker.transaction = &Transaction{
+		walker.transaction = &transactionImpl{
 			state: sentRDToLDS,
 		}
 	}
@@ -446,7 +478,7 @@ func (walker *AsyncCaPWQPageWalker) fillPageWalkCache(
 	trans := walker.transaction
 
 	level := uint64(trans.level)
-	data := uint64ToBytes(trans.PPN | level)
+	data := mmu.Uint64ToBytes(trans.PPN | level)
 
 	writeReq := mem.WriteReqBuilder{}.
 		WithSendTime(now).
@@ -529,7 +561,7 @@ type AsyncCaPWQMMU struct {
 
 	pageWalkers []*AsyncCaPWQPageWalker
 
-	pageWalkQueue        []*Transaction
+	pageWalkQueue        []*transactionImpl
 	maxPageWalkQueueSize int
 	maxInflightRequests  int
 

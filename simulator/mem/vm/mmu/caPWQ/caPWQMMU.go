@@ -1,4 +1,4 @@
-package mmu
+package caPWQ
 
 import (
 	"encoding/binary"
@@ -11,15 +11,45 @@ import (
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mem/vm"
+	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/util/akitaext"
+	"gitlab.com/akita/util/ca"
 	"gitlab.com/akita/util/tracing"
 )
+
+type transactionState int
+
+const (
+	newTransaction transactionState = iota
+	pageWalkCacheDone
+	sentWRToL1
+	memDone
+	sentRDToL1
+	l1Done
+	transactionFinished
+)
+
+type transactionImpl struct {
+	akita.MsgMeta
+
+	req               *device.TranslationReq
+	memReq            *mem.ReadReq
+	page              device.Page
+	level             int
+	msgID             string
+	state             transactionState
+	Address           uint64
+	PPN               uint64
+	vAddr             uint64
+	remoteMemAccesses int
+	pid               ca.PID
+}
 
 type CaPWQPageWalker struct {
 	*akita.TickingComponent
 
 	mmu         *CaPWQMMU
-	transaction *Transaction
+	transaction *transactionImpl
 	info        uint64
 }
 
@@ -59,7 +89,7 @@ func (walker *CaPWQPageWalker) AcceptPageWalkCacheRsp(
 	}
 
 	// Initialize a transaction
-	transaction := &Transaction{
+	transaction := &transactionImpl{
 		state:   newTransaction,
 		Address: rsp.Info.(uint64),
 		pid:     rsp.PID,
@@ -100,7 +130,7 @@ func (walker *CaPWQPageWalker) AcceptMemoryRsp(
 	}
 
 	walker.info = rsp.Info.(*mem.DataReadyRspInfo).Address
-	walker.transaction = &Transaction{
+	walker.transaction = &transactionImpl{
 		state: memDone,
 		pid:   rsp.PID,
 		PPN:   PPN,
@@ -340,7 +370,7 @@ func (walker *CaPWQPageWalker) fillPageWalkCache(
 	trans := walker.transaction
 
 	level := uint64(trans.level)
-	data := uint64ToBytes(trans.PPN | level)
+	data := mmu.Uint64ToBytes(trans.PPN | level)
 
 	writeReq := mem.WriteReqBuilder{}.
 		WithSendTime(now).
@@ -421,7 +451,7 @@ type CaPWQMMU struct {
 
 	pageWalkers []*CaPWQPageWalker
 
-	pageWalkQueue        []*Transaction
+	pageWalkQueue        []*transactionImpl
 	maxPageWalkQueueSize int
 
 	log2CacheLineSize uint64

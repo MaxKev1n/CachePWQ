@@ -8,11 +8,12 @@ import (
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/cache/writeback"
 	"gitlab.com/akita/mem/device"
+	"gitlab.com/akita/mem/vm/mmu"
+	"gitlab.com/akita/mem/vm/mmu/baseline"
 	"gitlab.com/akita/mem/vm/tlb"
 
 	"gitlab.com/akita/mem/idealmemcontroller"
 	"gitlab.com/akita/mem/vm/addresstranslator"
-	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/pagemigrationcontroller"
 	"gitlab.com/akita/mgpusim/rdma"
@@ -30,7 +31,7 @@ type IdealVMGPUBuilder struct {
 	freq                           akita.Freq
 	memAddrOffset                  uint64
 	totalMem                       uint64
-	mmu                            *mmu.MMUImpl
+	mmu                            mmu.MMU
 	numChiplet                     int
 	numShaderArrayPerChiplet       int
 	numCUPerShaderArray            int
@@ -127,7 +128,7 @@ func (b IdealVMGPUBuilder) WithTotalMem(memory uint64) IdealVMGPUBuilder {
 
 // WithMMU sets the MMU component that provides the address translation service
 // for the GPU.
-func (b IdealVMGPUBuilder) WithMMU(mmu *mmu.MMUImpl) IdealVMGPUBuilder {
+func (b IdealVMGPUBuilder) WithMMU(mmu mmu.MMU) IdealVMGPUBuilder {
 	b.mmu = mmu
 	return b
 }

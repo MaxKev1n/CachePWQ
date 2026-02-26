@@ -14,6 +14,8 @@ import (
 	"gitlab.com/akita/mem/monitor"
 	"gitlab.com/akita/mem/vm/addresstranslator"
 	"gitlab.com/akita/mem/vm/mmu"
+	"gitlab.com/akita/mem/vm/mmu/baseline"
+	"gitlab.com/akita/mem/vm/mmu/mpw"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/timing/caches/l1v"
@@ -737,7 +739,7 @@ func (b *NUMAGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
 	}
 
 	for i := 0; i < numGPCs; i++ {
-		component := mmu.MakeMMUBuilder().
+		component := baseline.MakeMMUBuilder().
 			WithEngine(b.engine).
 			WithFreq(1 * akita.GHz).
 			WithLog2PageSize(b.log2PageSize).
@@ -747,7 +749,7 @@ func (b *NUMAGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
 
 		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
 
-		component.(*mmu.MMUImpl).PageWalkCache = pageWalkCachePort
+		component.(*baseline.MMUImpl).PageWalkCache = pageWalkCachePort
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
@@ -778,7 +780,7 @@ func (b *NUMAGPUBuilder) buildMPWMMU(chiplet *Chiplet) {
 	}
 
 	for i := 0; i < numGPCs; i++ {
-		component := mmu.MakeMPWMMUBuilder().
+		component := mpw.MakeMPWMMUBuilder().
 			WithEngine(b.engine).
 			WithFreq(1 * akita.GHz).
 			WithLog2PageSize(b.log2PageSize).
@@ -788,7 +790,7 @@ func (b *NUMAGPUBuilder) buildMPWMMU(chiplet *Chiplet) {
 
 		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
 
-		component.(*mmu.MPWMMU).PageWalkCache = pageWalkCachePort
+		component.(*mpw.MPWMMU).PageWalkCache = pageWalkCachePort
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)

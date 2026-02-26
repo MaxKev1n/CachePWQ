@@ -14,6 +14,10 @@ import (
 	"gitlab.com/akita/mem/idealmemcontroller"
 	"gitlab.com/akita/mem/vm/addresstranslator"
 	"gitlab.com/akita/mem/vm/mmu"
+	"gitlab.com/akita/mem/vm/mmu/asyncCaPWQ"
+	"gitlab.com/akita/mem/vm/mmu/baseline"
+	"gitlab.com/akita/mem/vm/mmu/caPWQ"
+	"gitlab.com/akita/mem/vm/mmu/mpw"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/pagemigrationcontroller"
@@ -57,7 +61,7 @@ type CommonBuilder struct {
 	freq                           akita.Freq
 	memAddrOffset                  uint64
 	totalMem                       uint64
-	mmu                            *mmu.MMUImpl
+	mmu                            mmu.MMU
 	numChiplet                     int
 	numShaderArrayPerChiplet       int
 	numCUPerShaderArray            int
@@ -163,7 +167,7 @@ func (b *CommonBuilder) WithTotalMem(memory uint64) {
 
 // WithMMU sets the MMU component that provides the address translation service
 // for the GPU.
-func (b *CommonBuilder) WithMMU(mmu *mmu.MMUImpl) {
+func (b *CommonBuilder) WithMMU(mmu mmu.MMU) {
 	b.mmu = mmu
 }
 
@@ -626,7 +630,7 @@ func (b *CommonBuilder) buildIdealMMU(chiplet *Chiplet) {
 }
 
 func (b *CommonBuilder) buildCAPWQMMU(chiplet *Chiplet) {
-	mmuBuilder := mmu.MakeCaPWQMMUBuilder().
+	mmuBuilder := caPWQ.MakeCaPWQMMUBuilder().
 		WithEngine(b.engine).
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).
@@ -649,7 +653,7 @@ func (b *CommonBuilder) buildCAPWQMMU(chiplet *Chiplet) {
 }
 
 func (b *CommonBuilder) buildAsyncCAPWQMMU(chiplet *Chiplet) {
-	mmuBuilder := mmu.MakeAsyncCaPWQMMUBuilder().
+	mmuBuilder := asyncCaPWQ.MakeAsyncCaPWQMMUBuilder().
 		WithEngine(b.engine).
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).
@@ -672,7 +676,7 @@ func (b *CommonBuilder) buildAsyncCAPWQMMU(chiplet *Chiplet) {
 }
 
 func (b *CommonBuilder) buildMPWMMU(chiplet *Chiplet) {
-	mmuBuilder := mmu.MakeMPWMMUBuilder().
+	mmuBuilder := mpw.MakeMPWMMUBuilder().
 		WithEngine(b.engine).
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).
@@ -694,7 +698,7 @@ func (b *CommonBuilder) buildMPWMMU(chiplet *Chiplet) {
 }
 
 func (b *CommonBuilder) buildDefaultMMU(chiplet *Chiplet) {
-	mmuBuilder := mmu.MakeMMUBuilder().
+	mmuBuilder := baseline.MakeMMUBuilder().
 		WithEngine(b.engine).
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).

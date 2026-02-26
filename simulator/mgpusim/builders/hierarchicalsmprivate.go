@@ -11,7 +11,7 @@ import (
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/cache/writeback"
 	"gitlab.com/akita/mem/idealmemcontroller"
-	"gitlab.com/akita/mem/vm/mmu"
+	"gitlab.com/akita/mem/vm/mmu/baseline"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/yamlconfig"
@@ -505,7 +505,7 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) buildDefaultMMU(chiplet *Chiple
 	maxCUsPerGPC := 16
 	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
 
-	mmuBuilder := mmu.MakeMMUBuilder().
+	mmuBuilder := baseline.MakeMMUBuilder().
 		WithEngine(b.engine).
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).

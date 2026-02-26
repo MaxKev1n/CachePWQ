@@ -1,9 +1,10 @@
-package mmu
+package caPWQ
 
 import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem/cache/writeback"
 	"gitlab.com/akita/mem/device"
+	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/akitaext"
 )
@@ -78,7 +79,7 @@ func (b CaPWQMMUBuilder) WithLog2CacheLineSize(
 }
 
 // Build returns a newly created MMU component
-func (b CaPWQMMUBuilder) Build(name string) MMU {
+func (b CaPWQMMUBuilder) Build(name string) mmu.MMU {
 	mmu := new(CaPWQMMU)
 	mmu.TickingComponent = *akita.NewTickingComponent(
 		name, b.engine, b.freq, mmu)

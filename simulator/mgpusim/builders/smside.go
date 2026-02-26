@@ -9,6 +9,8 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/vm/mmu"
+	"gitlab.com/akita/mem/vm/mmu/baseline"
+	"gitlab.com/akita/mem/vm/mmu/caPWQ"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/yamlconfig"
@@ -450,7 +452,7 @@ func (b *SMSideGPUBuilder) buildCAPWQMMU(chiplet *Chiplet) {
 			maxNumReqInFlight, b.numL2TLBSlices)
 	}
 
-	mmuBuilder := mmu.MakeCaPWQMMUBuilder().
+	mmuBuilder := caPWQ.MakeCaPWQMMUBuilder().
 		WithEngine(b.engine).
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).
@@ -486,7 +488,7 @@ func (b *SMSideGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
 			maxNumReqInFlight, b.numL2TLBSlices)
 	}
 
-	mmuBuilder := mmu.MakeMMUBuilder().
+	mmuBuilder := baseline.MakeMMUBuilder().
 		WithEngine(b.engine).
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).

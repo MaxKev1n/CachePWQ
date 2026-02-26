@@ -4,6 +4,7 @@ import (
 	// "fmt"
 
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/mem/vm/mmu"
 	// "gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/cache/writeback"
@@ -11,8 +12,6 @@ import (
 	// "gitlab.com/akita/mem/dram"
 	"gitlab.com/akita/mem/idealmemcontroller"
 	"gitlab.com/akita/mem/vm/addresstranslator"
-	"gitlab.com/akita/mem/vm/mmu"
-
 	"gitlab.com/akita/mem/vm/tlb"
 	// "gitlab.com/akita/mgpusim"
 	// "gitlab.com/akita/mgpusim/pagemigrationcontroller"
@@ -47,7 +46,7 @@ type Chiplet struct {
 	L1IAddrTranslator []addresstranslator.AddressTranslator
 	L1SAddrTranslator []addresstranslator.AddressTranslator
 	DRAMs             []*idealmemcontroller.Comp
-	MMU               *mmu.MMUImpl
+	MMU               mmu.MMU
 
 	chipRdmaEngine        *rdma.Engine
 	lowModuleFinderForL1  *cache.InterleavedLowModuleFinder

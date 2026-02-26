@@ -31,7 +31,7 @@ type Cache struct {
 	dirBuf   util.Buffer
 	bankBufs []util.Buffer
 
-	mmuStorage  map[string]*mmu.Transaction
+	mmuStorage  map[string]mmu.Transaction
 	mmuPipeline pipelining.Pipeline
 	mmuBuf      util.Buffer
 
@@ -151,11 +151,11 @@ func (c *Cache) processMMUWrite(
 	now akita.VTimeInSec,
 	req *mem.WriteReq,
 ) bool {
-	transID := req.Info.(*mmu.Transaction).TaskID()
+	transID := req.Info.(mmu.Transaction).TaskID()
 	if _, exists := c.mmuStorage[transID]; exists {
 		panic("duplicate transID")
 	}
-	c.mmuStorage[transID] = req.Info.(*mmu.Transaction)
+	c.mmuStorage[transID] = req.Info.(mmu.Transaction)
 
 	c.mmuBuf.Pop()
 
@@ -170,7 +170,7 @@ func (c *Cache) processMMURead(
 	now akita.VTimeInSec,
 	req *mem.ReadReq,
 ) bool {
-	transID := req.Info.(*mmu.Transaction).TaskID()
+	transID := req.Info.(mmu.Transaction).TaskID()
 	if trans, exists := c.mmuStorage[transID]; exists {
 		rsp := mem.DataReadyRspBuilder{}.
 			WithSendTime(now).

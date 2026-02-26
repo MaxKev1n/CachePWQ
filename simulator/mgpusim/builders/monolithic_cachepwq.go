@@ -7,7 +7,7 @@ import (
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem/cache"
-	"gitlab.com/akita/mem/vm/mmu"
+	"gitlab.com/akita/mem/vm/mmu/caPWQ"
 	"gitlab.com/akita/mgpusim"
 	noc "gitlab.com/akita/noc/networking/booksim"
 	"gitlab.com/akita/noc/networking/chipnetwork"
@@ -272,7 +272,7 @@ func (b *MonolithicCaPWQGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 func (b *MonolithicCaPWQGPUBuilder) connectMMUToL2NoC(chiplet *Chiplet) {
 	chiplet.MMU.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
 	chiplet.L1ToL2NoC.PlugInSMSide(chiplet.MMU.TranslationPortPort(), 64)
-	chiplet.L1ToL2NoC.PlugInMemSide(chiplet.MMU.(*mmu.CaPWQMMU).ToCache, 64)
+	chiplet.L1ToL2NoC.PlugInMemSide(chiplet.MMU.(*caPWQ.CaPWQMMU).ToCache, 64)
 
 	lowModuleFinder := cache.NewXORLowModuleFinder(
 		len(chiplet.L1SCaches),
@@ -286,7 +286,7 @@ func (b *MonolithicCaPWQGPUBuilder) connectMMUToL2NoC(chiplet *Chiplet) {
 			l1s.GetBottomPort())
 	}
 
-	chiplet.MMU.(*mmu.CaPWQMMU).CacheLowModuleFinder = lowModuleFinder
+	chiplet.MMU.(*caPWQ.CaPWQMMU).CacheLowModuleFinder = lowModuleFinder
 }
 
 func (b *MonolithicCaPWQGPUBuilder) setupInterchipNetwork() {

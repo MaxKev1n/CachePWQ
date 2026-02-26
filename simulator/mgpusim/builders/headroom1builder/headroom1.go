@@ -8,11 +8,12 @@ import (
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/cache/writeback"
 	"gitlab.com/akita/mem/device"
+	"gitlab.com/akita/mem/vm/mmu"
+	"gitlab.com/akita/mem/vm/mmu/baseline"
 
 	// "gitlab.com/akita/mem/dram"
 	"gitlab.com/akita/mem/idealmemcontroller"
 	"gitlab.com/akita/mem/vm/addresstranslator"
-	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/pagemigrationcontroller"
@@ -32,7 +33,7 @@ type Headroom1Builder struct {
 	freq                           akita.Freq
 	memAddrOffset                  uint64
 	totalMem                       uint64
-	mmu                            *mmu.MMUImpl
+	mmu                            mmu.MMU
 	numChiplet                     int
 	numShaderArrayPerChiplet       int
 	numCUPerShaderArray            int
@@ -130,7 +131,7 @@ func (b Headroom1Builder) WithTotalMem(memory uint64) Headroom1Builder {
 
 // WithMMU sets the MMU component that provides the address translation service
 // for the GPU.
-func (b Headroom1Builder) WithMMU(mmu *mmu.MMUImpl) Headroom1Builder {
+func (b Headroom1Builder) WithMMU(mmu mmu.MMU) Headroom1Builder {
 	b.mmu = mmu
 	return b
 }
@@ -545,7 +546,7 @@ func (b *Headroom1Builder) buildL2TLB(chiplet *Chiplet) {
 }
 
 func (b *Headroom1Builder) buildMMU(chiplet *Chiplet) {
-	mmuBuilder := mmu.MakeMMUBuilder().
+	mmuBuilder := baseline.MakeMMUBuilder().
 		WithEngine(b.engine).
 		WithFreq(1 * akita.GHz).
 		WithLog2PageSize(b.log2PageSize).

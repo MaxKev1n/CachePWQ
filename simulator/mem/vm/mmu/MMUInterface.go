@@ -2,13 +2,12 @@ package mmu
 
 import (
 	"encoding/binary"
-	"strings"
+	"fmt"
+	"regexp"
+	"strconv"
 
 	"gitlab.com/akita/akita"
-	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
-	"gitlab.com/akita/mem/device"
-	"gitlab.com/akita/util/ca"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -24,90 +23,23 @@ type MMU interface {
 	CanAccept() bool
 }
 
-type transactionState int
-
-const (
-	newTransaction transactionState = iota
-	sentToPageWalkCache
-	pageWalkCacheDone
-	batchMemReqs
-	sentToMem
-	sentWRToL1
-	memDone
-	sentRDToL1
-	l1Done
-	sentWRToLDS
-	sentRDToLDS
-	transactionFinished
-)
-
-type Transaction struct {
-	akita.MsgMeta
-
-	req               *device.TranslationReq
-	memReq            *mem.ReadReq
-	page              device.Page
-	level             int
-	msgID             string
-	state             transactionState
-	Address           uint64
-	PPN               uint64
-	vAddr             uint64
-	remoteMemAccesses int
-	pid               ca.PID
+type Transaction interface {
+	TaskID() string
+	Meta() *akita.MsgMeta
 }
 
-func (r *Transaction) TaskID() string {
-	return r.msgID
-}
+var l2Re = regexp.MustCompile(`L2_(\d+)`)
 
-func (r *Transaction) Meta() *akita.MsgMeta {
-	return &r.MsgMeta
-}
-
-func div(x, y float64) float64 {
-	if y == 0 {
-		return 0
+func GetL2SliceNum(s string) (int, error) {
+	m := l2Re.FindStringSubmatch(s)
+	if len(m) < 2 {
+		return 0, fmt.Errorf("not found")
 	}
-	return x / y
+	return strconv.Atoi(m[1])
 }
 
-func getAccessResultString(accessResult mem.AccessResult) (str string) {
-	switch accessResult {
-	case mem.ReadHit:
-		str = "read-hit"
-		// fmt.Println("read hit")
-	case mem.ReadMiss:
-		str = "read-miss"
-		// fmt.Println("read miss")
-	case mem.ReadMSHRHit:
-		str = "read-mshr-hit"
-		// fmt.Println("read mshr hit")
-	default:
-		panic("unknown access type")
-	}
-	return
-}
-
-func getChipletNum(component string) (chipletNum string) {
-	chipletNum = strings.Split(component, "_")[1][1:2]
-	return
-}
-
-func uint64ToBytes(data uint64) []byte {
+func Uint64ToBytes(data uint64) []byte {
 	bytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(bytes, data)
 	return bytes
-}
-
-func unique(intSlice []uint64) []uint64 {
-	keys := make(map[int]bool)
-	list := []uint64{}
-	for _, entry := range intSlice {
-		if _, value := keys[int(entry)]; !value {
-			keys[int(entry)] = true
-			list = append(list, entry)
-		}
-	}
-	return list
 }

@@ -157,7 +157,7 @@ func (b *Builder) Build(name string) *Cache {
 }
 
 func (b *Builder) buildMMUBuffer(c *Cache) {
-	c.mmuStorage = make(map[string]*mmu.Transaction)
+	c.mmuStorage = make(map[string]mmu.Transaction)
 
 	pipelineName := fmt.Sprintf("%s.MMUBank.Pipeline", c.Name())
 	postPipelineBuf := util.NewBuffer(b.numReqPerCycle)
