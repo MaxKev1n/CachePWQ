@@ -2,7 +2,9 @@ package dispatching
 
 import (
 	"fmt"
+	"os"
 
+	"github.com/tebeka/atexit"
 	"github.com/vbauerster/mpb/v4"
 	"github.com/vbauerster/mpb/v4/decor"
 	"gitlab.com/akita/akita"
@@ -15,7 +17,22 @@ import (
 var barGroup *mpb.Progress
 
 func init() {
-	barGroup = mpb.New()
+	fileName := "./progress.log"
+
+	file, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+	if err != nil {
+		panic(err)
+	}
+
+	barGroup = mpb.New(
+		mpb.WithOutput(file),
+	)
+
+	atexit.Register(
+		func() {
+			file.Close()
+		},
+	)
 }
 
 // A Dispatcher is a sub-component of a command processor that can dispatch

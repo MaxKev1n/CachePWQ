@@ -3,7 +3,10 @@ package cu
 import (
 	"log"
 	"math"
+	"sync/atomic"
+	"time"
 
+	"github.com/tebeka/atexit"
 	"gitlab.com/akita/mgpusim/emu"
 	"gitlab.com/akita/mgpusim/insts"
 	"gitlab.com/akita/mgpusim/timing/wavefront"
@@ -18,6 +21,10 @@ type ScratchpadPreparer interface {
 // ScratchpadPreparerImpl reads and write registers for the emulator
 type ScratchpadPreparerImpl struct {
 	cu *ComputeUnit
+
+	// --- Deadlock / inactivity watchdog ---
+	lastCommitUnix atomic.Int64
+	stopWatchdog   chan struct{}
 }
 
 // NewScratchpadPreparerImpl returns a newly created ScratchpadPreparerImpl,
@@ -25,7 +32,41 @@ type ScratchpadPreparerImpl struct {
 func NewScratchpadPreparerImpl(cu *ComputeUnit) *ScratchpadPreparerImpl {
 	p := new(ScratchpadPreparerImpl)
 	p.cu = cu
+
+	p.lastCommitUnix.Store(time.Now().Unix())
+
+	go p.commitWatchdog(2 * time.Hour)
+
 	return p
+}
+
+// commitWatchdog triggers attexit.Exit(1) if no Commit() call occurs in timeout.
+func (p *ScratchpadPreparerImpl) commitWatchdog(timeout time.Duration) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			last := time.Unix(p.lastCommitUnix.Load(), 0)
+			if time.Since(last) > timeout {
+				log.Printf("[Watchdog] No Commit() for %v seconds. Exiting.\n", timeout.Seconds())
+				atexit.Exit(1)
+			}
+		case <-p.stopWatchdog:
+			return
+		}
+	}
+}
+
+// StopWatchdog can be called if you want to stop it manually
+func (p *ScratchpadPreparerImpl) StopWatchdog() {
+	select {
+	case <-p.stopWatchdog:
+		// already closed
+	default:
+		close(p.stopWatchdog)
+	}
 }
 
 // Prepare read from the register file and sets the scratchpad layout
