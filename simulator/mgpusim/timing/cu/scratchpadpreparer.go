@@ -390,6 +390,8 @@ func (p *ScratchpadPreparerImpl) Commit(
 	default:
 		log.Panicf("Inst format %s is not supported", inst.Format.FormatName)
 	}
+
+	p.lastCommitUnix.Store(time.Now().Unix())
 }
 
 func (p *ScratchpadPreparerImpl) commitSOP1(
