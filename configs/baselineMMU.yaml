@@ -5,4 +5,4 @@
 MMU:
   type: "BaselineMMU"
 
-  numPageWalkers: 32
+  numPageWalkers: 64

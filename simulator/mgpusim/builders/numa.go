@@ -684,7 +684,7 @@ func (b *NUMAGPUBuilder) buildL3TLB(chiplet *Chiplet) {
 		WithFreq(b.freq).
 		WithNumWays(numWays).
 		WithNumSets(numSets).
-		WithNumMSHREntry(256).
+		WithNumMSHREntry(512).
 		WithNumReqPerCycle(8).
 		WithLog2PageSize(b.log2PageSize).
 		WithPageWalkCacheSize(2048).

@@ -19,7 +19,7 @@ func MakeNUMAPlatformBuilder() NUMAPlatformBuilder {
 			numGPU:                   1,
 			log2PageSize:             uint64(12),
 			numCUPerShaderArray:      uint64(4),
-			numShaderArrayPerChiplet: uint64(16),
+			numShaderArrayPerChiplet: uint64(32),
 			numMemoryBankPerChiplet:  uint64(64),
 			numChiplets:              uint64(1),
 			totalMem:                 16 * mem.GB,
