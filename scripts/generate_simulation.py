@@ -5,7 +5,6 @@ import argparse
 import datetime
 import shutil
 import sys
-from plot.benchmark import memory_overhead
 
 # ==========================================================
 # Configuration
@@ -14,7 +13,8 @@ from plot.benchmark import memory_overhead
 CachePWQ_PATH = "/Users/chenzihang/Develop/CachePWQ"
 MGPU_PATH = f"{CachePWQ_PATH}/simulator/mgpusim/"
 BENCH_PATH = os.path.join(MGPU_PATH, "samples")
-CONFIG = "monolithic"
+CONFIG = "numa"
+SIZE = "normal"  # normal or large
 
 BENCHMARKS = [
     "convolution2d",
@@ -28,7 +28,6 @@ BENCHMARKS = [
     "pagerank",
     "simpleconvolution",
     "shoc-reduction",
-    "spmv",
     "stencil2d",
     "syrk",
     "syr2k",
@@ -84,52 +83,10 @@ def compile_all():
 # Runner Script Generation Phase
 # ==========================================================
 
-
-def find_optimal_combination(memory_limit_mb):
-    tasks = list(memory_overhead.items())
-    n = len(tasks)
-
-    # 动态规划表
-    dp = [[0] * (memory_limit_mb + 1) for _ in range(n + 1)]
-    selected = [[False] * (memory_limit_mb + 1) for _ in range(n + 1)]
-
-    for i in range(1, n + 1):
-        task_name, task_memory = tasks[i - 1]
-        for j in range(memory_limit_mb + 1):
-            if task_memory <= j:
-                if dp[i - 1][j] < dp[i - 1][j - task_memory] + 1:
-                    dp[i][j] = dp[i - 1][j - task_memory] + 1
-                    selected[i][j] = True
-                else:
-                    dp[i][j] = dp[i - 1][j]
-                    selected[i][j] = False
-            else:
-                dp[i][j] = dp[i - 1][j]
-                selected[i][j] = False
-
-    result_tasks = []
-    remaining_memory = memory_limit_mb
-    for i in range(n, 0, -1):
-        if selected[i][remaining_memory]:
-            result_tasks.append(tasks[i - 1][0])
-            remaining_memory -= tasks[i - 1][1]
-
-    total_memory_used = memory_limit_mb - remaining_memory
-    memory_utilization = total_memory_used / memory_limit_mb
-
-    return result_tasks, total_memory_used, memory_utilization
-
-
-def generate_runners_on_desktop(yaml_path=None):
+def generate_runners_on_desktop(yaml_path=None, large_size=False):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     base_output_dir = os.path.join("../runs", timestamp)
     os.makedirs(base_output_dir, exist_ok=True)
-
-    tasks, total_mem, util = find_optimal_combination(48 * 1024)  # 48 GB
-
-    print(
-        f"[Info] Selected {len(tasks)} benchmarks with total memory {total_mem} MB (Utilization: {util*100:.2f}%)"
-    )
 
     for benchmark in BENCHMARKS:
         # --- Create benchmark-specific folder ---
@@ -162,160 +119,101 @@ def generate_runners_on_desktop(yaml_path=None):
                 "-report-all",
                 "-scheduling round-robin",
                 f"-platform-type {CONFIG}",
-                "-mem-allocator-type interleaved",
+                "-mem-allocator-type pta",
             ]
 
             # benchmark-specific parameters
-            if benchmark == "syrk":
-                cmd.append("-max-inst 10000000")
-            if benchmark == "syr2k":
-                cmd.append("-max-inst 30000000")
-            if benchmark == "convolution2d":
-                cmd.append("-ni=8192 -nj=8192")
-            if benchmark == "fastwalshtransform":
-                cmd.append("-length=8388608")
-            if benchmark == "jacobi1d":
-                cmd.append("-n=67108864 -steps=1")
-            if benchmark == "jacobi2d":
-                cmd.append("-n=4096 -steps=1")
-            if benchmark == "kmeans":
-                cmd.append("-points=524288 -features=32 -clusters=20 -max-iter=1")
-            if benchmark == "matrixtranspose":
-                cmd.append("-width=2048")
-            if benchmark == "mis":
-                cmd.append("-numNodes=524288 -numItems=1048576")
-            if benchmark == "pagerank":
-                cmd.append("-node=8192 -sparsity=0.5 -iterations=1")
-            if benchmark == "simpleconvolution":
-                cmd.append("-width=8190 -height=8190")
-            if benchmark == "shoc-reduction":
-                cmd.append("-Size=67108864 -Iterations=2")
-            if benchmark == "spmv":
-                cmd.append("-dim=2097152 -sparsity=0.00001")
-            if benchmark == "stencil2d":
-                cmd.append("-row=2048 -col=2048")
-            if benchmark == "syrk":
-                cmd.append("-ni=2048 -nj=2048")
-            if benchmark == "syr2k":
-                cmd.append("-ni=1024 -nj=1024")
+            if large_size:
+                if benchmark == "atax":
+                    cmd.append("-x=8192 -y=8192 ")  # 128 MB
+                if benchmark == "bicg":
+                    cmd.append("-x=8192 -y=8192 ")  # 256 MB
+                if benchmark == "convolution2d":
+                    cmd.append("-ni=16384 -nj=16384 ")  # 2048 MB
+                if benchmark == "fastwalshtransform":
+                    cmd.append("-length=67108864 ")  # 256 MB
+                if benchmark == "jacobi1d":  # 2048 MB
+                    cmd.append("-n=268435456 -steps=1")
+                if benchmark == "jacobi2d":  # 2048 MB
+                    cmd.append("-n=16384 -steps=1")
+                if benchmark == "kmeans":  # 1024 MB
+                    cmd.append(
+                        "-points=4194304 -features=32 -clusters=20 -max-iter=1 "
+                    )
+                if benchmark == "matrixtranspose":  # 512 MB
+                    cmd.append("-width=8192 ")
+                if benchmark == "mis":  # 32 MB
+                    cmd.append("-numNodes=1048576 -numItems=2097152 ")
+                if benchmark == "pagerank":  # 1024 MB
+                    cmd.append("-node=16384 -sparsity=0.5 -iterations=1 ")
+                if benchmark == "simpleconvolution":  # 2048 MB
+                    cmd.append("-width=16382 -height=16382 ")
+                if benchmark == "shoc-reduction":  # 2048 MB
+                    cmd.append("-Size=268435456 -Iterations=2 ")
+                if benchmark == "spmv":  # 1390 MB
+                    cmd.append("-dim=2097152 -sparsity=0.00001 ")
+                if benchmark == "stencil2d":  # 512 MB
+                    cmd.append("-row=8192 -col=8192 ")
+                if benchmark == "syrk":  # 512 MB
+                    cmd.append("-ni=8192 -nj=8192 ")
+                if benchmark == "syr2k":  # 192 MB
+                    cmd.append("-ni=4096 -nj=4096 ")
 
-            # optional yaml config
-            if yaml_path:
-                cmd.append(f"-yaml-config-file {yaml_path}")
-
-            if CONFIG == "monolithic":
-                cmd.append(
-                    f"-booksim-config-file {CachePWQ_PATH}/simulator/noc/networking/booksim/native/config_monolithic.icnt "
-                )
-            elif CONFIG == "SMSide":
-                cmd.append(
-                    f"-booksim-config-file {CachePWQ_PATH}/simulator/noc/networking/booksim/native/config_smside.icnt "
-                )
-
-            f.write(" ".join(cmd) + "\n")
-            f.write(f'echo "[Done] {benchmark} finished."\n')
-
-        os.chmod(file_path, 0o755)
-
-    print(f"[OK] Generated run scripts and moved binaries to {base_output_dir}")
-
-    return base_output_dir
-
-def generate_runners(yaml_path=None, eda_mode=False):
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    base_output_dir = os.path.join("../runs", timestamp)
-    os.makedirs(base_output_dir, exist_ok=True)
-
-    for benchmark in BENCHMARKS:
-        # --- Create benchmark-specific folder ---
-        bench_dir = os.path.join(base_output_dir, benchmark)
-        os.makedirs(bench_dir, exist_ok=True)
-
-        # --- Move compiled binary ---
-        src_bin = os.path.join(BENCH_PATH, benchmark, benchmark)
-        dst_bin = os.path.join(bench_dir, benchmark)
-        if os.path.exists(src_bin):
-            shutil.move(src_bin, dst_bin)
-        else:
-            print(f"[WARN] No binary found for {benchmark}")
-
-        # --- Generate runner script ---
-        file_path = os.path.join(bench_dir, f"{benchmark}.sh")
-        with open(file_path, "w") as f:
-            if eda_mode:
-                # EDA (bsub) header
-                f.write("#!/bin/sh\n")
-                f.write("#BSUB -q bmcpu\n")
-                f.write(f"#BSUB -J {CONFIG}_{benchmark}\n")
-                f.write("#BSUB -n 1\n")
-                f.write(f"#BSUB -o {CONFIG}_{benchmark}.out\n")
-                f.write(f"#BSUB -e {CONFIG}_{benchmark}.err\n")
-                f.write("set -e\n")
             else:
-                # Normal local execution
-                f.write("#!/bin/bash\n")
-                f.write("set -e\n")
+                if benchmark == "atax":
+                    cmd.append("-x=4096 -y=4096 ")  # 64 MB
+                if benchmark == "bicg":
+                   cmd.append("-x=4096 -y=4096 ")  # 64 MB
+                if benchmark == "convolution2d":
+                    cmd.append("-ni=8192 -nj=8192 ")
+                if benchmark == "fastwalshtransform":
+                    cmd.append("-length=8388608 ")
+                if benchmark == "jacobi1d":
+                    cmd.append("-n=67108864 -steps=1 ")
+                if benchmark == "jacobi2d":
+                    cmd.append("-n=4096 -steps=1 ")
+                if benchmark == "kmeans":
+                    cmd.append("-points=524288 -features=32 -clusters=20 -max-iter=1 ")
+                if benchmark == "matrixtranspose":
+                    cmd.append("-width=2048 ")
+                if benchmark == "mis":
+                    cmd.append("-numNodes=524288 -numItems=1048576 ")
+                if benchmark == "pagerank":
+                    cmd.append("-node=8192 -sparsity=0.5 -iterations=1 ")
+                if benchmark == "simpleconvolution":
+                    cmd.append("-width=8190 -height=8190 ")
+                if benchmark == "shoc-reduction":
+                    cmd.append("-Size=67108864 -Iterations=2 ")
+                if benchmark == "spmv":
+                    cmd.append("-dim=2097152 -sparsity=0.00001 ")
+                if benchmark == "stencil2d":
+                    cmd.append("-row=2048 -col=2048 ")
+                if benchmark == "syrk":
+                    cmd.append("-ni=2048 -nj=2048 ")
+                if benchmark == "syr2k":
+                    cmd.append("-ni=1024 -nj=1024 ")
 
-            f.write(
-                "export LD_LIBRARY_PATH=/hpc/home/connect.zchen097/CachePWQ/simulator/noc/networking/booksim/native:$LD_LIBRARY_PATH\n"
-            )
-
-            cmd = [
-                f"./{benchmark}",
-                "-timing",
-                "-no-progress-bar",
-                "-report-all",
-                "-scheduling round-robin",
-                f"-platform-type {CONFIG}",
-                "-mem-allocator-type interleaved",
-            ]
-
-            # benchmark-specific parameters
             if benchmark == "syrk":
-                cmd.append("-max-inst 10000000")
+                cmd.append("-max-inst 10000000 ")
             if benchmark == "syr2k":
-                cmd.append("-max-inst 30000000")
-            if benchmark == "convolution2d":
-                cmd.append("-ni=8192 -nj=8192")
-            if benchmark == "fastwalshtransform":
-                cmd.append("-length=8388608")
-            if benchmark == "jacobi1d":
-                cmd.append("-n=67108864 -steps=1")
-            if benchmark == "jacobi2d":
-                cmd.append("-n=4096 -steps=1")
-            if benchmark == "kmeans":
-                cmd.append("-points=524288 -features=32 -clusters=20 -max-iter=1")
-            if benchmark == "matrixtranspose":
-                cmd.append("-width=2048")
-            if benchmark == "mis":
-                cmd.append("-numNodes=524288 -numItems=1048576")
-            if benchmark == "pagerank":
-                cmd.append("-node=8192 -sparsity=0.5 -iterations=1")
-            if benchmark == "simpleconvolution":
-                cmd.append("-width=8190 -height=8190")
-            if benchmark == "shoc-reduction":
-                cmd.append("-Size=67108864 -Iterations=2")
-            if benchmark == "spmv":
-                cmd.append("-dim=2097152 -sparsity=0.00001")
-            if benchmark == "stencil2d":
-                cmd.append("-row=2048 -col=2048")
-            if benchmark == "syrk":
-                cmd.append("-ni=2048 -nj=2048")
-            if benchmark == "syr2k":
-                cmd.append("-ni=1024 -nj=1024")
+                cmd.append("-max-inst 30000000 ")
+
 
             # optional yaml config
             if yaml_path:
                 cmd.append(f"-yaml-config-file {yaml_path}")
 
-            if CONFIG == "monolithic":
+            if CONFIG == "numa":
                 cmd.append(
-                    "-booksim-config-file /hpc/home/connect.zchen097/CachePWQ/simulator/noc/networking/booksim/native/config_monolithic.icnt "
+                    f"-global-noc-config-file {CachePWQ_PATH}/simulator/noc/networking/booksim/native/config_numa.icnt "
                 )
-            elif CONFIG == "SMSide":
                 cmd.append(
-                    "-booksim-config-file /hpc/home/connect.zchen097/CachePWQ/simulator/noc/networking/booksim/native/config_smside.icnt "
+                    f"-booksim-dir {CachePWQ_PATH}/simulator/noc/networking/booksim/native/ "
                 )
+                cmd.append("-tlb-monitor ")
+                cmd.append("-cache-utilization ")
+            else:
+                assert 0, "Unsupported CONFIG for desktop mode"
 
             f.write(" ".join(cmd) + "\n")
             f.write(f'echo "[Done] {benchmark} finished."\n')
@@ -326,7 +224,7 @@ def generate_runners(yaml_path=None, eda_mode=False):
 
     return base_output_dir
 
-def log_run_info(base_dir):
+def log_run_info(base_dir, yaml_path):
     """Record commit id, datetime, and executed command to a log file."""
     log_path = os.path.join(base_dir, "run_summary.log")
 
@@ -376,6 +274,25 @@ def log_run_info(base_dir):
         f.write("\n")
     print(f"[INFO] Run info written to {log_path}")
 
+    with open(log_path, "a") as f:
+        f.write("==== Configurations ====\n")
+
+        if yaml_path and os.path.exists(yaml_path):
+            f.write(f"Source YAML File: {yaml_path}\n")
+            f.write("-" * 10 + " YAML CONTENT " + "-" * 10 + "\n")
+            try:
+                with open(yaml_path, 'r') as yaml_file:
+                    f.write(yaml_file.read())
+            except Exception as e:
+                f.write(f"Error reading YAML file: {e}\n")
+            f.write("\n" + "-" * 30 + "\n")
+        else:
+            f.write("YAML Config: None (Using default parameters)\n")
+        
+        f.write("\n")
+    print(f"[INFO] Configurations info written to {log_path}")   
+        
+
 # ==========================================================
 # Main Entry
 # ==========================================================
@@ -393,15 +310,16 @@ def main():
     )
     args = parser.parse_args()
 
-    #compile_all()
-    base_output_dir = ""
+    compile_all()
+
+    out_dir = ""
 
     if args.eda:
-        base_output_dir = generate_runners(yaml_path=args.use_yaml, eda_mode=args.eda)
+        assert False, "not support EDA mode."
     else:
-        base_output_dir = generate_runners_on_desktop(yaml_path=args.use_yaml)
+        out_dir = generate_runners_on_desktop(yaml_path=args.use_yaml)
 
-    log_run_info(base_output_dir)
+    log_run_info(out_dir, args.use_yaml)
 
 
 if __name__ == "__main__":
