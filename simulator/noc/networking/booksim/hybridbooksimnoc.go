@@ -2,20 +2,94 @@ package noc
 
 import "C"
 import (
+	"container/list"
 	"fmt"
 	"log"
 	"reflect"
+	"strconv"
+	"strings"
 	"sync"
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/util"
-	"gitlab.com/akita/util/pipelining"
 	"gitlab.com/akita/util/tracing"
 )
 
 type BookSimPipelineItem struct {
-	taskID string
-	msg    akita.Msg
+	taskID     string
+	msg        akita.Msg
+	leftCycles uint64
+}
+
+var latencyMatrix [][]uint64
+
+func init() {
+	latencyMatrix = [][]uint64{
+		{50, 60, 70, 80, 150, 160, 170, 180},
+		{60, 70, 80, 50, 160, 170, 180, 150},
+		{70, 80, 50, 60, 170, 180, 150, 160},
+		{80, 50, 60, 70, 180, 150, 160, 170},
+		{150, 160, 170, 180, 50, 60, 70, 80},
+		{160, 170, 180, 150, 60, 70, 80, 50},
+		{170, 180, 150, 160, 70, 80, 50, 60},
+		{180, 150, 160, 170, 80, 50, 60, 70},
+	}
+}
+
+func GetNUMALatency(
+	srcPortName string,
+	dstPortName string,
+) uint64 {
+	if !strings.Contains(srcPortName, "GPC") &&
+		!strings.Contains(srcPortName, "MP") {
+		return 50
+	}
+
+	if !strings.Contains(dstPortName, "GPC") &&
+		!strings.Contains(dstPortName, "MP") {
+		return 50
+	}
+
+	var gpcID, mpID, l2ID int
+	// identify GPC or MP ID from port name
+	if strings.Contains(dstPortName, "MP") {
+		gpcID = extractGPCID(srcPortName)
+		mpID = extractMPID(dstPortName)
+		l2ID = extractL2ID(dstPortName)
+	} else {
+		mpID = extractMPID(srcPortName)
+		l2ID = extractL2ID(srcPortName)
+		gpcID = extractGPCID(dstPortName)
+	}
+
+	return latencyMatrix[gpcID][mpID] + uint64(l2ID)*2
+}
+
+func extractGPCID(portName string) int {
+	id, err := strconv.Atoi(strings.Split(portName, ".")[2][4:6])
+	if err != nil {
+		panic(fmt.Sprintf("failed to extract GPC ID from port name %s: %v", portName, err))
+	}
+
+	return id
+}
+
+func extractMPID(portName string) int {
+	id, err := strconv.Atoi(strings.Split(portName, ".")[2][3:5])
+	if err != nil {
+		panic(fmt.Sprintf("failed to extract MP ID from port name %s: %v", portName, err))
+	}
+
+	return id
+}
+
+func extractL2ID(portName string) int {
+	id, err := strconv.Atoi(strings.Split(portName, ".")[3][3:5])
+	if err != nil {
+		panic(fmt.Sprintf("failed to extract L2 ID from port name %s: %v", portName, err))
+	}
+
+	return id
 }
 
 func (t BookSimPipelineItem) TaskID() string {
@@ -27,12 +101,10 @@ type BookSimEndPoint struct {
 	nocPort akita.Port
 	outPort akita.Port
 
-	inPipeline         pipelining.Pipeline
-	inLookupBuffer     util.Buffer
-	outPipeline        pipelining.Pipeline
-	outLookupBuffer    util.Buffer
-	remotePipeline     pipelining.Pipeline
-	remoteLookupBuffer util.Buffer
+	inList          *list.List
+	outList         *list.List
+	inLookupBuffer  util.Buffer
+	outLookupBuffer util.Buffer
 
 	numPhysicalPorts int
 
@@ -42,8 +114,6 @@ type BookSimEndPoint struct {
 	noc *HybridBookSimNoC
 
 	subNetworkID int
-
-	uniform bool
 }
 
 func NewBookSimEndPoint(
@@ -66,28 +136,13 @@ func NewBookSimEndPoint(
 	}
 
 	ep.inLookupBuffer = util.NewBuffer(2 * ep.numPhysicalPorts)
-	ep.inPipeline = pipelining.MakeBuilder().
-		WithPipelineWidth(ep.numPhysicalPorts).
-		WithNumStage(50).
-		WithCyclePerStage(1).
-		WithPostPipelineBuffer(ep.inLookupBuffer).
-		Build(fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nodeID) + "_in_pipeline")
-
 	ep.outLookupBuffer = util.NewBuffer(2 * ep.numPhysicalPorts)
-	ep.outPipeline = pipelining.MakeBuilder().
-		WithPipelineWidth(ep.numPhysicalPorts).
-		WithNumStage(50).
-		WithCyclePerStage(1).
-		WithPostPipelineBuffer(ep.outLookupBuffer).
-		Build(fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nodeID) + "_out_pipeline")
 
-	ep.remoteLookupBuffer = util.NewBuffer(2 * ep.numPhysicalPorts)
-	ep.remotePipeline = pipelining.MakeBuilder().
-		WithPipelineWidth(ep.numPhysicalPorts).
-		WithNumStage(200).
-		WithCyclePerStage(1).
-		WithPostPipelineBuffer(ep.remoteLookupBuffer).
-		Build(fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nodeID) + "_remote_pipeline")
+	ep.inList = list.New()
+	ep.inList.Init()
+
+	ep.outList = list.New()
+	ep.outList.Init()
 
 	return ep
 }
@@ -97,91 +152,26 @@ func (e *BookSimEndPoint) setSubNetworkID(id int) {
 }
 
 func (e *BookSimEndPoint) Run(now akita.VTimeInSec) bool {
-	madeProgess := false
+	madeProgress := false
 
-	madeProgess = e.parseFromRemote(now) || madeProgess
-	madeProgess = e.remotePipeline.Tick(now) || madeProgess
-	madeProgess = e.parseFromDevice(now) || madeProgess
-	madeProgess = e.inPipeline.Tick(now) || madeProgess
-	madeProgess = e.parseFromNoC(now) || madeProgess
-	madeProgess = e.outPipeline.Tick(now) || madeProgess
-
-	return madeProgess
-}
-
-func (e *BookSimEndPoint) parseFromDevice(now akita.VTimeInSec) bool {
-	madeProgess := false
-
-	for {
-		item := e.nocPort.Peek()
-		if item == nil {
-			return madeProgess
-		}
-
-		tracing.TraceReqInitiate(
-			item,
-			now,
-			e.noc,
-			tracing.MsgIDAtReceiver(item, e.noc),
-		)
-
-		pipeline := e.inPipeline
-		if e.distributeToRemote(item) {
-			pipeline = e.remotePipeline
-		}
-
-		if !pipeline.CanAccept() {
-			return madeProgess
-		}
-
-		pipelineItem := BookSimPipelineItem{
-			taskID: akita.GetIDGenerator().Generate(),
-			msg:    item,
-		}
-		pipeline.Accept(now, pipelineItem)
-
-		e.nocPort.Retrieve(now)
-		madeProgess = true
-	}
-}
-
-func (e *BookSimEndPoint) distributeToRemote(m akita.Msg) bool {
-	ep := e.noc.Route(m)
-
-	if ep.uniform || e.uniform {
-		return false
+	for i := 0; i < e.numPhysicalPorts; i++ {
+		madeProgress = e.parseFromDevice(now) || madeProgress
 	}
 
-	return ep.subNetworkID != e.subNetworkID
-}
+	madeProgress = e.TickList(e.inList) || madeProgress
+	madeProgress = e.parseFromNoC(now) || madeProgress
+	madeProgress = e.TickList(e.outList) || madeProgress
 
-func (e *BookSimEndPoint) parseFromRemote(now akita.VTimeInSec) bool {
-	madeProgess := false
-
-	for {
-		item := e.remoteLookupBuffer.Peek()
-		if item == nil {
-			return madeProgess
-		}
-
-		if !e.inPipeline.CanAccept() {
-			return madeProgess
-		}
-
-		e.inPipeline.Accept(now, item.(BookSimPipelineItem))
-
-		e.remoteLookupBuffer.Pop()
-		madeProgess = true
-	}
+	return madeProgress
 }
 
 func (e *BookSimEndPoint) parseFromNoC(now akita.VTimeInSec) bool {
-	madeProgess := false
+	madeProgress := false
 
 	for {
 		item := e.outLookupBuffer.Peek()
 		if item == nil {
-			return madeProgess
+			return madeProgress
 		}
 
 		msg := item.(BookSimPipelineItem).msg
@@ -190,14 +180,88 @@ func (e *BookSimEndPoint) parseFromNoC(now akita.VTimeInSec) bool {
 
 		err := e.nocPort.Send(msg)
 		if err != nil {
-			return madeProgess
+			return madeProgress
 		}
 
 		tracing.TraceReqFinalize(msg, now, e.noc)
 
 		e.outLookupBuffer.Pop()
-		madeProgess = true
+		madeProgress = true
 	}
+}
+
+func (e *BookSimEndPoint) TickList(
+	processList *list.List,
+) bool {
+	if processList.Len() == 0 {
+		return false
+	}
+
+	madeProgress := false
+
+	for elem := processList.Front(); elem != nil; {
+		next := elem.Next()
+
+		item := elem.Value.(BookSimPipelineItem)
+		if item.leftCycles > 0 {
+			item.leftCycles--
+			elem.Value = item
+
+			madeProgress = true
+		} else {
+			if processList == e.inList {
+				if e.inLookupBuffer.CanPush() {
+					e.inLookupBuffer.Push(item)
+
+					processList.Remove(elem)
+				}
+			} else {
+				if e.outLookupBuffer.CanPush() {
+					e.outLookupBuffer.Push(item)
+
+					processList.Remove(elem)
+				}
+			}
+
+			madeProgress = true
+		}
+
+		elem = next
+	}
+
+	return madeProgress
+}
+
+func (e *BookSimEndPoint) parseFromDevice(now akita.VTimeInSec) bool {
+	item := e.nocPort.Peek()
+	if item == nil {
+		return false
+	}
+
+	if e.inList.Len() >= e.numPhysicalPorts*50 {
+		return false
+	}
+
+	tracing.TraceReqInitiate(
+		item,
+		now,
+		e.noc,
+		tracing.MsgIDAtReceiver(item, e.noc),
+	)
+
+	pipelineItem := BookSimPipelineItem{
+		taskID: akita.GetIDGenerator().Generate(),
+		msg:    item,
+		leftCycles: GetNUMALatency(
+			item.Meta().Src.Name(),
+			item.Meta().Dst.Name(),
+		),
+	}
+	e.inList.PushBack(pipelineItem)
+
+	e.nocPort.Retrieve(now)
+
+	return true
 }
 
 func (e *BookSimEndPoint) GetSrcNodeID() int {
@@ -360,8 +424,6 @@ func (NoC *HybridBookSimNoC) PlugInSMSideMultiPort(
 	}
 	NoC.port2EndPoint[p] = ep
 
-	ep.uniform = true
-
 	return ep.nocPort
 }
 
@@ -450,8 +512,6 @@ func (NoC *HybridBookSimNoC) PlugInMemSideMultiPort(
 		panic("HybridBookSimNoC: duplicate port mapping")
 	}
 	NoC.port2EndPoint[p] = ep
-
-	ep.uniform = true
 
 	return ep.nocPort
 }
@@ -591,6 +651,8 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 
 	// Ejection phase
 	for _, ep := range NoC.endpoints {
+		remaining := ep.numPhysicalPorts
+
 		for p := 0; p < ep.numPhysicalPorts; p++ {
 			node := ep.GetSrcNodeID()
 
@@ -605,15 +667,25 @@ func (NoC *HybridBookSimNoC) Tick(now akita.VTimeInSec) bool {
 					panic("HybridBookSimNoC: unknown packet ID")
 				}
 
-				if !ep.outPipeline.CanAccept() {
+				if remaining <= 0 {
+					break
+				}
+
+				if ep.outList.Len() >= ep.numPhysicalPorts*50 {
 					break
 				}
 
 				pipelineItem := BookSimPipelineItem{
 					taskID: akita.GetIDGenerator().Generate(),
 					msg:    msg,
+					leftCycles: GetNUMALatency(
+						msg.Meta().Src.Name(),
+						msg.Meta().Dst.Name(),
+					),
 				}
-				ep.outPipeline.Accept(now, pipelineItem)
+				ep.outList.PushBack(pipelineItem)
+
+				remaining -= 1
 
 				NoC.wrapper.Pop(node)
 

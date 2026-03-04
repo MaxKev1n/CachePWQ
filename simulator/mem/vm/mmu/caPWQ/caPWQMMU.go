@@ -3,7 +3,6 @@ package caPWQ
 import (
 	"encoding/binary"
 	"fmt"
-	"log"
 	"reflect"
 	"strconv"
 
@@ -335,12 +334,9 @@ func (walker *CaPWQPageWalker) sendToMem(now akita.VTimeInSec) {
 
 	walker.transaction = nil
 
-	l2SliceID, fail := mmu.GetL2SliceNum(dstPort.Name())
-	if fail != nil {
-		log.Panicf("cannot get l2 slice num from port name %s", dstPort.Name())
-	}
+	partitionID := mmu.ExtractMPID(dstPort.Name())
 
-	if l2SliceID < 32 {
+	if partitionID < 4 {
 		tracing.AddTaskStep(readReq.ID,
 			now, walker.mmu, "page_walk_req_left")
 	} else {

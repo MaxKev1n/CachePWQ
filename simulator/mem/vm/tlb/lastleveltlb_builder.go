@@ -1,6 +1,7 @@
 package tlb
 
 import (
+	"fmt"
 	"math"
 
 	"gitlab.com/akita/akita"
@@ -153,7 +154,9 @@ func (b LastLevelTLBBuilder) Build(name string) TLB {
 		WithLog2PageSize(b.log2PageSize).
 		WithBitsPerLevel(9).
 		WithByteSize(b.pageWalkCacheSize)
-	pageWalkCache := pageWalkCacheBuilder.Build("PageWalkCache")
+	pageWalkCache := pageWalkCacheBuilder.Build(
+		fmt.Sprintf("%s.PageWalkCache", name),
+	)
 	tlb.PageWalkCache = pageWalkCache.TopPort
 	tlb.PWCWritePort = pageWalkCache.ToMMUs
 	tlb.ToPageWalkCache = akita.NewLimitNumMsgPort(tlb, 4096, name+".ToPageWalkCache")

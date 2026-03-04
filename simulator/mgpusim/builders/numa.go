@@ -136,6 +136,46 @@ func (b *NUMAGPUBuilder) connectCP() {
 	b.connectCPWithTLBs()
 }
 
+// BuildSAs builds shader arrays.
+func (b *NUMAGPUBuilder) BuildSAs(chiplet *Chiplet) {
+	saBuilder := makeShaderArrayBuilder()
+	saBuilder.withEngine(b.engine)
+	saBuilder.withFreq(b.freq)
+	saBuilder.withGPUID(b.gpu.GPUID)
+	saBuilder.withLog2CachelineSize(b.log2CacheLineSize)
+	saBuilder.withLog2PageSize(b.log2PageSize)
+	saBuilder.withNumCU(b.numCUPerShaderArray)
+	saBuilder.withPageTable(b.pageTable)
+
+	if b.enableVisTracing {
+		saBuilder.withVisTracer(b.visTracer)
+	}
+
+	if b.enableTLBTracing {
+		saBuilder.withTLBTracer(b.tlbTracer)
+	}
+
+	maxCUsPerGPC := 16
+	if b.numShaderArrayPerChiplet%maxCUsPerGPC != 0 {
+		panic("numShaderArrayPerChiplet should be divisible by maxCUsPerGPC")
+	}
+
+	maxSAsPerGPC := maxCUsPerGPC / b.numCUPerShaderArray
+	for i := 0; i < b.numShaderArrayPerChiplet; i++ {
+		gpcID := i / maxSAsPerGPC
+		innerSAID := i % maxSAsPerGPC
+
+		saName := fmt.Sprintf(
+			"%s.GPC_%02d.SA_%02d",
+			chiplet.name,
+			gpcID,
+			innerSAID,
+		)
+		sa := saBuilder.Build(saName, i)
+		b.collectSAComponents(sa, chiplet)
+	}
+}
+
 func (b *NUMAGPUBuilder) createGlobalNoC(chiplet *Chiplet) {
 	chiplet.GlobalNoC = noc.NewHybridBookSimNoC(
 		fmt.Sprintf("HybridGlobalNoC[%d]", chiplet.ChipletID),
@@ -569,8 +609,21 @@ func (b *NUMAGPUBuilder) buildMemBanks(chiplet *Chiplet) {
 		WithPipelineLatency(80).
 		WithNumBanks(1)
 
+	maxSlicesPerPartition := 8
+	if b.numMemoryBankPerChiplet%maxSlicesPerPartition != 0 {
+		panic("numMemoryBankPerChiplet should be divisible by maxSlicesPerPartition")
+	}
+
 	for i := 0; i < b.numMemoryBankPerChiplet; i++ {
-		dramName := fmt.Sprintf("%s.DRAM_%d", chiplet.name, i)
+		partitionID := i / maxSlicesPerPartition
+		innerID := i % maxSlicesPerPartition
+
+		dramName := fmt.Sprintf(
+			"%s.MP_%02d.DRAM_%d",
+			chiplet.name,
+			partitionID,
+			innerID,
+		)
 		dram := idealmemcontroller.New(
 			dramName, b.engine, 512*mem.MB)
 		addrConverter := idealmemcontroller.InterleavingConverter{
@@ -591,7 +644,12 @@ func (b *NUMAGPUBuilder) buildMemBanks(chiplet *Chiplet) {
 			tracing.CollectTrace(dram, b.visTracer)
 		}
 
-		cacheName := fmt.Sprintf("%s.L2_%d", chiplet.name, i)
+		cacheName := fmt.Sprintf(
+			"%s.MP_%02d.L2_%02d",
+			chiplet.name,
+			partitionID,
+			innerID,
+		)
 		l2 := l2Builder.Build(cacheName)
 		b.l2Caches = append(b.l2Caches, l2)
 		b.gpu.L2Caches = append(b.gpu.L2Caches, l2)
@@ -753,7 +811,7 @@ func (b *NUMAGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
 			WithLog2PageSize(b.log2PageSize).
 			WithPageTable(b.pageTable).
 			WithMaxNumReqInFlight(maxNumReqInFlight / numGPCs).
-			Build(fmt.Sprintf("%s.BaselineMMU_%02d", chiplet.name, i))
+			Build(fmt.Sprintf("%s.GPC_%02d.BaselineMMU", chiplet.name, i))
 
 		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
 
@@ -794,7 +852,7 @@ func (b *NUMAGPUBuilder) buildMPWMMU(chiplet *Chiplet) {
 			WithLog2PageSize(b.log2PageSize).
 			WithPageTable(b.pageTable).
 			WithMaxNumReqInFlight(maxNumReqInFlight / numGPCs).
-			Build(fmt.Sprintf("%s.MPWMMU_%02d", chiplet.name, i))
+			Build(fmt.Sprintf("%s.GPC_%02d.MPWMMU", chiplet.name, i))
 
 		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
 
@@ -846,7 +904,7 @@ func (b *NUMAGPUBuilder) buildIdealMMU(chiplet *Chiplet) {
 			WithPageTable(b.pageTable).
 			WithLatency(pageWalkLatency).
 			WithMaxActiveTransactions(uint64(maxActiveWalkers / numGPCs)).
-			Build(fmt.Sprintf("%s.IdealMMU_%02d", chiplet.name, i))
+			Build(fmt.Sprintf("%s.GPC_%02d.IdealMMU", chiplet.name, i))
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
@@ -883,7 +941,7 @@ func (b *NUMAGPUBuilder) buildCaPWQMMU(chiplet *Chiplet) {
 			WithLog2PageSize(b.log2PageSize).
 			WithPageTable(b.pageTable).
 			WithMaxNumReqInFlight(maxNumReqInFlight / numGPCs).
-			Build(fmt.Sprintf("%s.CaPWQMMU_%02d", chiplet.name, i))
+			Build(fmt.Sprintf("%s.GPC_%02d.CaPWQMMU", chiplet.name, i))
 
 		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
 
@@ -927,7 +985,7 @@ func (b *NUMAGPUBuilder) buildAsyncCaPWQMMU(chiplet *Chiplet) {
 			WithLog2PageSize(b.log2PageSize).
 			WithPageTable(b.pageTable).
 			WithMaxNumReqInFlight(maxNumReqInFlight / numGPCs).
-			Build(fmt.Sprintf("%s.AsyncCaPWQMMU_%02d", chiplet.name, i))
+			Build(fmt.Sprintf("%s.GPC_%02d.AsyncCaPWQMMU", chiplet.name, i))
 
 		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
 

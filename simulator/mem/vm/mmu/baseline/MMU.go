@@ -181,12 +181,9 @@ func (impl *MMUImpl) sendToMem(now akita.VTimeInSec, trans *transactionImpl) {
 	trans.msgID = readReq.ID
 	trans.state = sentToMem
 
-	l2SliceID, fail := mmu.GetL2SliceNum(dstPort.Name())
-	if fail != nil {
-		log.Panicf("cannot get l2 slice num from port name %s", dstPort.Name())
-	}
+	partitionID := mmu.ExtractMPID(dstPort.Name())
 
-	if l2SliceID < 32 {
+	if partitionID < 4 {
 		tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, impl),
 			now, impl, "page_walk_req_left")
 	} else {

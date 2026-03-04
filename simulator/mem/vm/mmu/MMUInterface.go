@@ -3,8 +3,8 @@ package mmu
 import (
 	"encoding/binary"
 	"fmt"
-	"regexp"
 	"strconv"
+	"strings"
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem/cache"
@@ -28,14 +28,13 @@ type Transaction interface {
 	Meta() *akita.MsgMeta
 }
 
-var l2Re = regexp.MustCompile(`L2_(\d+)`)
-
-func GetL2SliceNum(s string) (int, error) {
-	m := l2Re.FindStringSubmatch(s)
-	if len(m) < 2 {
-		return 0, fmt.Errorf("not found")
+func ExtractMPID(portName string) int {
+	id, err := strconv.Atoi(strings.Split(portName, ".")[2][3:5])
+	if err != nil {
+		panic(fmt.Sprintf("failed to extract MP ID from port name %s: %v", portName, err))
 	}
-	return strconv.Atoi(m[1])
+
+	return id
 }
 
 func Uint64ToBytes(data uint64) []byte {
