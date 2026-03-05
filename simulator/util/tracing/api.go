@@ -75,6 +75,32 @@ func AddTaskStep(
 }
 
 // AddTaskStep marks that a milestone has been reached when processing a task.
+func AddTaskStepWithKind(
+	id string,
+	now akita.VTimeInSec,
+	domain NamedHookable,
+	kind string,
+	what string,
+) {
+	step := TaskStep{
+		Time: now,
+		What: what,
+	}
+	task := Task{
+		ID:    id,
+		Kind:  kind,
+		Steps: []TaskStep{step},
+	}
+	ctx := akita.HookCtx{
+		Now:    now,
+		Domain: domain,
+		Item:   task,
+		Pos:    HookPosTaskStep,
+	}
+	domain.InvokeHook(ctx)
+}
+
+// AddTaskStep marks that a milestone has been reached when processing a task.
 func AddTaskDetailedStep(
 	id string,
 	now akita.VTimeInSec,

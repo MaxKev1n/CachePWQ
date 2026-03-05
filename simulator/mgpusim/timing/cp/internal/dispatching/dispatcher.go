@@ -218,6 +218,13 @@ func (d *DispatcherImpl) completeKernel(now akita.VTimeInSec) (
 		d.dispatching = nil
 
 		tracing.TraceReqComplete(req, now, d.cp)
+		tracing.AddTaskStepWithKind(
+			req.Meta().ID,
+			now,
+			d.cp,
+			"cache_utilization",
+			"end",
+		)
 
 		return true
 	}

@@ -10,6 +10,8 @@ type CacheUtilizationTracer struct {
 	filter    tracing.TaskFilter
 	lock      sync.Mutex
 	stepCount map[string]float64
+
+	running bool
 }
 
 func NewCacheUtilizationTracer(filter tracing.TaskFilter) *CacheUtilizationTracer {
@@ -37,6 +39,11 @@ func (t *CacheUtilizationTracer) StartTask(task tracing.Task) {
 	if !t.filter(task) {
 		return
 	}
+
+	if !t.running {
+		return
+	}
+
 	t.lock.Lock()
 	value, ok := task.Detail.(float64)
 	if !ok {
@@ -49,7 +56,22 @@ func (t *CacheUtilizationTracer) StartTask(task tracing.Task) {
 
 // StepTask does nothing
 func (t *CacheUtilizationTracer) StepTask(task tracing.Task) {
-	// Do nothing
+	if !t.filter(task) {
+		return
+	}
+
+	t.lock.Lock()
+
+	what := task.Steps[0].What
+	if what == "start" {
+		t.running = true
+	}
+
+	if what == "end" {
+		t.running = false
+	}
+
+	t.lock.Unlock()
 }
 
 // EndTask records the end of the task

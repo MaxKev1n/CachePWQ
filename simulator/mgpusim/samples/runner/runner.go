@@ -2434,6 +2434,8 @@ func (r *Runner) addCacheUtilizationTracer() {
 	}
 
 	for _, gpu := range r.GPUDriver.GPUs {
+		cp := gpu.CommandProcessor
+
 		for _, cache := range gpu.L1VCaches {
 			tracer := profile.NewCacheUtilizationTracer(
 				func(task tracing.Task) bool {
@@ -2442,6 +2444,7 @@ func (r *Runner) addCacheUtilizationTracer() {
 			r.cacheUtilizationTracers = append(r.cacheUtilizationTracers,
 				cacheUtilizationTracer{tracer: tracer, cache: cache})
 			tracing.CollectTrace(cache, tracer)
+			tracing.CollectTrace(cp, tracer)
 		}
 	}
 }

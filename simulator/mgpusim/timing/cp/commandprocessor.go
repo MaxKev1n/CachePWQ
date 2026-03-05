@@ -185,7 +185,7 @@ func (p *CommandProcessor) resetSwitchingStats() {
 	}
 }
 
-//Tick ticks
+// Tick ticks
 func (p *CommandProcessor) Tick(now akita.VTimeInSec) bool {
 	madeProgress := false
 
@@ -459,6 +459,14 @@ func (p *CommandProcessor) processLaunchKernelReq(
 	tracing.TraceReqReceive(req, now, p)
 	// tracing.TraceReqInitiate(&reqToBottom, now, p,
 	// 	tracing.MsgIDAtReceiver(req, p))
+
+	tracing.AddTaskStepWithKind(
+		req.Meta().ID,
+		now,
+		p,
+		"cache_utilization",
+		"start",
+	)
 
 	return true
 }
