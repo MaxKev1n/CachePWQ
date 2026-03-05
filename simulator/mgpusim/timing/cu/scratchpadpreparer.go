@@ -23,6 +23,8 @@ type ScratchpadPreparerImpl struct {
 	cu *ComputeUnit
 
 	// --- Deadlock / inactivity watchdog ---
+	init bool
+
 	lastCommitUnix atomic.Int64
 	stopWatchdog   chan struct{}
 }
@@ -33,11 +35,19 @@ func NewScratchpadPreparerImpl(cu *ComputeUnit) *ScratchpadPreparerImpl {
 	p := new(ScratchpadPreparerImpl)
 	p.cu = cu
 
+	return p
+}
+
+func (p *ScratchpadPreparerImpl) Init() {
+	if p.init {
+		return
+	}
+	p.init = true
+
+	// Initialize the watchdog timer
 	p.lastCommitUnix.Store(time.Now().Unix())
 
-	go p.commitWatchdog(2 * time.Hour)
-
-	return p
+	go p.commitWatchdog(2 * time.Minute)
 }
 
 // commitWatchdog triggers attexit.Exit(1) if no Commit() call occurs in timeout.
@@ -109,6 +119,8 @@ func (p *ScratchpadPreparerImpl) Prepare(
 	default:
 		log.Panicf("Inst format %s is not supported", inst.Format.FormatName)
 	}
+
+	p.Init()
 }
 
 func (p *ScratchpadPreparerImpl) prepareSOP1(

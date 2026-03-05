@@ -161,17 +161,11 @@ func (b *Benchmark) initMem() {
 	size := b.TableSize * 8
 	startsSize := b.NThreadBlocks * b.ThreadBlockSize * 8
 
+	b.HostTable = make([]uint64, b.TableSize)
 	b.HostStarts = make([]uint64, b.NThreadBlocks*b.ThreadBlockSize)
 	b.NUpdates = 1 * b.NThreadBlocks * b.ThreadBlockSize
 
-	HostStarts, err := readUint64SliceFromFile("starts.bin")
-	if err != nil {
-		panic(err)
-	}
-	if len(HostStarts) == 0 {
-		panic("starts.bin is empty")
-	}
-	b.HostStarts = HostStarts
+	b.HostStarts, _ = readUint64SliceFromFile("starts.bin")
 
 	log.Printf("Starts: %v\n", b.HostStarts)
 
