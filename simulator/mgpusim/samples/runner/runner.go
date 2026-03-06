@@ -362,6 +362,10 @@ type Runner struct {
 	L3TLBMSHRUniqLenTracers         []*tracing.AverageCountTracer
 	L3TLBMSHRLenG0Tracers           []*tracing.AverageCountTracer
 	L3TLBMSHRUniqLenG0Tracers       []*tracing.AverageCountTracer
+	L1MSHRLenTracers                []*tracing.AverageCountTracer
+	L1MSHRUniqLenTracers            []*tracing.AverageCountTracer
+	L1MSHRLenG0Tracers              []*tracing.AverageCountTracer
+	L1MSHRUniqLenG0Tracers          []*tracing.AverageCountTracer
 	ActivePageWalkerTracers         []ActivePageWalkerTracer
 	ActiveMMUSecondaryQueueTracers  []*tracing.AverageCountTracer
 	MaxMMUSecondaryQueueTracers     []*tracing.MaximumCountTracer
@@ -397,6 +401,7 @@ type Runner struct {
 	ReportTLBHitRate                bool
 	ReportPWCHitRate                bool
 	ReportL3TLBMSHRLen              bool
+	ReportL1MSHRLen                 bool
 	ReportDRAMTransactionCount      bool
 	ReportRDMATransactionCount      bool
 	ReportCDMATransactionCount      bool
@@ -570,6 +575,7 @@ func (r *Runner) ParseFlag() *Runner {
 		r.ReportMMUCacheReqLatency = true
 		r.ReportAddressTranslatorLatency = true
 		r.ReportL3TLBMSHRLen = true
+		r.ReportL1MSHRLen = true
 		r.ReportL3TLBQueueImbalance = true
 		r.ReportPageWalkerImbalance = true
 		r.ReportEntropy = true
@@ -654,6 +660,7 @@ func (r *Runner) Init() *Runner {
 	r.addTLBLatencyTracer()
 	r.addTLBCoalesceTracer()
 	r.addL3TLBMSHRLenTracer()
+	r.addL1MSHRLenTracer()
 	r.addRTUCoalesceTracer()
 	r.addTLBHitRateTracer()
 	r.addDRAMLatencyTracer()
@@ -2124,6 +2131,47 @@ func (r *Runner) addTLBCoalesceTracer() {
 	}
 }
 
+func (r *Runner) addL1MSHRLenTracer() {
+	if !r.ReportL1MSHRLen {
+		return
+	}
+
+	for _, gpu := range r.GPUDriver.GPUs {
+		for _, cache := range gpu.L1VCaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "MSHRlen"
+				})
+			r.L1MSHRLenTracers = append(r.L1MSHRLenTracers, tracer)
+			tracing.CollectTrace(cache, tracer)
+		}
+		for _, cache := range gpu.L1VCaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "MSHRlen_g0"
+				})
+			r.L1MSHRLenG0Tracers = append(r.L1MSHRLenG0Tracers, tracer)
+			tracing.CollectTrace(cache, tracer)
+		}
+		for _, cache := range gpu.L1VCaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "MSHRuniq"
+				})
+			r.L1MSHRUniqLenTracers = append(r.L1MSHRUniqLenTracers, tracer)
+			tracing.CollectTrace(cache, tracer)
+		}
+		for _, cache := range gpu.L1VCaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "MSHRuniq_g0"
+				})
+			r.L1MSHRUniqLenG0Tracers = append(r.L1MSHRUniqLenG0Tracers, tracer)
+			tracing.CollectTrace(cache, tracer)
+		}
+	}
+}
+
 func (r *Runner) addL3TLBMSHRLenTracer() {
 	if !r.ReportL3TLBMSHRLen {
 		return
@@ -3578,6 +3626,49 @@ func (r *Runner) reportL1CaPWQCacheLens() {
 			tracer.TracedComponentName,
 			"maximum_pwq_cache_len",
 			float64(tracer.MaximumCount()),
+		)
+	}
+
+	for i, tracer := range r.L1MSHRLenTracers {
+		if tracer.AverageCount() == 0 {
+			continue
+		}
+		r.metricsCollector.Collect(
+			"L1_"+strconv.Itoa(i),
+			"average_mshr_len",
+			float64(tracer.AverageCount()),
+		)
+	}
+	for i, tracer := range r.L1MSHRLenG0Tracers {
+		if tracer.AverageCount() == 0 {
+			continue
+		}
+		r.metricsCollector.Collect(
+			"L1_"+strconv.Itoa(i),
+			"average_mshr_len_g0",
+			float64(tracer.AverageCount()),
+		)
+	}
+
+	for i, tracer := range r.L1MSHRUniqLenTracers {
+		if tracer.AverageCount() == 0 {
+			continue
+		}
+		r.metricsCollector.Collect(
+			"L1_"+strconv.Itoa(i),
+			"average_mshr_uniq_len",
+			float64(tracer.AverageCount()),
+		)
+	}
+
+	for i, tracer := range r.L1MSHRUniqLenG0Tracers {
+		if tracer.AverageCount() == 0 {
+			continue
+		}
+		r.metricsCollector.Collect(
+			"L1_"+strconv.Itoa(i),
+			"average_mshr_uniq_len_g0",
+			float64(tracer.AverageCount()),
 		)
 	}
 }

@@ -1,6 +1,8 @@
 package l1v
 
 import (
+	"strconv"
+
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
@@ -20,6 +22,7 @@ type directory struct {
 func (d *directory) Tick(now akita.VTimeInSec) bool {
 	d.status = profile.BASE
 	d.numExecutedReqs = 0
+	d.collectMSHROccupancy(now)
 
 	item := d.cache.dirBuf.Peek()
 	if item == nil {
@@ -32,6 +35,26 @@ func (d *directory) Tick(now akita.VTimeInSec) bool {
 	}
 
 	return d.processWrite(now, trans)
+}
+
+func (d *directory) collectMSHROccupancy(now akita.VTimeInSec) {
+	m := d.cache.mshr
+	uniqEntries := len(m.AllEntries())
+	totalEntries := 0
+	for _, me := range m.AllEntries() {
+		totalEntries += len(me.Requests)
+	}
+
+	tracing.StartTask("", "", now, d.cache,
+		"MSHRlen", strconv.Itoa(totalEntries), nil)
+	tracing.StartTask("", "", now, d.cache,
+		"MSHRuniq", strconv.Itoa(uniqEntries), nil)
+	if uniqEntries > 0 {
+		tracing.StartTask("", "", now, d.cache,
+			"MSHRlen_g0", strconv.Itoa(totalEntries), nil)
+		tracing.StartTask("", "", now, d.cache,
+			"MSHRuniq_g0", strconv.Itoa(uniqEntries), nil)
+	}
 }
 
 func (d *directory) processRead(now akita.VTimeInSec, trans *transaction) bool {
