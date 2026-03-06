@@ -47,7 +47,7 @@ func (p *ScratchpadPreparerImpl) Init() {
 	// Initialize the watchdog timer
 	p.lastCommitUnix.Store(time.Now().Unix())
 
-	go p.commitWatchdog(2 * time.Minute)
+	go p.commitWatchdog(2 * time.Hour)
 }
 
 // commitWatchdog triggers attexit.Exit(1) if no Commit() call occurs in timeout.
