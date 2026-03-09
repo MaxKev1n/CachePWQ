@@ -7,10 +7,11 @@ import (
 
 	"encoding/binary"
 
+	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mgpusim/insts"
 )
 
-//ALU does its jobs
+// ALU does its jobs
 type ALU interface {
 	Run(state InstEmuState)
 
@@ -20,6 +21,8 @@ type ALU interface {
 
 // ALUImpl is where the instructions get executed.
 type ALUImpl struct {
+	akita.HookableBase
+
 	storageAccessor *storageAccessor
 	lds             []byte
 }
@@ -31,17 +34,23 @@ func NewALU(storageAccessor *storageAccessor) *ALUImpl {
 	return alu
 }
 
+// Name returns the name of the ALU.
+func (u *ALUImpl) Name() string {
+	panic("not supported")
+}
+
 // SetLDS assigns the LDS storage to be used in the following instructions.
 func (u *ALUImpl) SetLDS(lds []byte) {
 	u.lds = lds
 }
 
-//LDS returns lds
+// LDS returns lds
 func (u *ALUImpl) LDS() []byte {
 	return u.lds
 }
 
 // Run executes the instruction in the scatchpad of the InstEmuState
+//
 //nolint:gocyclo
 func (u *ALUImpl) Run(state InstEmuState) {
 	inst := state.Inst()

@@ -114,6 +114,8 @@ type BookSimEndPoint struct {
 	noc *HybridBookSimNoC
 
 	subNetworkID int
+
+	isMemorySide bool
 }
 
 func NewBookSimEndPoint(
@@ -122,6 +124,7 @@ func NewBookSimEndPoint(
 	outPort akita.Port,
 	size int,
 	numPhysicalPorts int,
+	memorySide bool,
 ) *BookSimEndPoint {
 	nocPort := akita.NewLimitNumMsgPort(NoC, size, fmt.Sprintf("%s.NocPort[%d]", NoC.Name(), nodeID))
 
@@ -143,6 +146,8 @@ func NewBookSimEndPoint(
 
 	ep.outList = list.New()
 	ep.outList.Init()
+
+	ep.isMemorySide = memorySide
 
 	return ep
 }
@@ -260,6 +265,21 @@ func (e *BookSimEndPoint) parseFromDevice(now akita.VTimeInSec) bool {
 	e.inList.PushBack(pipelineItem)
 
 	e.nocPort.Retrieve(now)
+
+	numFlits := (item.Meta().TrafficBytes + 40) / 40
+
+	what := "num_flits_cu_to_mem"
+	if e.isMemorySide {
+		what = "num_flits_mem_to_cu"
+	}
+
+	tracing.AddTaskStepWithDetail(
+		"PowerStat",
+		now,
+		e.noc,
+		what,
+		uint64(numFlits),
+	)
 
 	return true
 }
@@ -410,7 +430,7 @@ func (NoC *HybridBookSimNoC) PlugInSMSideMultiPort(
 		}
 	}
 
-	ep := NewBookSimEndPoint(NoC, nextID, p, size, numPhysicalPort)
+	ep := NewBookSimEndPoint(NoC, nextID, p, size, numPhysicalPort, false)
 	NoC.endpoints[nextEndpointID] = ep
 
 	if p.GetConnection() == nil {
@@ -454,7 +474,7 @@ func (NoC *HybridBookSimNoC) PlugInNUMASMSideMultiPort(
 		}
 	}
 
-	ep := NewBookSimEndPoint(NoC, nextID, p, size, numPhysicalPort)
+	ep := NewBookSimEndPoint(NoC, nextID, p, size, numPhysicalPort, false)
 	NoC.endpoints[nextEndpointID] = ep
 
 	if p.GetConnection() == nil {
@@ -499,7 +519,7 @@ func (NoC *HybridBookSimNoC) PlugInMemSideMultiPort(
 		}
 	}
 
-	ep := NewBookSimEndPoint(NoC, nextID, p, size, numPhysicalPort)
+	ep := NewBookSimEndPoint(NoC, nextID, p, size, numPhysicalPort, true)
 	NoC.endpoints[nextEndpointID] = ep
 
 	if p.GetConnection() == nil {
@@ -543,7 +563,7 @@ func (NoC *HybridBookSimNoC) PlugInNUMAMemSideMultiPort(
 		}
 	}
 
-	ep := NewBookSimEndPoint(NoC, nextID, p, size, numPhysicalPort)
+	ep := NewBookSimEndPoint(NoC, nextID, p, size, numPhysicalPort, true)
 	NoC.endpoints[nextEndpointID] = ep
 
 	if p.GetConnection() == nil {

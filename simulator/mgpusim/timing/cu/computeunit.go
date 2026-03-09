@@ -39,6 +39,7 @@ type ComputeUnit struct {
 	running bool
 
 	Scheduler        Scheduler
+	ALU              emu.ALU
 	BranchUnit       SubComponent
 	VectorMemDecoder SubComponent
 	VectorMemUnit    SubComponent
@@ -74,6 +75,10 @@ type ComputeUnit struct {
 
 	currentFlushReq   *protocol.CUPipelineFlushReq
 	currentRestartReq *protocol.CUPipelineRestartReq
+
+	TotalActiveCycles     akita.VTimeInSec
+	LastStatsUpdateTime   akita.VTimeInSec
+	CurrentWavefrontCount int
 }
 
 // Handle processes that events that are scheduled on the ComputeUnit
@@ -364,10 +369,13 @@ func (cu *ComputeUnit) handleMapWGReq(
 			"wavefront",
 			nil,
 		)
+
+		cu.CurrentWavefrontCount++
 	}
 
 	cu.running = true
 	cu.TickLater(now)
+	cu.UpdateStats(now)
 
 	return true
 }
@@ -377,6 +385,9 @@ func (cu *ComputeUnit) handleWfCompletionEvent(evt *WfCompletionEvent) error {
 	wf := evt.Wf
 	wg := wf.WG
 	wf.State = wavefront.WfCompleted
+
+	cu.UpdateStats(now)
+	cu.CurrentWavefrontCount--
 
 	tracing.EndTask(wf.UID, now, cu)
 
@@ -886,6 +897,18 @@ func (cu *ComputeUnit) setWavesToReady() {
 			}
 		}
 	}
+}
+
+func (cu *ComputeUnit) UpdateStats(now akita.VTimeInSec) akita.VTimeInSec {
+	deltaTime := now - cu.LastStatsUpdateTime
+
+	if cu.CurrentWavefrontCount > 0 {
+		cu.TotalActiveCycles += deltaTime
+	}
+
+	cu.LastStatsUpdateTime = now
+
+	return cu.TotalActiveCycles
 }
 
 // NewComputeUnit returns a newly constructed compute unit

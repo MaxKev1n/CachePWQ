@@ -11,6 +11,7 @@ import (
 	"gitlab.com/akita/mem/idealmemcontroller"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim/pagemigrationcontroller"
+	"gitlab.com/akita/mgpusim/power"
 	"gitlab.com/akita/mgpusim/protocol"
 	"gitlab.com/akita/mgpusim/rdma"
 	"gitlab.com/akita/mgpusim/timing/cp/internal/dispatching"
@@ -455,6 +456,8 @@ func (p *CommandProcessor) processLaunchKernelReq(
 
 	d.StartDispatching(req)
 	p.ToDriver.Retrieve(now)
+
+	power.Start(now)
 
 	tracing.TraceReqReceive(req, now, p)
 	// tracing.TraceReqInitiate(&reqToBottom, now, p,

@@ -25,6 +25,7 @@ type Builder struct {
 	numReqPerCycle  int
 	lowModuleFinder cache.LowModuleFinder
 	visTracer       tracing.Tracer
+	isInstCache     bool
 }
 
 // NewBuilder creates a builder with default parameter setting
@@ -38,6 +39,7 @@ func NewBuilder() *Builder {
 		numBank:         1,
 		numReqPerCycle:  4,
 		bankLatency:     20,
+		isInstCache:     false,
 	}
 }
 
@@ -112,6 +114,12 @@ func (b *Builder) WithLowModuleFinder(
 	return b
 }
 
+// WithInstCache sets whether the cache to build is an instruction cache
+func (b *Builder) WithInstCache() *Builder {
+	b.isInstCache = true
+	return b
+}
+
 // Build returns a new cache unit
 func (b *Builder) Build(name string) *Cache {
 	b.assertAllRequiredInformationIsAvailable()
@@ -150,6 +158,10 @@ func (b *Builder) Build(name string) *Cache {
 
 	if b.visTracer != nil {
 		tracing.CollectTrace(c, b.visTracer)
+	}
+
+	if b.isInstCache {
+		c.isInstCache = true
 	}
 
 	return c

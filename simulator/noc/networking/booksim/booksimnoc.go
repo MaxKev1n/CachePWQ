@@ -12,6 +12,8 @@ import (
 )
 
 type BookSimNoC interface {
+	tracing.NamedHookable
+
 	CreateNetwork(config string)
 	CreateNetworkWithLib(lib string, config string)
 	PlugInSMSide(p akita.Port, size int) akita.Port

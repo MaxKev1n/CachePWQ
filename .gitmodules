@@ -1,0 +1,3 @@
+[submodule "simulator/GPUWattch"]
+	path = simulator/GPUWattch
+	url = https://github.com/MaxKev1n/GPUWattch.git

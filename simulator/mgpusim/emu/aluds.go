@@ -2,7 +2,34 @@ package emu
 
 import (
 	"log"
+
+	"gitlab.com/akita/util/tracing"
 )
+
+func (u *ALUImpl) BankAccesses(addr []uint32) {
+	bankAccessCount := make(map[uint32]uint32)
+	for _, a := range addr {
+		bank := (a >> 2) & 0x1F
+		bankAccessCount[bank]++
+	}
+
+	var maxAccess uint32
+	for _, count := range bankAccessCount {
+		if count > maxAccess {
+			maxAccess = count
+		}
+	}
+
+	for maxAccess > 0 {
+		tracing.AddTaskStep(
+			"PowerStat",
+			0,
+			u,
+			"LDS_accesses",
+		)
+		maxAccess--
+	}
+}
 
 func (u *ALUImpl) runDS(state InstEmuState) {
 	inst := state.Inst()
@@ -32,6 +59,8 @@ func (u *ALUImpl) runDSWRITEB32(state InstEmuState) {
 	layout := sp.AsDS()
 	lds := u.LDS()
 
+	addresses := make([]uint32, 0)
+
 	i := uint(0)
 	for i = 0; i < 64; i++ {
 		if !laneMasked(layout.EXEC, i) {
@@ -42,7 +71,10 @@ func (u *ALUImpl) runDSWRITEB32(state InstEmuState) {
 		data0offset := uint(8 + 64*4)
 
 		copy(lds[addr0:addr0+4], sp[data0offset+i*16:data0offset+i*16+4])
+
+		addresses = append(addresses, addr0)
 	}
+	u.BankAccesses(addresses)
 }
 
 func (u *ALUImpl) runDSWRITE2B32(state InstEmuState) {
@@ -50,6 +82,8 @@ func (u *ALUImpl) runDSWRITE2B32(state InstEmuState) {
 	sp := state.Scratchpad()
 	layout := sp.AsDS()
 	lds := u.LDS()
+
+	addresses := make([]uint32, 0)
 
 	i := uint(0)
 	for i = 0; i < 64; i++ {
@@ -64,7 +98,10 @@ func (u *ALUImpl) runDSWRITE2B32(state InstEmuState) {
 
 		copy(lds[addr0:addr0+4], sp[data0offset+i*16:data0offset+i*16+4])
 		copy(lds[addr1:addr1+4], sp[data1offset+i*16:data1offset+i*16+4])
+
+		addresses = append(addresses, addr0, addr1)
 	}
+	u.BankAccesses(addresses)
 }
 
 func (u *ALUImpl) runDSREADB32(state InstEmuState) {
@@ -72,6 +109,8 @@ func (u *ALUImpl) runDSREADB32(state InstEmuState) {
 	sp := state.Scratchpad()
 	layout := sp.AsDS()
 	lds := u.LDS()
+
+	addresses := make([]uint32, 0)
 
 	i := uint(0)
 	for i = 0; i < 64; i++ {
@@ -83,7 +122,10 @@ func (u *ALUImpl) runDSREADB32(state InstEmuState) {
 		// addr0 := layout.ADDR[i]
 		dstOffset := uint(8 + 64*4 + 256*4*2)
 		copy(sp[dstOffset+i*16:dstOffset+i*16+4], lds[addr0:addr0+4])
+
+		addresses = append(addresses, addr0)
 	}
+	u.BankAccesses(addresses)
 }
 
 func (u *ALUImpl) runDSREAD2B32(state InstEmuState) {
@@ -91,6 +133,8 @@ func (u *ALUImpl) runDSREAD2B32(state InstEmuState) {
 	sp := state.Scratchpad()
 	layout := sp.AsDS()
 	lds := u.LDS()
+
+	addresses := make([]uint32, 0)
 
 	i := uint(0)
 	for i = 0; i < 64; i++ {
@@ -104,7 +148,10 @@ func (u *ALUImpl) runDSREAD2B32(state InstEmuState) {
 
 		addr1 := layout.ADDR[i] + inst.Offset1*4
 		copy(sp[dstOffset+i*16+4:dstOffset+i*16+8], lds[addr1:addr1+4])
+
+		addresses = append(addresses, addr0, addr1)
 	}
+	u.BankAccesses(addresses)
 }
 
 func (u *ALUImpl) runDSWRITE2B64(state InstEmuState) {
@@ -112,6 +159,8 @@ func (u *ALUImpl) runDSWRITE2B64(state InstEmuState) {
 	sp := state.Scratchpad()
 	layout := sp.AsDS()
 	lds := u.LDS()
+
+	addresses := make([]uint32, 0)
 
 	i := uint(0)
 	for i = 0; i < 64; i++ {
@@ -126,13 +175,18 @@ func (u *ALUImpl) runDSWRITE2B64(state InstEmuState) {
 		addr1 := layout.ADDR[i] + inst.Offset1*8
 		data1Offset := uint(8 + 64*4 + 256*4)
 		copy(lds[addr1:addr1+8], sp[data1Offset+i*16:data1Offset+i*16+8])
+
+		addresses = append(addresses, addr0, addr0+4, addr1, addr1+4)
 	}
+	u.BankAccesses(addresses)
 }
 
 func (u *ALUImpl) runDSREADB64(state InstEmuState) {
 	sp := state.Scratchpad()
 	layout := sp.AsDS()
 	lds := u.LDS()
+
+	addresses := make([]uint32, 0)
 
 	i := uint(0)
 	for i = 0; i < 64; i++ {
@@ -143,7 +197,10 @@ func (u *ALUImpl) runDSREADB64(state InstEmuState) {
 		addr := layout.ADDR[i]
 		dstOffset := uint(8 + 64*4 + 256*4*2)
 		copy(sp[dstOffset+i*16:dstOffset+i*16+8], lds[addr:addr+8])
+
+		addresses = append(addresses, addr, addr+4)
 	}
+	u.BankAccesses(addresses)
 }
 
 func (u *ALUImpl) runDSREAD2B64(state InstEmuState) {
@@ -151,6 +208,8 @@ func (u *ALUImpl) runDSREAD2B64(state InstEmuState) {
 	sp := state.Scratchpad()
 	layout := sp.AsDS()
 	lds := u.LDS()
+
+	addresses := make([]uint32, 0)
 
 	i := uint(0)
 	for i = 0; i < 64; i++ {
@@ -164,5 +223,8 @@ func (u *ALUImpl) runDSREAD2B64(state InstEmuState) {
 
 		addr1 := layout.ADDR[i] + inst.Offset1*8
 		copy(sp[dstOffset+i*16+8:dstOffset+i*16+16], lds[addr1:addr1+8])
+
+		addresses = append(addresses, addr0, addr0+4, addr1, addr1+4)
 	}
+	u.BankAccesses(addresses)
 }

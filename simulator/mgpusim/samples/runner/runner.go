@@ -19,6 +19,7 @@ import (
 	"gitlab.com/akita/mem/monitor"
 	"gitlab.com/akita/mem/profile"
 	"gitlab.com/akita/mem/trace"
+	"gitlab.com/akita/mgpusim/power"
 	"gitlab.com/akita/mgpusim/yamlconfig"
 
 	// ram "gitlab.com/akita/mem/dram"
@@ -145,6 +146,8 @@ var monitorTLBFlag = flag.Bool("tlb-monitor", false,
 	"Enable the TLB monitor that tracks the number of the TLB queues.")
 var cacheUtilizationFlag = flag.Bool("cache-utilization", false,
 	"Enable the cache utilization tracer that tracks the utilization of the cache.")
+var powerFlag = flag.Bool("power", false,
+	"Enable power modeling using GPUWattch.")
 
 type verificationPreEnablingBenchmark interface {
 	benchmarks.Benchmark
@@ -380,6 +383,7 @@ type Runner struct {
 	TLBMSHRStallTracers             []TLBMSHRStallTracer
 	TLBReqStallTracers              []TLBReqStallTracer
 	TLBAverageTracers               []TLBMonitorTracer
+	PowerStatTracer                 *power.PowerStatTracer
 	Benchmarks                      []benchmarks.Benchmark
 	Timing                          bool
 	Verify                          bool
@@ -652,6 +656,7 @@ func (r *Runner) Init() *Runner {
 	r.parseGPUFlag()
 
 	r.metricsCollector = &collector{}
+	r.addPowerStatTracer()
 	r.addMaxInstStopper()
 	r.addKernelTimeTracer()
 	r.addInstCountTracer()
@@ -1122,6 +1127,10 @@ func (r *Runner) buildTimingPlatform() {
 			b.WithCacheTEA()
 
 			r.ReportCacheUtilization = true
+		}
+
+		if *powerFlag {
+			b.WithPowerModel()
 		}
 
 		b.WithAlg(*schedulingAlg)
@@ -1810,6 +1819,64 @@ func (r *Runner) buildTimingPlatform() {
 	default:
 		panic("oh no!")
 	}
+}
+
+func (r *Runner) addPowerStatTracer() {
+	if !*powerFlag {
+		return
+	}
+
+	r.PowerStatTracer = power.NewPowerStatTracer(
+		func(task tracing.Task) bool {
+			return task.ID == "PowerStat"
+		})
+
+	for _, gpu := range r.GPUDriver.GPUs {
+		for _, cu := range gpu.CUs {
+			tracing.CollectTrace(cu.(tracing.NamedHookable), r.PowerStatTracer)
+		}
+		for _, alu := range gpu.ALUs {
+			tracing.CollectTrace(alu.(tracing.NamedHookable), r.PowerStatTracer)
+		}
+		for _, l1v := range gpu.L1VCaches {
+			tracing.CollectTrace(l1v, r.PowerStatTracer)
+		}
+		for _, l1s := range gpu.L1SCaches {
+			tracing.CollectTrace(l1s, r.PowerStatTracer)
+		}
+		for _, l1i := range gpu.L1ICaches {
+			tracing.CollectTrace(l1i, r.PowerStatTracer)
+		}
+		for _, l2 := range gpu.L2Caches {
+			tracing.CollectTrace(l2, r.PowerStatTracer)
+		}
+		for _, dram := range gpu.MemoryControllers {
+			tracing.CollectTrace(dram, r.PowerStatTracer)
+		}
+		for _, tlb := range gpu.L1ITLBs {
+			tracing.CollectTrace(tlb, r.PowerStatTracer)
+		}
+		for _, tlb := range gpu.L1STLBs {
+			tracing.CollectTrace(tlb, r.PowerStatTracer)
+		}
+		for _, tlb := range gpu.L1VTLBs {
+			tracing.CollectTrace(tlb, r.PowerStatTracer)
+		}
+		for _, tlb := range gpu.L2TLBs {
+			tracing.CollectTrace(tlb, r.PowerStatTracer)
+		}
+		for _, tlb := range gpu.L3TLBs {
+			tracing.CollectTrace(tlb, r.PowerStatTracer)
+		}
+		for _, mmu := range gpu.MMUs {
+			tracing.CollectTrace(mmu, r.PowerStatTracer)
+		}
+		for _, noc := range gpu.NoCs {
+			tracing.CollectTrace(noc, r.PowerStatTracer)
+		}
+	}
+
+	power.Model.SetPowerStatTracer(r.PowerStatTracer)
 }
 
 func (r *Runner) addMaxInstStopper() {

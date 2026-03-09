@@ -353,6 +353,12 @@ func (tlb *LastLevelTLB) lookup(now akita.VTimeInSec) bool {
 				"tlb-mshr-hit",
 				req.VAddr,
 			)
+			tracing.AddTaskStep(
+				"PowerStat",
+				now,
+				tlb,
+				"l2tlb_hits",
+			)
 
 			tlb.monitorStats.MSHRHits += 1
 
@@ -412,6 +418,12 @@ func (tlb *LastLevelTLB) handleTranslationHit(
 		"tlb-hit",
 		req.VAddr,
 	)
+	tracing.AddTaskStep(
+		"PowerStat",
+		now,
+		tlb,
+		"l2tlb_hits",
+	)
 	tracing.TraceReqComplete(req, now, tlb)
 
 	if tlb.mode4Kstrip {
@@ -450,6 +462,12 @@ func (tlb *LastLevelTLB) handleTranslationMiss(
 			now, tlb,
 			"tlb-miss",
 			req.VAddr,
+		)
+		tracing.AddTaskStep(
+			"PowerStat",
+			now,
+			tlb,
+			"l2tlb_misses",
 		)
 
 		// this is the missepoint

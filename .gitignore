@@ -35,3 +35,5 @@ go.work.sum
 # IDEs and editors
 .vscode/
 .idea/
+
+power_output.txt

@@ -700,7 +700,8 @@ func (b *shaderArrayBuilder) buildL1ICache(sa *shaderArray) {
 		WithNumMSHREntry(32).
 		WithTotalByteSize(64 * mem.KB).
 		WithNumReqsPerCycle(4).
-		WithBankLatency(28)
+		WithBankLatency(28).
+		WithInstCache()
 
 	name := fmt.Sprintf("%s.L1ICache", b.name)
 	cache := builder.Build(name)

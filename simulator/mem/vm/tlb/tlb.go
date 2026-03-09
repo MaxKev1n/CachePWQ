@@ -210,6 +210,12 @@ func (tlb *TLBImpl) lookup(now akita.VTimeInSec) bool {
 				"tlb-mshr-hit",
 				req.VAddr,
 			)
+			tracing.AddTaskStep(
+				"PowerStat",
+				now,
+				tlb,
+				"l1tlb_hits",
+			)
 			tlb.lookupBuffer.Pop()
 			return true
 		}
@@ -247,6 +253,12 @@ func (tlb *TLBImpl) handleTranslationHit(
 		"tlb-hit",
 		req.VAddr,
 	)
+	tracing.AddTaskStep(
+		"PowerStat",
+		now,
+		tlb,
+		"l1tlb_hits",
+	)
 	// tracing.AddTaskStep(
 	// 	tracing.MsgIDAtReceiver(req, tlb),
 	// 	now, tlb,
@@ -275,6 +287,12 @@ func (tlb *TLBImpl) handleTranslationMiss(
 			now, tlb,
 			"tlb-miss",
 			req.VAddr,
+		)
+		tracing.AddTaskStep(
+			"PowerStat",
+			now,
+			tlb,
+			"l1tlb_misses",
 		)
 		return true
 	}

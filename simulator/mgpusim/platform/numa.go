@@ -5,6 +5,7 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mgpusim/builders"
 	"gitlab.com/akita/mgpusim/driver"
+	"gitlab.com/akita/mgpusim/power"
 )
 
 // NUMAPlatformBuilder can build a platform that equips DisTLBGPU GPU.
@@ -74,6 +75,13 @@ func (b *NUMAPlatformBuilder) createGPUBuilder(
 
 	if b.useCacheTEA {
 		gpuBuilder.WithCacheTEA()
+	}
+
+	if b.usePowerModel {
+		power.NewPowerModel(
+			"/Users/chenzihang/Develop/CachePWQ/simulator/GPUWattch/accelwattch_ptx_sim.xml",
+			engine,
+		)
 	}
 
 	b.setVisTracer(gpuDriver, gpuBuilder)

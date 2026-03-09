@@ -1,6 +1,7 @@
 package wavefront
 
 import (
+	"math/bits"
 	"sync"
 
 	"gitlab.com/akita/akita"
@@ -105,4 +106,9 @@ func (wf *Wavefront) PID() ca.PID {
 // SetPID sets pid
 func (wf *Wavefront) SetPID(pid ca.PID) {
 	wf.pid = pid
+}
+
+// NumActiveThreads returns the number of active threads in the wavefront
+func (wf *Wavefront) NumActiveThreads() uint64 {
+	return uint64(bits.OnesCount64(wf.EXEC))
 }

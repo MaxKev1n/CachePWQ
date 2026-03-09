@@ -21,6 +21,19 @@ const (
 	ExeUnitSpecial
 )
 
+var instNameTypeCache = make(map[string]OpcodeType)
+
+type OpcodeType int
+
+const (
+	OpcodeType_UNKNOWN OpcodeType = iota
+	OpcodeType_IALU
+	OpcodeType_FPU
+	OpcodeType_SFU
+	OpcodeType_MEM
+	OpcodeType_SALU
+)
+
 // A InstType represents an instruction type. For example s_barrier instruction
 // is a instruction type
 type InstType struct {
@@ -331,8 +344,9 @@ func (i Inst) dsString() string {
 	return s
 }
 
-//nolint:gocyclo
 // String returns the disassembly of an instruction
+//
+//nolint:gocyclo
 func (i Inst) String(file *elf.File) string {
 	switch i.FormatType {
 	case SOP2:
@@ -365,4 +379,60 @@ func (i Inst) String(file *elf.File) string {
 		log.Panic("Unknown instruction format type.")
 		return i.InstName
 	}
+}
+
+func (i Inst) classifyInst() OpcodeType {
+	// 转为大写，防止大小写不一致
+	name := strings.ToUpper(i.InstName)
+
+	// 1. 优先判断 SFU (超越函数)
+	// 这些指令即使带有 _F32 后缀，也必须归类为 SFU，因为能耗更高
+	sfuKeywords := []string{
+		"SIN", "COS", "EXP", "LOG", "SQRT", "RCP", "RSQ",
+		"DIV_FIXUP", // 除法修复通常也是复杂逻辑
+	}
+	for _, kw := range sfuKeywords {
+		if strings.Contains(name, kw) {
+			return OpcodeType_SFU
+		}
+	}
+
+	// 2. 判断浮点 FPU
+	// 凡是带有 _F16, _F32, _F64 的都是浮点
+	if strings.Contains(name, "_F32") ||
+		strings.Contains(name, "_F64") ||
+		strings.Contains(name, "_F16") {
+		return OpcodeType_FPU
+	}
+
+	// 3. 判断内存指令 (可选，防止误判为 IALU)
+	if strings.Contains(name, "LOAD") ||
+		strings.Contains(name, "STORE") ||
+		strings.Contains(name, "FLAT") {
+		return OpcodeType_MEM
+	}
+
+	// 4. 判断标量指令 (S_ 开头)
+	if strings.HasPrefix(name, "S_") {
+		return OpcodeType_SALU
+	}
+
+	// 5. 剩下的通常归为 IALU (整数、位运算、逻辑运算)
+	// V_ADD_I32, V_LSHL_B32, V_AND_B32, V_MOV 等
+	return OpcodeType_IALU
+}
+
+func (i Inst) OperationType() OpcodeType {
+	name := i.InstName
+
+	// 1. 检查缓存是否存在
+	pType, exists := instNameTypeCache[name]
+
+	// 2. 如果不存在，用慢速的字符串方法算一次，然后存入缓存
+	if !exists {
+		pType = i.classifyInst()
+		instNameTypeCache[name] = pType
+	}
+
+	return pType
 }

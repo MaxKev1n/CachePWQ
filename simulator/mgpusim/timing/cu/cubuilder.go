@@ -100,6 +100,7 @@ func (b *Builder) Build(name string) *ComputeUnit {
 
 	b.alu = emu.NewALU(nil)
 	b.scratchpadPreparer = NewScratchpadPreparerImpl(cu)
+	cu.ALU = b.alu
 
 	for i := 0; i < 4; i++ {
 		cu.WfPools = append(cu.WfPools, NewWavefrontPool(10))

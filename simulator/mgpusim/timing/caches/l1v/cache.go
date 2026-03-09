@@ -45,6 +45,8 @@ type Cache struct {
 	provider        profile.CachePSVComponent
 
 	directoryStatus []profile.CachePSVStatus
+
+	isInstCache bool
 }
 
 // SetLowModuleFinder sets the finder that tells which remote port can serve
