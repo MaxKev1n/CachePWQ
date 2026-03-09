@@ -68,7 +68,7 @@ def collect_l2tlb_miss(
     df = pd.read_csv(file_path)
 
     for _, row in df.iterrows():
-        if row.iloc[1] == " GPU1.chiplet_00.L2TLB" and row.iloc[2] == " tlb-miss":
+        if row.iloc[1] == " GPU1.chiplet_00.L3TLB" and row.iloc[2] == " tlb-miss":
             performance_data += row.iloc[3]
 
             if performance_data == 0:
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     for benchmark in get_benchmarks():
         perf_data = collect_inst_count(
             benchmark_name=benchmark,
-            input_dir="../../data/HierarchicalMemSide-monolithic-tlb",
+            input_dir="../../data/baseline_cache_utilization",
         )
 
         inst_count = pd.concat(
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     for benchmark in get_benchmarks():
         perf_data = collect_l2tlb_miss(
             benchmark_name=benchmark,
-            input_dir="../../data/HierarchicalMemSide-monolithic-tlb",
+            input_dir="../../data/baseline_cache_utilization",
         )
 
         inst_count_data = inst_count[inst_count["Benchmark"] == benchmark]["Data"].values[0]

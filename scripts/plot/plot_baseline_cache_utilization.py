@@ -94,7 +94,7 @@ def plot_PICS(
 
     benchmarks = get_benchmarks()
 
-    bar_width = 0.2
+    bar_width = 0.15
     r1 = np.arange(len(benchmarks)) * (1 * bar_width + 0.1)
 
     # # Ave.
@@ -116,7 +116,7 @@ def plot_PICS(
     bar1 = plt.bar(
         r1,
         data["idle"],
-        label="idle",
+        label="Idle",
         width=bar_width,
         color="#fcfdf7",
         edgecolor="black",
@@ -126,7 +126,7 @@ def plot_PICS(
         r1,
         data["base"],
         width=bar_width,
-        label="base",
+        label="Running",
         color="#cce5d8",
         edgecolor="black",
         linewidth=1.5,
@@ -136,8 +136,8 @@ def plot_PICS(
         r1,
         data["translation"],
         width=bar_width,
-        label="translation",
-        color="#f7c6c6",
+        label="No Translation",
+        color="#6ba78b",
         edgecolor="black",
         linewidth=1.5,
         bottom=data["idle"] + data["base"],
@@ -146,7 +146,7 @@ def plot_PICS(
         r1,
         data["miss"],
         width=bar_width,
-        label="miss",
+        label="No MSHR",
         color="#3f6b5c",
         edgecolor="black",
         linewidth=1.5,
@@ -157,14 +157,14 @@ def plot_PICS(
     plt.xticks(
         [r for r in r1],
         [get_short_name(benchmarks[i]) for i in range(len(benchmarks))],
-        fontsize=22,
+        fontsize=28,
         fontweight="bold",
-        rotation=90,
+        # rotation=90,
     )
-    plt.ylabel("Percentage (%)", fontsize=24, fontweight="bold")
+    plt.ylabel("Percentage (%)", fontsize=28, fontweight="bold")
     plt.yticks(
         np.arange(0, 101, 20),
-        fontsize=24,
+        fontsize=28,
         fontweight="bold",
     )
     plt.ylim(0, 100)
@@ -176,9 +176,9 @@ def plot_PICS(
         frameon=True,
         fancybox=True,
         framealpha=0.7,
-        prop={"weight": "bold", "size": 20},
+        prop={"weight": "bold", "size": 26},
     )
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.tight_layout(rect=[0, 0, 1, 0.925])
     plt.grid(axis="y", alpha=0.3)
 
     ax = plt.gca()
@@ -213,7 +213,7 @@ if __name__ == "__main__":
     for benchmark in get_benchmarks():
         idle, base, translation, miss = collect_data(
             benchmark_name=benchmark,
-            input_dir="../../data/baseline-l3tlb-monitor",
+            input_dir="../../data/baseline_cache_utilization",
         )
 
         data = pd.concat(
