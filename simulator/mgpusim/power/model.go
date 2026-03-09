@@ -220,6 +220,10 @@ func (m *PowerModel) NewPowerStat() Stat {
 			cStat.l2tlb_hits = C.uint64_t(value)
 		case "l2tlb_misses":
 			cStat.l2tlb_misses = C.uint64_t(value)
+		case "l3tlb_hits":
+			cStat.l3tlb_hits = C.uint64_t(value)
+		case "l3tlb_misses":
+			cStat.l3tlb_misses = C.uint64_t(value)
 		case "l2_read_hits":
 			cStat.l2_read_hits = C.uint64_t(value)
 		case "l2_read_misses":

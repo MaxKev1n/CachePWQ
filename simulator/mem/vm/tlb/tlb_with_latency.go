@@ -412,7 +412,7 @@ func (tlb *LatTLB) lookup(now akita.VTimeInSec) bool {
 				"PowerStat",
 				now,
 				tlb,
-				"l1tlb_hits",
+				"l2tlb_hits",
 			)
 
 			tlb.lookupBuffer.Pop()
@@ -473,7 +473,7 @@ func (tlb *LatTLB) handleTranslationHit(
 		"PowerStat",
 		now,
 		tlb,
-		"l1tlb_hits",
+		"l2tlb_hits",
 	)
 	tracing.TraceReqComplete(req, now, tlb)
 
@@ -514,7 +514,7 @@ func (tlb *LatTLB) handleTranslationMiss(
 			"PowerStat",
 			now,
 			tlb,
-			"l1tlb_misses",
+			"l2tlb_misses",
 		)
 
 		// this is the missepoint
