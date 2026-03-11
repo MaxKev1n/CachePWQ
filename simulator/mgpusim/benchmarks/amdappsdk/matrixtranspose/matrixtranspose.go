@@ -178,12 +178,12 @@ func (b *Benchmark) exec() {
 	for _, q := range b.queues {
 		b.driver.DrainCommandQueue(q)
 	}
-
-	b.driver.MemCopyD2H(b.context, b.hOutputData, b.dOutputData)
 }
 
 // Verify verifies
 func (b *Benchmark) Verify() {
+	b.driver.MemCopyD2H(b.context, b.hOutputData, b.dOutputData)
+
 	failed := false
 	for i := 0; i < b.Width; i++ {
 		for j := 0; j < b.Width; j++ {

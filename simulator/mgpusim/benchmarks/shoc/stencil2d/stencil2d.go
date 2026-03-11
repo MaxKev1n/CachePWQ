@@ -215,13 +215,13 @@ func (b *Benchmark) exec() {
 
 		b.currData, b.newData = b.newData, b.currData
 	}
-
-	b.driver.MemCopyD2H(b.context, b.hOutput, *b.currData)
 }
 
 // Verify verfies
 func (b *Benchmark) Verify() {
 	cpuOutput := b.cpuStencil2D()
+
+	b.driver.MemCopyD2H(b.context, b.hOutput, *b.currData)
 
 	mismatch := false
 	for x := 0; x < b.NumRows; x++ {

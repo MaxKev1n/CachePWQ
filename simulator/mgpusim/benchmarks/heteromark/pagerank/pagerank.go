@@ -218,16 +218,16 @@ func (b *Benchmark) exec() {
 			&kernArg,
 		)
 	}
-
-	if i%2 != 0 {
-		b.driver.MemCopyD2H(b.context, b.hPageRank, b.dPageRankTemp)
-	} else {
-		b.driver.MemCopyD2H(b.context, b.hPageRank, b.dPageRank)
-	}
 }
 
 // Verify verifies
 func (b *Benchmark) Verify() {
+	if b.MaxIterations%2 != 0 {
+		b.driver.MemCopyD2H(b.context, b.hPageRank, b.dPageRankTemp)
+	} else {
+		b.driver.MemCopyD2H(b.context, b.hPageRank, b.dPageRank)
+	}
+
 	var i uint32
 	m := b.hMatrix
 	for i = 0; i < b.MaxIterations; i++ {

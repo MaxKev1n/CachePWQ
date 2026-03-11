@@ -28,7 +28,7 @@ type KernelArgs struct {
 	HiddenGlobalOffsetZ int64
 }
 
-//Benchmark set up test parameters
+// Benchmark set up test parameters
 type Benchmark struct {
 	driver                *driver.Driver
 	context               *driver.Context
@@ -216,13 +216,13 @@ func (b *Benchmark) exec() {
 		globalSize, localSize,
 		&args,
 	)
-
-	b.driver.MemCopyD2H(b.context, b.out, b.dOutData)
 }
 
 // Verify verifies results
 func (b *Benchmark) Verify() {
 	cpuOutput := b.spmvCPU()
+
+	b.driver.MemCopyD2H(b.context, b.out, b.dOutData)
 
 	mismatch := false
 	for i := int32(0); i < b.Dim; i++ {

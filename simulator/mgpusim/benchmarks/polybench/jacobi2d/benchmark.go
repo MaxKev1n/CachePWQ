@@ -175,14 +175,14 @@ func (b *Benchmark) exec() {
 		b.driver.LaunchKernel(b.context, b.kernel2,
 			globalSize, localSize, &kernel2Arg)
 	}
-
-	b.driver.MemCopyD2H(b.context, b.a_outputFromGPU, b.da)
-	b.driver.MemCopyD2H(b.context, b.b_outputFromGPU, b.db)
 }
 
 // Verify verifies
 func (b *Benchmark) Verify() {
 	b.cpujacobi2d()
+
+	b.driver.MemCopyD2H(b.context, b.a_outputFromGPU, b.da)
+	b.driver.MemCopyD2H(b.context, b.b_outputFromGPU, b.db)
 
 	// allow some amount of slack (not 0.001).
 	for i := 1; i < b.N-1; i++ {

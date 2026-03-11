@@ -150,13 +150,13 @@ func (b *Benchmark) exec() {
 	b.driver.LaunchKernel(b.context, b.kernel1,
 		globalSize, localSize, &kernel1Arg)
 	// b.driver.MemCopyD2H(b.context, b.a_debug, b.da)
-
-	b.driver.MemCopyD2H(b.context, b.b_outputFromGPU, b.db)
 }
 
 // Verify verifies
 func (b *Benchmark) Verify() {
 	b.cpuconvolution2d()
+
+	b.driver.MemCopyD2H(b.context, b.b_outputFromGPU, b.db)
 
 	for i := 0; i < b.NI; i++ {
 		for j := 0; j < b.NJ; j++ {

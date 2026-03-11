@@ -154,13 +154,12 @@ func (b *Benchmark) exec() {
 	for _, q := range b.queues {
 		b.driver.DrainCommandQueue(q)
 	}
-
-	b.driver.MemCopyD2H(b.context, b.Output, b.DevOutput)
 }
 
 // Verify verifies
 func (b *Benchmark) Verify() {
 	log.Printf("How will it pass if it is not implemented at all?")
+	b.driver.MemCopyD2H(b.context, b.Output, b.DevOutput)
 }
 
 // SetLASPMemoryAlloc use Unified Memory

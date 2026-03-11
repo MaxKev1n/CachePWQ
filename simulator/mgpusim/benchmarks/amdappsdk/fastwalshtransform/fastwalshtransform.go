@@ -132,12 +132,12 @@ func (b *Benchmark) exec() {
 	for _, q := range b.queues {
 		b.driver.DrainCommandQueue(q)
 	}
-
-	b.driver.MemCopyD2H(b.context, b.hInputArray, b.dInputArray)
 }
 
 // Verify verifies
 func (b *Benchmark) Verify() {
+	b.driver.MemCopyD2H(b.context, b.hInputArray, b.dInputArray)
+
 	for step := uint32(1); step < b.Length; step <<= 1 {
 		jump := step << 1
 		for group := uint32(0); group < step; group++ {

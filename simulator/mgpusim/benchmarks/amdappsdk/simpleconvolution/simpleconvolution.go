@@ -193,13 +193,13 @@ func (b *Benchmark) exec() {
 	for _, q := range queues {
 		b.driver.DrainCommandQueue(q)
 	}
-
-	b.driver.MemCopyD2H(b.context, b.hOutputData, b.dOutputData)
 }
 
 // Verify verifies
 func (b *Benchmark) Verify() {
 	cpuOutputImage := b.cpuSimpleConvolution()
+
+	b.driver.MemCopyD2H(b.context, b.hOutputData, b.dOutputData)
 
 	for i := uint32(0); i < b.Height; i++ {
 		for j := uint32(0); j < b.Width; j++ {

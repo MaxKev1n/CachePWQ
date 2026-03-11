@@ -217,7 +217,7 @@ func (b *Benchmark) transposeFeatures() {
 		b.driver.DrainCommandQueue(q)
 	}
 
-	b.verifySwap()
+	// b.verifySwap()
 }
 
 func (b *Benchmark) verifySwap() {

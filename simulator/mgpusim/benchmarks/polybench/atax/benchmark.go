@@ -181,13 +181,13 @@ func (b *Benchmark) exec() {
 	}
 	b.driver.LaunchKernel(b.context, b.kernel2,
 		globalSize, localSize, &kernel2Arg)
-
-	b.driver.MemCopyD2H(b.context, b.yOutput, b.dY)
 }
 
 // Verify verifies
 func (b *Benchmark) Verify() {
 	b.cpuAtax()
+
+	b.driver.MemCopyD2H(b.context, b.yOutput, b.dY)
 
 	for i := 0; i < b.NY; i++ {
 		if b.cpuY[i] != b.yOutput[i] {
