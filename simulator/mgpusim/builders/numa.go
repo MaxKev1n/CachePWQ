@@ -701,7 +701,7 @@ func (b *NUMAGPUBuilder) buildL2TLB(chiplet *Chiplet) {
 			WithFreq(b.freq).
 			WithNumWays(numWays).
 			WithNumSets(numSets).
-			WithNumMSHREntry(64).
+			WithNumMSHREntry(128).
 			WithNumReqPerCycle(4).
 			WithLog2PageSize(b.log2PageSize).
 			WithIndexingMask(mask).
