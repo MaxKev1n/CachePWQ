@@ -213,7 +213,7 @@ if __name__ == "__main__":
     for benchmark in get_benchmarks():
         idle, base, translation, miss = collect_data(
             benchmark_name=benchmark,
-            input_dir="../../data/baseline_cache_utilization",
+            input_dir="../../data/baseline-numa-latency",
         )
 
         data = pd.concat(

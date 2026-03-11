@@ -52,6 +52,7 @@ def collect_mshr(benchmark_name: str, input_dir: str) -> tuple[float, float]:
     Returns:
         list: A list of dictionaries containing performance data.
     """
+    count = 0
     lens = 0
     unique_lens = 0
 
@@ -66,21 +67,17 @@ def collect_mshr(benchmark_name: str, input_dir: str) -> tuple[float, float]:
     df = pd.read_csv(file_path)
 
     for _, row in df.iterrows():
+        if "L3TLB0" not in row.iloc[1]:
+            continue
+
         if row.iloc[2] == " average_mshr_uniq_len_g0":
-            unique_lens = row.iloc[3]
+            unique_lens += row.iloc[3]
+            count += 1
 
-            if unique_lens == 0:
-                assert f"Warning: kernel time for {benchmark_name} is zero."
         elif row.iloc[2] == " average_mshr_len_g0":
-            lens = row.iloc[3]
+            lens += row.iloc[3]
 
-            if lens == 0:
-                assert f"Warning: kernel time for {benchmark_name} is zero."
-        
-        if lens != 0 and unique_lens != 0:
-            break
-
-    return lens, unique_lens
+    return lens / float(count), unique_lens / float(count)
 
 def plot_mshr_size(
     baseline: pd.DataFrame,
@@ -150,10 +147,10 @@ def plot_mshr_size(
         height = bar.get_height()
         x = bar.get_x() + bar.get_width() / 2
 
-        if height >= 256:
+        if height >= 512:
             plt.annotate(
             f"{height:.1f}",
-            xy=(x, 230),
+            xy=(x, 500),
             xytext=(0, 10),  # 相对偏移 (0,15) 表示向上15pt
             textcoords="offset points",
             ha="center",
@@ -178,11 +175,11 @@ def plot_mshr_size(
     )
     plt.ylabel("Average MSHR Occupancy", fontsize=24, fontweight="bold")
     plt.yticks(
-        np.arange(0, 256.1, 64),
+        np.arange(0, 512.1, 128),
         fontsize=22,
         fontweight="bold",
     )
-    plt.ylim(0, 256)
+    plt.ylim(0, 512)
     # plt.legend(
     #     loc="upper center",
     #     ncol=1,
@@ -203,7 +200,7 @@ def plot_mshr_size(
         spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
 
     output_file = os.path.join(
-        out_dir, "MSHR_Size"
+        out_dir, "L3TLB_MSHR_Size"
     )
     plt.savefig(output_file + ".png", dpi=300)
     plt.savefig(output_file + ".pdf", dpi=300)
@@ -330,7 +327,7 @@ def plot_mshr_len(
         spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
 
     output_file = os.path.join(
-        out_dir, "MSHR_Len"
+        out_dir, "L3TLB_MSHR_Len"
     )
     plt.savefig(output_file + ".png", dpi=300)
     plt.savefig(output_file + ".pdf", dpi=300)
@@ -356,22 +353,37 @@ if __name__ == "__main__":
     for benchmark in get_benchmarks():
         lens, unique_lens = collect_mshr(
             benchmark_name=benchmark,
-            input_dir="../../data/baseline-l3tlb-monitor",
+            input_dir="../../data/baseline-numa-latency",
         )
 
-        baseline = pd.concat(
-            [
-                baseline,
-                pd.DataFrame(
-                    {
-                        "Benchmark": [benchmark],
-                        "MSHR_Size": [lens],
-                        "MSHR_Len": [lens/unique_lens]
-                    }
-                ),
-            ],
-            ignore_index=True,
-        )
+        if lens == 0 and unique_lens == 0:
+            baseline = pd.concat(
+                [
+                    baseline,
+                    pd.DataFrame(
+                        {
+                            "Benchmark": [benchmark],
+                            "MSHR_Size": [0],
+                            "MSHR_Len": [0]
+                        }
+                    ),
+                ],
+                ignore_index=True,
+            )
+        else:
+            baseline = pd.concat(
+                [
+                    baseline,
+                    pd.DataFrame(
+                        {
+                            "Benchmark": [benchmark],
+                            "MSHR_Size": [lens],
+                            "MSHR_Len": [lens/unique_lens]
+                        }
+                    ),
+                ],
+                ignore_index=True,
+            )
 
     plot_mshr_size(
         baseline=baseline.copy(),
