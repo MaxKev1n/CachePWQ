@@ -46,7 +46,8 @@ var l2tlbsqlTracingFlag = flag.Bool("trace-l2sql", false,
 	"Generate trace from L2 TLB into a new MySql database.")
 var verifyFlag = flag.Bool("verify", false, "Verify the emulation result.")
 var memTracing = flag.Bool("trace-mem", false, "Generate memory trace")
-var tlbTracing = flag.Bool("trace-tlb", false, "Generate memory trace")
+var tlbTracing = flag.Bool("trace-tlb", false, "Generate tlb trace")
+var ptwTracing = flag.Bool("trace-ptw", false, "Generate ptw trace")
 var disableProgressBar = flag.Bool("no-progress-bar", false,
 	"Disables the progress bar")
 var instCountReportFlag = flag.Bool("report-inst-count", false,
@@ -1111,6 +1112,10 @@ func (r *Runner) buildTimingPlatform() {
 
 		if *tlbTracing {
 			b.WithTLBTracing()
+		}
+
+		if *ptwTracing {
+			b.WithPTWTracing()
 		}
 
 		if *disableProgressBar {

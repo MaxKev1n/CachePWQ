@@ -36,6 +36,7 @@ type NUMAGPUBuilder struct {
 	// specific componenets
 	useTLBMonitor bool
 	useCacheTEA   bool
+	ptwTracer     tracing.Tracer
 }
 
 func (b *NUMAGPUBuilder) WithTLBMonitor() {
@@ -44,6 +45,12 @@ func (b *NUMAGPUBuilder) WithTLBMonitor() {
 
 func (b *NUMAGPUBuilder) WithCacheTEA() {
 	b.useCacheTEA = true
+}
+
+func (b *NUMAGPUBuilder) WithPTWTracer(
+	tracer tracing.Tracer,
+) {
+	b.ptwTracer = tracer
 }
 
 func MakeNUMAGPUBuilder() NUMAGPUBuilder {
@@ -781,6 +788,12 @@ func (b *NUMAGPUBuilder) buildMMU(chiplet *Chiplet) {
 			b.buildAsyncCaPWQMMU(chiplet)
 		default:
 			log.Panicf("Unsupported MMU type: %s\n", mmuType)
+		}
+	}
+
+	for _, mmu := range chiplet.MMUs {
+		if b.ptwTracer != nil {
+			tracing.CollectTrace(mmu, b.ptwTracer)
 		}
 	}
 }

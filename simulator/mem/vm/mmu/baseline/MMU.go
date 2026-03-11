@@ -41,6 +41,22 @@ type transactionImpl struct {
 	pid               ca.PID
 }
 
+func (t *transactionImpl) TaskID() string {
+	return t.msgID
+}
+
+func (t *transactionImpl) Meta() *akita.MsgMeta {
+	return &t.MsgMeta
+}
+
+func (t *transactionImpl) GetPPN() uint64 {
+	return t.PPN
+}
+
+func (t *transactionImpl) GetMemReq() *mem.ReadReq {
+	return t.memReq
+}
+
 type PageWalkerImpl struct {
 	queue         []*device.TranslationReq
 	inflightTrans *transactionImpl
@@ -180,6 +196,7 @@ func (impl *MMUImpl) sendToMem(now akita.VTimeInSec, trans *transactionImpl) {
 	trans.vAddr = impl.pageTable.NextLevel(trans.vAddr)
 	trans.msgID = readReq.ID
 	trans.state = sentToMem
+	trans.memReq = readReq // For tracing
 
 	partitionID := mmu.ExtractMPID(dstPort.Name())
 
@@ -215,6 +232,15 @@ func (impl *MMUImpl) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInS
 		if trans.msgID == rsp.RespondTo {
 			trans.PPN = binary.LittleEndian.Uint64(rsp.Data)
 			trans.state = memDone
+
+			tracing.AddTaskStepWithDetail(
+				"",
+				now,
+				impl,
+				"ptw-mem-req",
+				trans,
+			)
+
 			if trans.level+1 == 4 {
 				impl.finalizeTransaction(now, i)
 			} else {

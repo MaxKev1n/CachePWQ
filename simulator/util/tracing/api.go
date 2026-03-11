@@ -115,6 +115,7 @@ func AddTaskStepWithDetail(
 	task := Task{
 		ID:     id,
 		What:   what,
+		Where:  domain.Name(),
 		Detail: detail,
 		Steps:  []TaskStep{step},
 	}

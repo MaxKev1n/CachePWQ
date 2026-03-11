@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/util/tracing"
 )
@@ -26,6 +27,9 @@ type MMU interface {
 type Transaction interface {
 	TaskID() string
 	Meta() *akita.MsgMeta
+
+	GetPPN() uint64
+	GetMemReq() *mem.ReadReq
 }
 
 func ExtractMPID(portName string) int {

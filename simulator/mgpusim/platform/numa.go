@@ -1,8 +1,12 @@
 package platform
 
 import (
+	"log"
+	"os"
+
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
+	memtraces "gitlab.com/akita/mem/trace"
 	"gitlab.com/akita/mgpusim/builders"
 	"gitlab.com/akita/mgpusim/driver"
 	"gitlab.com/akita/mgpusim/power"
@@ -11,6 +15,8 @@ import (
 // NUMAPlatformBuilder can build a platform that equips DisTLBGPU GPU.
 type NUMAPlatformBuilder struct {
 	CommonPlatformBuilder
+
+	tracePTW bool
 }
 
 // MakeNUMAPlatformBuilder creates a EmuBuilder with default parameters.
@@ -26,8 +32,15 @@ func MakeNUMAPlatformBuilder() NUMAPlatformBuilder {
 			totalMem:                 16 * mem.GB,
 			bankSize:                 256 * mem.MB,
 			lowAddr:                  4 * mem.GB,
-		}}
+		},
+		false,
+	}
 	return b
+}
+
+// WithPTWTracing lets the platform trace ptw operations.
+func (b *NUMAPlatformBuilder) WithPTWTracing() {
+	b.tracePTW = true
 }
 
 func (b NUMAPlatformBuilder) Build() (akita.Engine, *driver.Driver) {
@@ -75,6 +88,17 @@ func (b *NUMAPlatformBuilder) createGPUBuilder(
 
 	if b.useCacheTEA {
 		gpuBuilder.WithCacheTEA()
+	}
+
+	if b.tracePTW {
+		file, err := os.Create("ptw.trace")
+		if err != nil {
+			panic(err)
+		}
+		logger := log.New(file, "", 0)
+		tracer := memtraces.NewPTWTracer(logger)
+
+		gpuBuilder.WithPTWTracer(tracer)
 	}
 
 	if b.usePowerModel {
