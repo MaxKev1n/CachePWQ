@@ -79,6 +79,8 @@ type ComputeUnit struct {
 	TotalActiveCycles     akita.VTimeInSec
 	LastStatsUpdateTime   akita.VTimeInSec
 	CurrentWavefrontCount int
+
+	scratchpadPreparer ScratchpadPreparer
 }
 
 // Handle processes that events that are scheduled on the ComputeUnit
@@ -402,6 +404,8 @@ func (cu *ComputeUnit) handleWfCompletionEvent(evt *WfCompletionEvent) error {
 
 		if !cu.hasMoreWfsToRun() {
 			cu.running = false
+
+			cu.scratchpadPreparer.StopWatchdog()
 		}
 	}
 

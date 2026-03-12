@@ -1,6 +1,7 @@
 package cu
 
 import (
+	"context"
 	"log"
 	"math"
 	"math/bits"
@@ -18,6 +19,7 @@ import (
 type ScratchpadPreparer interface {
 	Prepare(instEmuState emu.InstEmuState, wf *wavefront.Wavefront)
 	Commit(instEmuState emu.InstEmuState, wf *wavefront.Wavefront)
+	StopWatchdog()
 }
 
 // ScratchpadPreparerImpl reads and write registers for the emulator
@@ -27,6 +29,7 @@ type ScratchpadPreparerImpl struct {
 	// --- Deadlock / inactivity watchdog ---
 	init bool
 
+	cancel         context.CancelFunc
 	lastCommitUnix atomic.Int64
 	stopWatchdog   chan struct{}
 }
@@ -44,16 +47,19 @@ func (p *ScratchpadPreparerImpl) Init() {
 	if p.init {
 		return
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	p.cancel = cancel
 	p.init = true
 
 	// Initialize the watchdog timer
 	p.lastCommitUnix.Store(time.Now().Unix())
 
-	go p.commitWatchdog(2 * time.Hour)
+	go p.commitWatchdog(ctx, 2*time.Hour)
 }
 
 // commitWatchdog triggers attexit.Exit(1) if no Commit() call occurs in timeout.
-func (p *ScratchpadPreparerImpl) commitWatchdog(timeout time.Duration) {
+func (p *ScratchpadPreparerImpl) commitWatchdog(ctx context.Context, timeout time.Duration) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
@@ -62,10 +68,10 @@ func (p *ScratchpadPreparerImpl) commitWatchdog(timeout time.Duration) {
 		case <-ticker.C:
 			last := time.Unix(p.lastCommitUnix.Load(), 0)
 			if time.Since(last) > timeout {
-				log.Printf("[Watchdog] No Commit() for %v seconds. Exiting.\n", timeout.Seconds())
+				log.Printf("[Watchdog@%s] No Commit() for %v seconds. Exiting.\n", p.cu.Name(), timeout.Seconds())
 				atexit.Exit(1)
 			}
-		case <-p.stopWatchdog:
+		case <-ctx.Done():
 			return
 		}
 	}
@@ -73,11 +79,10 @@ func (p *ScratchpadPreparerImpl) commitWatchdog(timeout time.Duration) {
 
 // StopWatchdog can be called if you want to stop it manually
 func (p *ScratchpadPreparerImpl) StopWatchdog() {
-	select {
-	case <-p.stopWatchdog:
-		// already closed
-	default:
-		close(p.stopWatchdog)
+	if p.cancel != nil {
+		p.cancel()
+		p.init = false
+		log.Printf("[Watchdog@%s] StopWatchdog called.\n", p.cu.Name())
 	}
 }
 
