@@ -282,7 +282,7 @@ func (b *HierarchicalSMSidePrivateTLBGPUBuilder) establishGPC(chiplet *Chiplet) 
 	}
 
 	for _, mmu := range chiplet.MMUs {
-		chiplet.GlobalNoC.PlugInSMSideMultiPort(mmu.TranslationPortPort(), 16, 1)
+		chiplet.GlobalNoC.PlugInSMSideMultiPort(mmu.ToTranslationPort(), 16, 1)
 	}
 }
 

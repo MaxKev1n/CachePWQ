@@ -526,12 +526,12 @@ func (mpw *MPWMMU) ToTopPort() akita.Port {
 	return mpw.ToTop
 }
 
-func (mpw *MPWMMU) TranslationPortPort() akita.Port {
+func (mpw *MPWMMU) ToTranslationPort() akita.Port {
 	return mpw.TranslationPort
 }
 
 func (mpw *MPWMMU) ToCachePort() akita.Port {
-	panic("Baseline MMU does not support ToCachePort")
+	return nil
 }
 
 func (mpw *MPWMMU) CanAccept() bool {

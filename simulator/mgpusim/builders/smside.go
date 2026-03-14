@@ -528,13 +528,13 @@ func (b *SMSideGPUBuilder) connectL2TLBTOMMU(chiplet *Chiplet) {
 func (b *SMSideGPUBuilder) connectMMUToL2NoC(chiplet *Chiplet) {
 	for _, mmu := range b.MMUs {
 		mmu.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
-		chiplet.L1ToL2NoC.PlugInSMSide(mmu.TranslationPortPort(), 64)
+		chiplet.L1ToL2NoC.PlugInSMSide(mmu.ToTranslationPort(), 64)
 	}
 }
 
 func (b *SMSideGPUBuilder) connectMMUToL2(chiplet *Chiplet) {
 	for _, mmu := range b.MMUs {
 		mmu.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
-		chiplet.L1ToL2Connection.PlugIn(mmu.TranslationPortPort(), 64)
+		chiplet.L1ToL2Connection.PlugIn(mmu.ToTranslationPort(), 64)
 	}
 }

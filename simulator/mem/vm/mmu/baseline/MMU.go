@@ -433,12 +433,12 @@ func (mmu *MMUImpl) ToTopPort() akita.Port {
 	return mmu.ToTop
 }
 
-func (mmu *MMUImpl) TranslationPortPort() akita.Port {
+func (mmu *MMUImpl) ToTranslationPort() akita.Port {
 	return mmu.TranslationPort
 }
 
 func (mmu *MMUImpl) ToCachePort() akita.Port {
-	panic("Baseline MMU does not support ToCachePort")
+	return nil
 }
 
 func (mmu *MMUImpl) CanAccept() bool {

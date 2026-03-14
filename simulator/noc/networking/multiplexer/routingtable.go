@@ -35,8 +35,7 @@ func (r *MapRoutingTable) Find(dstPort akita.Port) akita.Port {
 	if srcPort, exists := r.table[dstPort]; exists {
 		return srcPort
 	}
-
-	return r.defaultPort
+	panic("Route does not exist")
 }
 
 func (r *MapRoutingTable) GetAllSrcPorts() []akita.Port {

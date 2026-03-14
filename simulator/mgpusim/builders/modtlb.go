@@ -177,7 +177,7 @@ func (b *MODTLBGPUBuilder) connectMMUToL2(chiplet *Chiplet) {
 			l2.TopPort)
 	}
 	chiplet.MMU.SetLowModuleFinder(lowModuleFinder)
-	chiplet.L1ToL2Connection.PlugIn(chiplet.MMU.TranslationPortPort(), 64)
+	chiplet.L1ToL2Connection.PlugIn(chiplet.MMU.ToTranslationPort(), 64)
 }
 
 func (b *MODTLBGPUBuilder) buildMemBanks(chiplet *Chiplet) {

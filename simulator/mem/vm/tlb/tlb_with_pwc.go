@@ -584,7 +584,7 @@ func (tlb *LastLevelTLB) parseBottom(now akita.VTimeInSec) bool {
 
 	mshrEntryPresent := tlb.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
 	if !mshrEntryPresent {
-		return tlb.parseBottomExtend(now)
+		panic("oh no!")
 	}
 
 	setID := tlb.vAddrToSetID(page.VAddr)

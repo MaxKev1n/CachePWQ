@@ -20,6 +20,13 @@ func (s *respondStage) Tick(now akita.VTimeInSec) bool {
 			continue
 		}
 
+		if trans.fromWalker {
+			if trans.read != nil {
+				return s.respondWalkerReadTrans(now, trans)
+			}
+			return s.respondWalkerWriteTrans(now, trans)
+		}
+
 		if trans.read != nil {
 			return s.respondReadTrans(now, trans)
 		}
@@ -27,6 +34,52 @@ func (s *respondStage) Tick(now akita.VTimeInSec) bool {
 	}
 
 	return false
+}
+
+func (s *respondStage) respondWalkerWriteTrans(
+	now akita.VTimeInSec,
+	trans *transaction,
+) bool {
+	if !trans.done {
+		return false
+	}
+
+	write := trans.write
+	dr := mem.DataReadyRspBuilder{}.
+		WithSendTime(now).
+		WithSrc(s.cache.WalkerPort).
+		WithDst(write.Src).
+		WithRspTo(write.ID).
+		WithData(trans.data).
+		WithInfo(trans.write.Info).
+		Build()
+	err := s.cache.WalkerPort.Send(dr)
+	if err != nil {
+		return false
+	}
+
+	s.removeTransaction(trans)
+
+	tracing.TraceReqComplete(write, now, s.cache)
+
+	return true
+}
+
+func (s *respondStage) respondWalkerReadTrans(
+	now akita.VTimeInSec,
+	trans *transaction,
+) bool {
+	if !trans.done {
+		return false
+	}
+
+	read := trans.read
+
+	s.removeTransaction(trans)
+
+	tracing.TraceReqComplete(read, now, s.cache)
+
+	return true
 }
 
 func (s *respondStage) respondReadTrans(

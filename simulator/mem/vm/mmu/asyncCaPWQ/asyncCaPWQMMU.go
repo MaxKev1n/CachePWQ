@@ -816,7 +816,7 @@ func (mmu *AsyncCaPWQMMU) ToTopPort() akita.Port {
 	return mmu.ToTop
 }
 
-func (mmu *AsyncCaPWQMMU) TranslationPortPort() akita.Port {
+func (mmu *AsyncCaPWQMMU) ToTranslationPort() akita.Port {
 	return mmu.TranslationPort
 }
 

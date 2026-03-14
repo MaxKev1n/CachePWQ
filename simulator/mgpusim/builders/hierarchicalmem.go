@@ -415,7 +415,7 @@ func (b *HierarchicalMemSideGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 	}
 
 	chiplet.GlobalNoC.PlugInMemSideMultiPort(chiplet.L2TLBs[0].GetTopPort(), 64, 1)
-	chiplet.GlobalNoC.PlugInSMSideMultiPort(chiplet.MMU.TranslationPortPort(), 64, 1)
+	chiplet.GlobalNoC.PlugInSMSideMultiPort(chiplet.MMU.ToTranslationPort(), 64, 1)
 }
 
 func (b *HierarchicalMemSideGPUBuilder) establishL1TLBToL2TLBRoutingPath(chiplet *Chiplet) {

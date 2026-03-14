@@ -446,7 +446,7 @@ func (b *HierarchicalMemSideCaPWQGPUBuilder) connectGlobalNoC(chiplet *Chiplet) 
 	}
 
 	chiplet.GlobalNoC.PlugInMemSideMultiPort(chiplet.L2TLBs[0].GetTopPort(), 64, 1)
-	chiplet.GlobalNoC.PlugInSMSideMultiPort(chiplet.MMU.TranslationPortPort(), 64, 1)
+	chiplet.GlobalNoC.PlugInSMSideMultiPort(chiplet.MMU.ToTranslationPort(), 64, 1)
 }
 
 func (b *HierarchicalMemSideCaPWQGPUBuilder) establishL1TLBToL2TLBRoutingPath(chiplet *Chiplet) {
@@ -511,17 +511,17 @@ func (b *HierarchicalMemSideCaPWQGPUBuilder) establishMMUToL1RoutingPath(chiplet
 		ep := multiplexer.MakeEndPointBuilder().
 			WithEngine(b.engine).
 			WithFreq(b.freq).
-			WithDevicePorts([]akita.Port{idealCache.GetMMUSidePort()}).
+			WithDevicePorts([]akita.Port{idealCache.GetWalkerPort()}).
 			WithNumReqPerCycle(1).
 			WithFlitByteSize(64).
 			Build(fmt.Sprintf("%s.L1IdealCaPWQCache[%d]", chiplet.name, i))
 
 		switchPort := mmuSwitch.ConnectEndPointToSwitch(ep, 5, b.freq)
 		rt := mmuSwitch.GetRoutingTable()
-		rt.AddRoute(idealCache.GetMMUSidePort(), switchPort)
+		rt.AddRoute(idealCache.GetWalkerPort(), switchPort)
 
 		lowModuleFinder.LowModules = append(lowModuleFinder.LowModules,
-			idealCache.GetMMUSidePort())
+			idealCache.GetWalkerPort())
 
 		b.gpu.L1CaPWQCache = append(b.gpu.L1CaPWQCache, idealCache)
 	}

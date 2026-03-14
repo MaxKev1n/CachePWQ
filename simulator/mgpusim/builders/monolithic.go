@@ -268,7 +268,7 @@ func (b *MonolithicGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 
 func (b *MonolithicGPUBuilder) connectMMUToL2NoC(chiplet *Chiplet) {
 	chiplet.MMU.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
-	chiplet.L1ToL2NoC.PlugInSMSide(chiplet.MMU.TranslationPortPort(), 64)
+	chiplet.L1ToL2NoC.PlugInSMSide(chiplet.MMU.ToTranslationPort(), 64)
 }
 
 func (b *MonolithicGPUBuilder) setupInterchipNetwork() {

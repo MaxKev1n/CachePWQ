@@ -820,7 +820,7 @@ func (b *CommonBuilder) connectCP() {
 
 func (b *CommonBuilder) connectMMUToL2(chiplet *Chiplet) {
 	chiplet.MMU.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
-	chiplet.L1ToL2Connection.PlugIn(chiplet.MMU.TranslationPortPort(), 64)
+	chiplet.L1ToL2Connection.PlugIn(chiplet.MMU.ToTranslationPort(), 64)
 }
 
 func (b *CommonBuilder) connectCPWithCUs() {

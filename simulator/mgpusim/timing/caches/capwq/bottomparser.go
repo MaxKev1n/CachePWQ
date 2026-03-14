@@ -1,9 +1,6 @@
 package capwq
 
 import (
-	"fmt"
-	"reflect"
-
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
@@ -26,12 +23,8 @@ func (p *bottomParser) Tick(now akita.VTimeInSec) bool {
 		return p.processDoneRsp(now, rsp)
 	case *mem.DataReadyRsp:
 		return p.processDataReady(now, rsp)
-	case *mem.ReadReq:
-		return p.processMMURead(now, rsp)
-	case *mem.WriteReq:
-		return p.processMMUWrite(now, rsp)
 	default:
-		panic(fmt.Sprintf("unexpected type %v", reflect.TypeOf(item)))
+		panic("cannot process response")
 	}
 }
 
@@ -56,44 +49,6 @@ func (p *bottomParser) processDoneRsp(
 	tracing.EndTask(trans.id, now, p.cache)
 
 	return true
-}
-
-func (p *bottomParser) processMMURead(
-	now akita.VTimeInSec,
-	req *mem.ReadReq,
-) bool {
-	if !p.cache.dirBuf.CanPush() {
-		return false
-	}
-
-	p.cache.dirBuf.Push(req)
-
-	p.cache.BottomPort.Retrieve(now)
-
-	tracing.TraceReqReceive(req, now, p.cache)
-	tracing.StopTracingNetwork(
-		req, now, p.cache, "trace-mmu-cache-req")
-
-	return false
-}
-
-func (p *bottomParser) processMMUWrite(
-	now akita.VTimeInSec,
-	req *mem.WriteReq,
-) bool {
-	if !p.cache.dirBuf.CanPush() {
-		return false
-	}
-
-	p.cache.dirBuf.Push(req)
-
-	p.cache.BottomPort.Retrieve(now)
-
-	tracing.TraceReqReceive(req, now, p.cache)
-	tracing.StopTracingNetwork(
-		req, now, p.cache, "trace-mmu-cache-req")
-
-	return false
 }
 
 func (p *bottomParser) processDataReady(

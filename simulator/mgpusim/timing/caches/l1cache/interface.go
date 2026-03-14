@@ -14,4 +14,5 @@ type Cache interface {
 	GetTopPort() akita.Port
 	GetBottomPort() akita.Port
 	GetControlPort() akita.Port
+	GetWalkerPort() akita.Port
 }

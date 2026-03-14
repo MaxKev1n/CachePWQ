@@ -4,19 +4,19 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
-	"gitlab.com/akita/mem/vm/mmu"
+	"gitlab.com/akita/mem/profile"
 	"gitlab.com/akita/util"
-	"gitlab.com/akita/util/pipelining"
 	"gitlab.com/akita/util/tracing"
 )
 
-// A CaPWQCache is a customized L1 cache the for R9nano GPUs.
+// A Cache is a customized L1 cache the for R9nano GPUs.
 type Cache struct {
 	*akita.TickingComponent
 
 	TopPort     akita.Port
 	BottomPort  akita.Port
 	ControlPort akita.Port
+	WalkerPort  akita.Port
 
 	numReqPerCycle   int
 	log2BlockSize    uint64
@@ -30,11 +30,8 @@ type Cache struct {
 	dirBuf   util.Buffer
 	bankBufs []util.Buffer
 
-	mmuStorage  map[string]mmu.Transaction
-	mmuPipeline pipelining.Pipeline
-	mmuBuf      util.Buffer
-
 	coalesceStage    *coalescer
+	walkerStage      *walkerStage
 	directoryStage   *directory
 	bankStages       []*bankStage
 	parseBottomStage *bottomParser
@@ -45,6 +42,11 @@ type Cache struct {
 	postCoalesceTransactions []*transaction
 
 	isPaused bool
+
+	enableAttribute bool
+	provider        profile.CachePSVComponent
+
+	directoryStatus []profile.CachePSVStatus
 }
 
 // SetLowModuleFinder sets the finder that tells which remote port can serve
@@ -63,7 +65,17 @@ func (c *Cache) Tick(now akita.VTimeInSec) bool {
 
 	madeProgress = c.controlStage.Tick(now) || madeProgress
 
+	if c.enableAttribute {
+		c.Attribute(now)
+
+		return true
+	}
+
 	return madeProgress
+}
+
+func (c *Cache) EnableCacheTEA() {
+	c.enableAttribute = true
 }
 
 func (c *Cache) runPipeline(now akita.VTimeInSec) bool {
@@ -73,7 +85,7 @@ func (c *Cache) runPipeline(now akita.VTimeInSec) bool {
 	madeProgress = c.tickBankStage(now) || madeProgress
 	madeProgress = c.tickDirectoryStage(now) || madeProgress
 	madeProgress = c.tickCoalesceState(now) || madeProgress
-	madeProgress = c.tickMMUStage(now) || madeProgress
+	madeProgress = c.tickWalkerStage(now) || madeProgress
 	return madeProgress
 }
 
@@ -107,6 +119,16 @@ func (c *Cache) tickDirectoryStage(now akita.VTimeInSec) bool {
 	madeProgress := false
 	for i := 0; i < c.numReqPerCycle; i++ {
 		madeProgress = c.directoryStage.Tick(now) || madeProgress
+
+		c.directoryStatus[i] = c.directoryStage.status
+	}
+	return madeProgress
+}
+
+func (c *Cache) tickWalkerStage(now akita.VTimeInSec) bool {
+	madeProgress := false
+	for i := 0; i < c.numReqPerCycle; i++ {
+		madeProgress = c.walkerStage.Tick(now) || madeProgress
 	}
 	return madeProgress
 }
@@ -119,88 +141,6 @@ func (c *Cache) tickCoalesceState(now akita.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (c *Cache) tickMMUStage(now akita.VTimeInSec) bool {
-	madeProgress := false
-
-	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.mmuPipeline.Tick(now) || madeProgress
-		madeProgress = c.processMMUTransaction(now) || madeProgress
-	}
-
-	return madeProgress
-}
-
-func (c *Cache) processMMUTransaction(now akita.VTimeInSec) bool {
-	item := c.mmuBuf.Peek()
-	if item == nil {
-		return false
-	}
-
-	switch req := item.(type) {
-	case *mem.WriteReq:
-		return c.processMMUWrite(now, req)
-	case *mem.ReadReq:
-		return c.processMMURead(now, req)
-	default:
-		panic("unexpected type")
-	}
-}
-
-func (c *Cache) processMMUWrite(
-	now akita.VTimeInSec,
-	req *mem.WriteReq,
-) bool {
-	transID := req.Info.(mmu.Transaction).TaskID()
-	if _, exists := c.mmuStorage[transID]; exists {
-		panic("duplicate transID")
-	}
-	c.mmuStorage[transID] = req.Info.(mmu.Transaction)
-
-	c.mmuBuf.Pop()
-
-	tracing.TraceReqComplete(
-		req, now, c,
-	)
-
-	return true
-}
-
-func (c *Cache) processMMURead(
-	now akita.VTimeInSec,
-	req *mem.ReadReq,
-) bool {
-	transID := req.Info.(mmu.Transaction).TaskID()
-	if trans, exists := c.mmuStorage[transID]; exists {
-		rsp := mem.DataReadyRspBuilder{}.
-			WithSendTime(now).
-			WithSrc(c.BottomPort).
-			WithDst(req.Src).
-			WithRspTo(req.ID).
-			WithInfo(req.Info).
-			Build()
-
-		trans.Meta().TrafficBytes = 40
-
-		err := c.BottomPort.Send(rsp)
-		if err != nil {
-			return false
-		}
-
-		tracing.TraceReqComplete(
-			req, now, c,
-		)
-		tracing.StartTracingNetwork(
-			rsp, now, c, "trace-mmu-cache-req")
-
-		delete(c.mmuStorage, transID)
-
-		c.mmuBuf.Pop()
-
-		return true
-	}
-	panic("cannot find transID")
-}
-
 func (c *Cache) GetTopPort() akita.Port {
 	return c.TopPort
 }
@@ -211,4 +151,73 @@ func (c *Cache) GetBottomPort() akita.Port {
 
 func (c *Cache) GetControlPort() akita.Port {
 	return c.ControlPort
+}
+
+func (c *Cache) GetName() string {
+	return c.Name()
+}
+
+func (c *Cache) CheckTopPort(port akita.Port) bool {
+	return port == c.TopPort
+}
+
+func (c *Cache) CheckBottomPort(port akita.Port) bool {
+	return port == c.BottomPort
+}
+
+func (c *Cache) Attribute(now akita.VTimeInSec) {
+	if c.directoryStage.numExecutedReqs == uint64(c.numReqPerCycle) {
+		tracing.StartTask(
+			"",
+			"",
+			now,
+			c,
+			"cache_utilization",
+			"base",
+			1.0,
+		)
+
+		return
+	}
+
+	if c.directoryStage.numExecutedReqs > 0 {
+		tracing.StartTask(
+			"",
+			"",
+			now,
+			c,
+			"cache_utilization",
+			"base",
+			float64(c.directoryStage.numExecutedReqs)/float64(c.numReqPerCycle),
+		)
+	}
+
+	remainingReqs := int(c.numReqPerCycle) - int(c.directoryStage.numExecutedReqs)
+	for i := remainingReqs - 1; i >= 0; i-- {
+		status := profile.BASE
+
+		if len(c.coalesceStage.toCoalesce) == 0 && c.TopPort.Peek() == nil {
+			status = c.provider.Attribute()
+		} else if !c.dirBuf.CanPush() {
+			status = c.directoryStatus[i]
+		}
+
+		tracing.StartTask(
+			"",
+			"",
+			now,
+			c,
+			"cache_utilization",
+			profile.CachePSVStatusNames[status],
+			1.0/float64(c.numReqPerCycle),
+		)
+	}
+}
+
+func (c *Cache) SetProvider(provider profile.CachePSVComponent) {
+	c.provider = provider
+}
+
+func (c *Cache) GetWalkerPort() akita.Port {
+	return c.WalkerPort
 }

@@ -260,14 +260,14 @@ func (c *IdealCaPWQCache) GetControlPort() akita.Port {
 	panic("not implemented")
 }
 
-func (c *IdealCaPWQCache) GetMMUSidePort() akita.Port {
-	return c.mmuSidePort
-}
-
 func (c *IdealCaPWQCache) GetName() string {
 	return c.Name()
 }
 
 func (c *IdealCaPWQCache) SetLowModuleFinder(lmf cache.LowModuleFinder) {
 	panic("not implemented")
+}
+
+func (c *IdealCaPWQCache) GetWalkerPort() akita.Port {
+	return c.mmuSidePort
 }

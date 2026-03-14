@@ -208,3 +208,7 @@ func (c *Cache) Attribute(now akita.VTimeInSec) {
 func (c *Cache) SetProvider(provider profile.CachePSVComponent) {
 	c.provider = provider
 }
+
+func (c *Cache) GetWalkerPort() akita.Port {
+	return nil
+}

@@ -6,13 +6,13 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
-	"gitlab.com/akita/mem/vm/mmu"
+	"gitlab.com/akita/mem/profile"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/pipelining"
 	"gitlab.com/akita/util/tracing"
 )
 
-// A CaPWQBuilder can build an l1v cache
+// A Builder can build an l1v cache
 type Builder struct {
 	engine          akita.Engine
 	freq            akita.Freq
@@ -127,7 +127,9 @@ func (b *Builder) Build(name string) *Cache {
 	c.BottomPort = akita.NewLimitNumMsgPort(c, b.numReqPerCycle,
 		name+".BottomPort")
 	c.ControlPort = akita.NewLimitNumMsgPort(c, b.numReqPerCycle,
-		name+"ControlPort")
+		name+".ControlPort")
+	c.WalkerPort = akita.NewLimitNumMsgPort(c, b.numReqPerCycle,
+		name+".WalkerPort")
 
 	c.dirBuf = util.NewBuffer(b.numReqPerCycle)
 	c.bankBufs = make([]util.Buffer, b.numBank)
@@ -147,7 +149,6 @@ func (b *Builder) Build(name string) *Cache {
 	c.lowModuleFinder = b.lowModuleFinder
 
 	b.buildStages(c)
-	b.buildMMUBuffer(c)
 
 	if b.visTracer != nil {
 		tracing.CollectTrace(c, b.visTracer)
@@ -156,24 +157,9 @@ func (b *Builder) Build(name string) *Cache {
 	return c
 }
 
-func (b *Builder) buildMMUBuffer(c *Cache) {
-	c.mmuStorage = make(map[string]mmu.Transaction)
-
-	pipelineName := fmt.Sprintf("%s.MMUBank.Pipeline", c.Name())
-	postPipelineBuf := util.NewBuffer(b.numReqPerCycle)
-	pipeline := pipelining.MakeBuilder().
-		WithPipelineWidth(b.numReqPerCycle).
-		WithNumStage(b.bankLatency).
-		WithCyclePerStage(1).
-		WithPostPipelineBuffer(postPipelineBuf).
-		Build(pipelineName)
-
-	c.mmuBuf = postPipelineBuf
-	c.mmuPipeline = pipeline
-}
-
 func (b *Builder) buildStages(c *Cache) {
 	c.coalesceStage = &coalescer{cache: c}
+	c.walkerStage = &walkerStage{cache: c}
 	c.directoryStage = &directory{cache: c}
 	for i := 0; i < b.numBank; i++ {
 		pipelineName := fmt.Sprintf("%s.Bank_%02d.Pipeline", c.Name(), i)
@@ -208,6 +194,7 @@ func (b *Builder) buildStages(c *Cache) {
 		bankStages:   c.bankStages,
 		coalescer:    c.coalesceStage,
 	}
+	c.directoryStatus = make([]profile.CachePSVStatus, b.numReqPerCycle)
 }
 
 func (b *Builder) assertAllRequiredInformationIsAvailable() {

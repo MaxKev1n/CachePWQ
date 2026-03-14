@@ -213,3 +213,7 @@ func (c *Cache) GetBottomPort() akita.Port {
 func (c *Cache) GetControlPort() akita.Port {
 	return c.ControlPort
 }
+
+func (c *Cache) GetWalkerPort() akita.Port {
+	return nil
+}

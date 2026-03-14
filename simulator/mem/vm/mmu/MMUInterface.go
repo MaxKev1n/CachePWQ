@@ -17,7 +17,7 @@ type MMU interface {
 
 	GetNumActiveWalkers() int
 	ToTopPort() akita.Port
-	TranslationPortPort() akita.Port
+	ToTranslationPort() akita.Port
 	ToCachePort() akita.Port
 	ToPageWalkCachePort() akita.Port
 	SetLowModuleFinder(lmf cache.LowModuleFinder)

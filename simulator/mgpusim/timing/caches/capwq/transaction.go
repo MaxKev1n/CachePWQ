@@ -39,6 +39,8 @@ type transaction struct {
 	bankDone      bool
 	bottomDone    bool
 	done          bool
+
+	fromWalker bool
 }
 
 func (t *transaction) Address() uint64 {

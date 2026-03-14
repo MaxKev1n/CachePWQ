@@ -271,7 +271,7 @@ func (b *MonolithicCaPWQGPUBuilder) connectL1TLBToL2TLBNoC(chiplet *Chiplet) {
 
 func (b *MonolithicCaPWQGPUBuilder) connectMMUToL2NoC(chiplet *Chiplet) {
 	chiplet.MMU.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
-	chiplet.L1ToL2NoC.PlugInSMSide(chiplet.MMU.TranslationPortPort(), 64)
+	chiplet.L1ToL2NoC.PlugInSMSide(chiplet.MMU.ToTranslationPort(), 64)
 	chiplet.L1ToL2NoC.PlugInMemSide(chiplet.MMU.(*caPWQ.CaPWQMMU).ToCache, 64)
 
 	lowModuleFinder := cache.NewXORLowModuleFinder(

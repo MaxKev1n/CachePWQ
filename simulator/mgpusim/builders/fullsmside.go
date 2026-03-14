@@ -544,13 +544,13 @@ func (b *FullSMSideGPUBuilder) connectMMUToL1(chiplet *Chiplet) {
 			lowModuleFinder.LowModules = append(lowModuleFinder.LowModules, l1vCache.MMUPort)
 			l1ToMMUConn.PlugIn(l1vCache.MMUPort, 16)
 		}
-		l1ToMMUConn.PlugIn(mmu.TranslationPortPort(), 64)
+		l1ToMMUConn.PlugIn(mmu.ToTranslationPort(), 64)
 	}
 }
 
 func (b *FullSMSideGPUBuilder) connectMMUToL2(chiplet *Chiplet) {
 	for _, mmu := range b.MMUs {
 		mmu.SetLowModuleFinder(chiplet.lowModuleFinderForL1)
-		chiplet.L1ToL2Connection.PlugIn(mmu.TranslationPortPort(), 64)
+		chiplet.L1ToL2Connection.PlugIn(mmu.ToTranslationPort(), 64)
 	}
 }

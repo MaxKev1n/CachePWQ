@@ -286,7 +286,7 @@ func (b *HierarchicalSMSideGPUBuilder) establishGPC(chiplet *Chiplet) {
 	}
 
 	for _, mmu := range chiplet.MMUs {
-		chiplet.GlobalNoC.PlugInSMSideMultiPort(mmu.TranslationPortPort(), 16, 1)
+		chiplet.GlobalNoC.PlugInSMSideMultiPort(mmu.ToTranslationPort(), 16, 1)
 	}
 }
 
@@ -705,13 +705,13 @@ func (b *HierarchicalSMSideGPUBuilder) buildCAPWQMMU(chiplet *Chiplet) {
 			28,
 		)
 
-		lowModuleFinder.LowModule = idealCache.GetMMUSidePort()
+		lowModuleFinder.LowModule = idealCache.GetWalkerPort()
 
 		mmuToL1Conn := akita.NewDirectConnection(
 			fmt.Sprintf("%s.CaPWQMMU[%d]-L1IdealCaPWQCache[%d]", chiplet.name, i, i),
 			b.engine, b.freq)
 
-		mmuToL1Conn.PlugIn(idealCache.GetMMUSidePort(), 16)
+		mmuToL1Conn.PlugIn(idealCache.GetWalkerPort(), 16)
 		mmuToL1Conn.PlugIn(caPWQMMU.ToCachePort(), 16)
 
 		chiplet.MMUs = append(chiplet.MMUs, caPWQMMU)

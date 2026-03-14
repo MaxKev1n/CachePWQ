@@ -70,7 +70,7 @@ func (mmu *IdealMMU) ToTopPort() akita.Port {
 	return mmu.ToTop
 }
 
-func (mmu *IdealMMU) TranslationPortPort() akita.Port {
+func (mmu *IdealMMU) ToTranslationPort() akita.Port {
 	return mmu.TranslationPort
 }
 
@@ -79,7 +79,7 @@ func (mmu *IdealMMU) ToPageWalkCachePort() akita.Port {
 }
 
 func (mmu *IdealMMU) ToCachePort() akita.Port {
-	panic("IdealMMU does not have ToCache port")
+	return nil
 }
 
 func (mmu *IdealMMU) CommandProcessorPort() akita.Port {

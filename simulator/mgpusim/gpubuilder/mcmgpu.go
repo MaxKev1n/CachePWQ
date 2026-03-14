@@ -776,7 +776,7 @@ func (b *MCMGPUBuilder) connectL1ToL2(chiplet *Chiplet) {
 	}
 
 	chiplet.MMU.SetLowModuleFinder(lowModuleFinder)
-	l1ToL2Conn.PlugIn(chiplet.MMU.TranslationPortPort(), 64)
+	l1ToL2Conn.PlugIn(chiplet.MMU.ToTranslationPort(), 64)
 }
 
 func (b *MCMGPUBuilder) connectL2ToDRAM(chiplet *Chiplet) {

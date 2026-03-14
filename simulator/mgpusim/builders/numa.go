@@ -21,7 +21,6 @@ import (
 	"gitlab.com/akita/mem/vm/mmu/mpw"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
-	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	"gitlab.com/akita/mgpusim/timing/caches/l1v"
 	"gitlab.com/akita/mgpusim/yamlconfig"
 	noc "gitlab.com/akita/noc/networking/booksim"
@@ -154,6 +153,12 @@ func (b *NUMAGPUBuilder) BuildSAs(chiplet *Chiplet) {
 	saBuilder.withNumCU(b.numCUPerShaderArray)
 	saBuilder.withPageTable(b.pageTable)
 
+	switch yamlconfig.OverrideConfig["MMU.type"] {
+	case "CaPWQMMU", "AsyncCaPWQMMU":
+		saBuilder.withConfig("CaPWQ")
+	default:
+	}
+
 	if b.enableVisTracing {
 		saBuilder.withVisTracer(b.visTracer)
 	}
@@ -279,7 +284,7 @@ func (b *NUMAGPUBuilder) establishTPC(chiplet *Chiplet) {
 		mux := multiplexer.MakeMultiplexerBuilder().
 			WithEngine(b.engine).
 			WithFreq(b.freq).
-			WithNumReqPerCycle(2).
+			WithNumReqPerCycle(4).
 			WithSwitchLatency(2).
 			WithBufferSizeInNumFlit(16).
 			WithRoutingTable(routingTable).
@@ -289,12 +294,18 @@ func (b *NUMAGPUBuilder) establishTPC(chiplet *Chiplet) {
 	}
 
 	for i, l1v := range chiplet.L1VCaches {
+		devicePorts := []akita.Port{l1v.GetBottomPort()}
+
+		//if l1v.GetWalkerPort() != nil {
+		//	devicePorts = append(devicePorts, l1v.GetWalkerPort())
+		//}
+
 		ep := multiplexer.MakeEndPointBuilder().
 			WithEngine(b.engine).
 			WithFreq(b.freq).
-			WithDevicePorts([]akita.Port{l1v.GetBottomPort()}).
-			WithNumReqPerCycle(1).
-			WithNetworkPortBufferSize(1).
+			WithDevicePorts(devicePorts).
+			WithNumReqPerCycle(2).
+			WithNetworkPortBufferSize(2).
 			WithFlitByteSize(32).
 			Build(fmt.Sprintf("%s.L1VCache[%d]", chiplet.name, i))
 
@@ -302,7 +313,9 @@ func (b *NUMAGPUBuilder) establishTPC(chiplet *Chiplet) {
 		mux := chiplet.tpcMux[tpcID]
 
 		localPort := mux.AddLowSidePort(ep)
-		mux.AddRoute(l1v.GetBottomPort(), localPort)
+		for _, port := range devicePorts {
+			mux.AddRoute(port, localPort)
+		}
 	}
 
 	for i, l1vtlb := range chiplet.L1VTLBs {
@@ -310,7 +323,7 @@ func (b *NUMAGPUBuilder) establishTPC(chiplet *Chiplet) {
 			WithEngine(b.engine).
 			WithFreq(b.freq).
 			WithDevicePorts([]akita.Port{l1vtlb.GetBottomPort()}).
-			WithNumReqPerCycle(1).
+			WithNumReqPerCycle(2).
 			WithFlitByteSize(32).
 			Build(fmt.Sprintf("%s.L1VTLB[%d]", chiplet.name, i))
 
@@ -447,7 +460,7 @@ func (b *NUMAGPUBuilder) establishGPC(chiplet *Chiplet) {
 			WithEngine(b.engine).
 			WithFreq(b.freq).
 			WithDevicePorts([]akita.Port{
-				mmu.TranslationPortPort(),
+				mmu.ToTranslationPort(),
 				mmu.ToPageWalkCachePort(),
 				mmu.ToTopPort(),
 			}).
@@ -459,7 +472,7 @@ func (b *NUMAGPUBuilder) establishGPC(chiplet *Chiplet) {
 		mux := chiplet.gpcMux[i]
 
 		localPort := mux.AddLowSidePort(ep)
-		mux.AddRoute(mmu.TranslationPortPort(), localPort)
+		mux.AddRoute(mmu.ToTranslationPort(), localPort)
 		mux.AddRoute(mmu.ToPageWalkCachePort(), localPort)
 		mux.AddRoute(mmu.ToTopPort(), localPort)
 	}
@@ -517,6 +530,7 @@ func (b *NUMAGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 			WithNetworkPortBufferSize(64).
 			WithDevicePorts([]akita.Port{
 				chiplet.L2TLBs[i].GetTopPort(),
+				//chiplet.MMUs[i].ToCachePort(),
 			}).
 			Build(fmt.Sprintf("%s.GPCHighSideEndPoint[%d]", chiplet.name, i))
 
@@ -537,8 +551,6 @@ func (b *NUMAGPUBuilder) connectGlobalNoC(chiplet *Chiplet) {
 			chiplet.GlobalNoC.AddRoute(port, ep.NetworkPort)
 		}
 		ep.PlugInNoCPort(nocPort, 64)
-
-		chiplet.GlobalNoC.AddRoute(chiplet.L2TLBs[i].GetTopPort(), ep.NetworkPort)
 	}
 
 	if len(chiplet.l2Mux)%2 != 0 {
@@ -1097,54 +1109,20 @@ func (b *NUMAGPUBuilder) establishMMUToL1RoutingPath(chiplet *Chiplet) {
 			panic("MMU is not CaPWQMMU")
 		}
 
-		mmuSwitch := multiplexer.SwitchBuilder{}.
-			WithEngine(b.engine).
-			WithFreq(b.freq).
-			WithArbiter(multiplexer.NewRRArbiter()).
-			WithRoutingTable(multiplexer.NewMapRoutingTable()).
-			WithNumReqPerCycle(32).
-			WithBufferSizeInNumFlit(32).
-			Build(fmt.Sprintf("%s.MMUSwitch", chiplet.name))
+		conn := akita.NewDirectConnection(
+			fmt.Sprintf("%s.MMU_%02d_To_L1Conn", chiplet.name, i),
+			b.engine, 1*akita.GHz,
+		)
+
+		conn.PlugIn(chiplet.MMUs[i].ToCachePort(), 16)
 
 		for j := i * numCUsPerGPC; j < (i+1)*numCUsPerGPC; j++ {
-			idealCache := l1cache.NewIdealCaPWQCache(
-				fmt.Sprintf("%s.L1IdealCaPWQCache_%02d", chiplet.name, j),
-				b.engine,
-				b.freq,
-				2,
-				28,
+			lowModuleFinder.LowModules = append(
+				lowModuleFinder.LowModules,
+				chiplet.L1VCaches[j].GetWalkerPort(),
 			)
-
-			ep := multiplexer.MakeEndPointBuilder().
-				WithEngine(b.engine).
-				WithFreq(b.freq).
-				WithDevicePorts([]akita.Port{idealCache.GetMMUSidePort()}).
-				WithNumReqPerCycle(1).
-				WithFlitByteSize(64).
-				Build(fmt.Sprintf("%s.L1IdealCaPWQCache_%02d", chiplet.name, j))
-
-			switchPort := mmuSwitch.ConnectEndPointToSwitch(ep, 5, b.freq)
-			rt := mmuSwitch.GetRoutingTable()
-			rt.AddRoute(idealCache.GetMMUSidePort(), switchPort)
-
-			lowModuleFinder.LowModules = append(lowModuleFinder.LowModules,
-				idealCache.GetMMUSidePort())
-
-			b.gpu.L1CaPWQCache = append(b.gpu.L1CaPWQCache, idealCache)
+			conn.PlugIn(chiplet.L1VCaches[j].GetWalkerPort(), 16)
 		}
-
-		ep := multiplexer.MakeEndPointBuilder().
-			WithEngine(b.engine).
-			WithFreq(b.freq).
-			WithDevicePorts([]akita.Port{chiplet.MMUs[i].ToCachePort()}).
-			WithFlitByteSize(64).
-			WithNumReqPerCycle(8).
-			WithNetworkPortBufferSize(8).
-			Build(fmt.Sprintf("%s.MMU_%02d", chiplet.name, i))
-
-		switchPort := mmuSwitch.ConnectEndPointToSwitch(ep, 5, b.freq)
-		rt := mmuSwitch.GetRoutingTable()
-		rt.AddRoute(chiplet.MMUs[i].ToCachePort(), switchPort)
 	}
 }
 

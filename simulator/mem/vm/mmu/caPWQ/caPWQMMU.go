@@ -38,6 +38,7 @@ type transactionImpl struct {
 	PPN     uint64
 	vAddr   uint64
 	pid     ca.PID
+	data    []byte
 }
 
 type CaPWQPageWalker struct {
@@ -54,7 +55,7 @@ func newCaPWQPageWalker(mmu *CaPWQMMU, id int) *CaPWQPageWalker {
 	}
 
 	walker.TickingComponent = akita.NewTickingComponent(
-		fmt.Sprintf("CaPWQPageWalker_%02d", id),
+		fmt.Sprintf("%s.CaPWQPageWalker_%02d", mmu.Name(), id),
 		mmu.Engine,
 		mmu.Freq,
 		walker,
@@ -134,16 +135,12 @@ func (walker *CaPWQPageWalker) AcceptMemoryRsp(
 		panic("walker can't accept")
 	}
 
-	PPN := binary.LittleEndian.Uint64(rsp.Data)
-	if PPN == 0 {
-		panic("invalid page walk result, PPN is 0")
-	}
-
 	walker.info = rsp.Info.(*mem.DataReadyRspInfo).Address
 	walker.transaction = &transactionImpl{
 		state: memDone,
 		pid:   rsp.PID,
-		PPN:   PPN,
+		data:  rsp.Data,
+		PPN:   binary.LittleEndian.Uint64(rsp.Data),
 	}
 
 	tracing.EndTask(rsp.RespondTo, now, walker.mmu)
@@ -161,8 +158,10 @@ func (walker *CaPWQPageWalker) AcceptL1CacheRsp(
 
 	block := rsp.Info.(vm.CaPWQBlock)
 
+	PPN := binary.LittleEndian.Uint64(rsp.Data)
+
 	for j, trans := range walker.mmu.pageWalkQueue {
-		if trans.state != sentRDToL1 || trans.PPN != block.PPN {
+		if trans.state != sentRDToL1 || trans.PPN != PPN {
 			continue
 		}
 
@@ -229,7 +228,7 @@ func (walker *CaPWQPageWalker) sendReadReqToL1(now akita.VTimeInSec) {
 		WithDst(dstPort).
 		WithPID(trans.pid).
 		WithAddress(walker.info).
-		WithInfo(trans.PPN).
+		WithInfo(trans.data).
 		Build()
 
 	readReq.TrafficBytes += 8
@@ -651,7 +650,7 @@ func (mmu *CaPWQMMU) ToTopPort() akita.Port {
 	return mmu.ToTop
 }
 
-func (mmu *CaPWQMMU) TranslationPortPort() akita.Port {
+func (mmu *CaPWQMMU) ToTranslationPort() akita.Port {
 	return mmu.TranslationPort
 }
 
