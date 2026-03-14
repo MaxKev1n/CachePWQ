@@ -134,8 +134,8 @@ func (b *shaderArrayBuilder) buildComponents(sa *shaderArray) {
 		b.buildFullSMSideComponents(sa)
 	case "SMSide":
 		b.buildSMSideComponents(sa)
-	case "CaPWQ":
-		b.buildCaPWQComponents(sa)
+	case "CaPWQL2":
+		b.buildCaPWQL2Components(sa)
 	default:
 		b.buildDefaultComponents(sa)
 	}
@@ -198,18 +198,18 @@ func (b *shaderArrayBuilder) buildSMSideComponents(sa *shaderArray) {
 	b.buildL1ICache(sa)
 }
 
-func (b *shaderArrayBuilder) buildCaPWQComponents(sa *shaderArray) {
+func (b *shaderArrayBuilder) buildCaPWQL2Components(sa *shaderArray) {
 	b.buildCUs(sa)
 
 	b.buildL1VTLBs(sa)
 	b.buildL1VAddressTranslators(sa)
 	b.buildL1VReorderBuffers(sa)
-	b.buildCaPWQL1VCaches(sa)
+	b.buildCaPWQL2L1VCaches(sa)
 
 	b.buildL1STLB(sa)
 	b.buildL1SAddressTranslator(sa)
 	b.buildL1SReorderBuffer(sa)
-	b.buildL1SCaPWQCache(sa)
+	b.buildL1SCache(sa)
 
 	b.buildL1ITLB(sa)
 	b.buildL1IAddressTranslator(sa)
@@ -463,8 +463,8 @@ func (b *shaderArrayBuilder) buildL1VCaches(sa *shaderArray) {
 	}
 }
 
-func (b *shaderArrayBuilder) buildCaPWQL1VCaches(sa *shaderArray) {
-	builder := capwq.NewBuilder().
+func (b *shaderArrayBuilder) buildCaPWQL2L1VCaches(sa *shaderArray) {
+	builder := CaPWQCacheL2.NewBuilder().
 		WithEngine(b.engine).
 		WithFreq(b.freq).
 		WithNumBanks(1).
@@ -574,28 +574,6 @@ func (b *shaderArrayBuilder) buildSMSideL1STLB(sa *shaderArray) {
 
 	if b.visTracer != nil {
 		tracing.CollectTrace(tlb, b.visTracer)
-	}
-}
-
-func (b *shaderArrayBuilder) buildL1SCaPWQCache(sa *shaderArray) {
-	builder := capwq.NewBuilder().
-		WithEngine(b.engine).
-		WithFreq(b.freq).
-		WithBankLatency(20).
-		WithNumBanks(1).
-		WithLog2BlockSize(b.log2CacheLineSize).
-		WithWayAssocitivity(16).
-		WithNumMSHREntry(32).
-		WithTotalByteSize(64 * mem.KB).
-		WithNumReqsPerCycle(4).
-		WithBankLatency(28)
-
-	name := fmt.Sprintf("%s.L1SCaPWQCache", b.name)
-	cache := builder.Build(name)
-	sa.l1sCache = cache
-
-	if b.visTracer != nil {
-		tracing.CollectTrace(cache, b.visTracer)
 	}
 }
 

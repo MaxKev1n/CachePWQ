@@ -1,4 +1,4 @@
-package caPWQ
+package caPWQL2
 
 import (
 	"encoding/binary"

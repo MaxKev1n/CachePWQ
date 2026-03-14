@@ -1,4 +1,4 @@
-package capwq
+package CaPWQCacheL2
 
 import (
 	"gitlab.com/akita/mem"

@@ -16,7 +16,6 @@ import (
 	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/mem/vm/mmu/asyncCaPWQ"
 	"gitlab.com/akita/mem/vm/mmu/baseline"
-	"gitlab.com/akita/mem/vm/mmu/caPWQ"
 	"gitlab.com/akita/mem/vm/mmu/mpw"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
@@ -594,8 +593,6 @@ func (b *CommonBuilder) buildMMU(chiplet *Chiplet) {
 		switch mmuType {
 		case "IdealMMU":
 			b.buildIdealMMU(chiplet)
-		case "CaPWQMMU":
-			b.buildCAPWQMMU(chiplet)
 		case "MPWMMU":
 			b.buildMPWMMU(chiplet)
 		case "BaselineMMU":
@@ -632,29 +629,6 @@ func (b *CommonBuilder) buildIdealMMU(chiplet *Chiplet) {
 	}
 
 	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.IdealMMU", chiplet.name))
-
-	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
-}
-
-func (b *CommonBuilder) buildCAPWQMMU(chiplet *Chiplet) {
-	mmuBuilder := caPWQ.MakeCaPWQMMUBuilder().
-		WithEngine(b.engine).
-		WithFreq(1 * akita.GHz).
-		WithLog2PageSize(b.log2PageSize).
-		WithPageTable(b.pageTable).
-		WithMaxNumReqInFlight(16).
-		WithLog2CacheLineSize(b.log2CacheLineSize)
-
-	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
-		numWalkersInt, err := strconv.Atoi(numWalkers)
-		if err != nil {
-			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
-		}
-
-		mmuBuilder = mmuBuilder.WithMaxNumReqInFlight(numWalkersInt)
-	}
-
-	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.CaPWQMMU", chiplet.name))
 
 	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
 }
