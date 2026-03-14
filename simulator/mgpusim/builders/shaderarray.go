@@ -9,7 +9,8 @@ import (
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mem/vm/addresstranslator"
 	"gitlab.com/akita/mem/vm/tlb"
-	"gitlab.com/akita/mgpusim/timing/caches/capwq"
+	"gitlab.com/akita/mgpusim/timing/caches/capwql1"
+	"gitlab.com/akita/mgpusim/timing/caches/capwql2"
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	"gitlab.com/akita/mgpusim/timing/caches/l1v"
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
@@ -134,6 +135,8 @@ func (b *shaderArrayBuilder) buildComponents(sa *shaderArray) {
 		b.buildFullSMSideComponents(sa)
 	case "SMSide":
 		b.buildSMSideComponents(sa)
+	case "CaPWQL1":
+		b.buildCaPWQL1Components(sa)
 	case "CaPWQL2":
 		b.buildCaPWQL2Components(sa)
 	default:
@@ -193,6 +196,25 @@ func (b *shaderArrayBuilder) buildSMSideComponents(sa *shaderArray) {
 	b.buildL1SCache(sa)
 
 	b.buildSMSideL1ITLB(sa)
+	b.buildL1IAddressTranslator(sa)
+	b.buildL1IReorderBuffer(sa)
+	b.buildL1ICache(sa)
+}
+
+func (b *shaderArrayBuilder) buildCaPWQL1Components(sa *shaderArray) {
+	b.buildCUs(sa)
+
+	b.buildL1VTLBs(sa)
+	b.buildL1VAddressTranslators(sa)
+	b.buildL1VReorderBuffers(sa)
+	b.buildCaPWQL1L1VCaches(sa)
+
+	b.buildL1STLB(sa)
+	b.buildL1SAddressTranslator(sa)
+	b.buildL1SReorderBuffer(sa)
+	b.buildL1SCache(sa)
+
+	b.buildL1ITLB(sa)
 	b.buildL1IAddressTranslator(sa)
 	b.buildL1IReorderBuffer(sa)
 	b.buildL1ICache(sa)
@@ -458,6 +480,29 @@ func (b *shaderArrayBuilder) buildL1VCaches(sa *shaderArray) {
 
 	for i := 0; i < b.numCU; i++ {
 		name := fmt.Sprintf("%s.L1VCache_%02d", b.name, i)
+		cache := builder.Build(name)
+		sa.l1vCaches = append(sa.l1vCaches, cache)
+	}
+}
+
+func (b *shaderArrayBuilder) buildCaPWQL1L1VCaches(sa *shaderArray) {
+	builder := CaPWQCacheL1.NewBuilder().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithNumBanks(1).
+		WithLog2BlockSize(b.log2CacheLineSize).
+		WithWayAssocitivity(16).
+		WithNumMSHREntry(32).
+		WithTotalByteSize(64 * mem.KB).
+		WithNumReqsPerCycle(2).
+		WithBankLatency(28)
+
+	if b.visTracer != nil {
+		builder = builder.WithVisTracer(b.visTracer)
+	}
+
+	for i := 0; i < b.numCU; i++ {
+		name := fmt.Sprintf("%s.CaPWQL1VCache_%02d", b.name, i)
 		cache := builder.Build(name)
 		sa.l1vCaches = append(sa.l1vCaches, cache)
 	}

@@ -3,6 +3,6 @@
 # =============================
 
 MMU:
-  type: "CaPWQMMU"
+  type: "CaPWQMMUL1"
 
-  numPageWalkers: 32
+  numPageWalkers: 64
