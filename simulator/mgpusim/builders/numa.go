@@ -877,7 +877,7 @@ func (b *NUMAGPUBuilder) buildMPWMMU(chiplet *Chiplet) {
 			WithLog2PageSize(b.log2PageSize).
 			WithPageTable(b.pageTable).
 			WithMaxNumReqInFlight(maxNumReqInFlight / numGPCs).
-			Build(fmt.Sprintf("%s.GPC_%02d.MPWMMU", chiplet.name, i))
+			Build(fmt.Sprintf("%s.GPC_%02d.mpwMMU", chiplet.name, i))
 
 		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
 
