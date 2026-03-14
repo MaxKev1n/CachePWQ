@@ -140,7 +140,6 @@ func (walker *CaPWQPageWalker) AcceptMemoryRsp(
 		state: memDone,
 		pid:   rsp.PID,
 		data:  rsp.Data,
-		PPN:   binary.LittleEndian.Uint64(rsp.Data),
 	}
 
 	tracing.EndTask(rsp.RespondTo, now, walker.mmu)
@@ -158,38 +157,23 @@ func (walker *CaPWQPageWalker) AcceptL1CacheRsp(
 
 	block := rsp.Info.(vm.CaPWQBlock)
 
-	PPN := binary.LittleEndian.Uint64(rsp.Data)
-
-	for j, trans := range walker.mmu.pageWalkQueue {
-		if trans.state != sentRDToL1 || trans.PPN != PPN {
-			continue
-		}
-
-		walker.transaction = trans
-
-		trans.pid = block.PID
-		trans.state = l1Done
-		trans.level = block.Level
-		trans.Address = block.Address
-		trans.msgID = block.MsgID
-
-		if trans.level+1 == 4 {
-			trans.state = transactionFinished
-		} else {
-			walker.fillPageWalkCache(now)
-		}
-		trans.level++
-
-		walker.mmu.pageWalkQueue = append(
-			walker.mmu.pageWalkQueue[:j],
-			walker.mmu.pageWalkQueue[j+1:]...,
-		)
-
-		walker.TickLater(now)
-
-		return
+	walker.transaction = &transactionImpl{
+		state:   l1Done,
+		Address: block.Address,
+		pid:     block.PID,
+		msgID:   block.MsgID,
+		PPN:     binary.LittleEndian.Uint64(rsp.Data),
+		level:   block.Level,
 	}
-	panic(fmt.Sprintf("%s: no match transactions!", walker.Name()))
+
+	if walker.transaction.level+1 == 4 {
+		walker.transaction.state = transactionFinished
+	} else {
+		walker.fillPageWalkCache(now)
+	}
+	walker.transaction.level++
+
+	walker.TickLater(now)
 }
 
 func (walker *CaPWQPageWalker) walkPageTable(now akita.VTimeInSec) bool {
@@ -240,10 +224,6 @@ func (walker *CaPWQPageWalker) sendReadReqToL1(now akita.VTimeInSec) {
 
 	trans.state = sentRDToL1 // Just for debugging.
 
-	walker.mmu.pageWalkQueue = append(
-		walker.mmu.pageWalkQueue,
-		trans,
-	)
 	walker.transaction = nil
 
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(readReq, walker.mmu),
@@ -442,9 +422,6 @@ type CaPWQMMU struct {
 
 	pageWalkers []*CaPWQPageWalker
 
-	pageWalkQueue        []*transactionImpl
-	maxPageWalkQueueSize int
-
 	log2CacheLineSize uint64
 
 	numInflightPTWRequests uint64
@@ -467,15 +444,6 @@ func (mmu *CaPWQMMU) Tick(now akita.VTimeInSec) bool {
 			mmu,
 			"num_active_walkers",
 			strconv.Itoa(int(mmu.numInflightPTWRequests)),
-			nil,
-		)
-		tracing.StartTask(
-			"",
-			"",
-			now,
-			mmu,
-			"page_walk_queue_len",
-			strconv.Itoa(int(len(mmu.pageWalkQueue))),
 			nil,
 		)
 	}
@@ -541,10 +509,6 @@ func (mmu *CaPWQMMU) parseFromL1(now akita.VTimeInSec) bool {
 }
 
 func (mmu *CaPWQMMU) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) bool {
-	if len(mmu.pageWalkQueue) >= mmu.maxPageWalkQueueSize {
-		return false
-	}
-
 	for i := range mmu.pageWalkers {
 		if !mmu.pageWalkers[i].CanAccept() {
 			continue
@@ -583,10 +547,6 @@ func (mmu *CaPWQMMU) handleL1ReadResponse(rsp *mem.DataReadyRsp, now akita.VTime
 }
 
 func (mmu *CaPWQMMU) parseFromTop(now akita.VTimeInSec) bool {
-	if mmu.numInflightPTWRequests >= uint64(mmu.maxPageWalkQueueSize) {
-		return false
-	}
-
 	item := mmu.ToTop.Peek()
 	if item == nil {
 		return false
@@ -633,10 +593,6 @@ func (mmu *CaPWQMMU) GetNumActiveWalkers() int {
 }
 
 func (mmu *CaPWQMMU) isActive() bool {
-	if len(mmu.pageWalkQueue) > 0 {
-		return true
-	}
-
 	for i := range mmu.pageWalkers {
 		if mmu.pageWalkers[i].transaction != nil {
 			return true

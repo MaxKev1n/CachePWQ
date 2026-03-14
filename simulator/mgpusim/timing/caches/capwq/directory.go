@@ -32,7 +32,7 @@ func (d *directory) Tick(now akita.VTimeInSec) bool {
 	trans := item.(*transaction)
 
 	if trans.fromWalker {
-		return d.processWalkerReq(now, trans)
+		return d.processWalkerReq(trans)
 	}
 
 	if trans.read != nil {
@@ -43,7 +43,6 @@ func (d *directory) Tick(now akita.VTimeInSec) bool {
 }
 
 func (d *directory) processWalkerReq(
-	now akita.VTimeInSec,
 	trans *transaction,
 ) bool {
 	if trans.read != nil {
@@ -64,11 +63,16 @@ func (d *directory) processWalkerRead(
 
 	mshrEntry := d.cache.mshr.Query(pid, cacheLineID)
 	if mshrEntry == nil {
-		panic("walker mshr not found")
+		d.removeTransaction(trans)
+
+		d.cache.dirBuf.Pop()
+
+		return true
 	}
 
 	data := trans.read.Info.([]byte)
-	for i, req := range mshrEntry.Requests {
+	for i := len(mshrEntry.Requests) - 1; i >= 0; i-- {
+		req := mshrEntry.Requests[i]
 		t := req.(*transaction)
 
 		if t.write.Address != addr {
@@ -79,12 +83,10 @@ func (d *directory) processWalkerRead(
 		t.done = true
 
 		mshrEntry.Requests = append(mshrEntry.Requests[:i], mshrEntry.Requests[i+1:]...)
+	}
 
-		if len(mshrEntry.Requests) == 0 {
-			d.cache.mshr.Remove(pid, cacheLineID)
-		}
-
-		break
+	if len(mshrEntry.Requests) == 0 {
+		d.cache.mshr.Remove(pid, cacheLineID)
 	}
 
 	d.removeTransaction(trans)

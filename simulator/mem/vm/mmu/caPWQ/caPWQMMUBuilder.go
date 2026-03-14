@@ -96,7 +96,6 @@ func (b CaPWQMMUBuilder) Build(name string) mmu.MMU {
 		panic("no page table!")
 	}
 
-	mmu.maxPageWalkQueueSize = 8 * b.maxNumReqInFlight
 	mmu.pageWalkers = make([]*CaPWQPageWalker, 0, b.maxNumReqInFlight)
 	for i := 0; i < b.maxNumReqInFlight; i++ {
 		walker := newCaPWQPageWalker(mmu, i)
