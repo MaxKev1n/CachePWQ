@@ -19,6 +19,7 @@ import (
 	"gitlab.com/akita/mem/vm/mmu/baseline"
 	"gitlab.com/akita/mem/vm/mmu/caPWQL1"
 	"gitlab.com/akita/mem/vm/mmu/caPWQL2"
+	"gitlab.com/akita/mem/vm/mmu/caPWQL3"
 	"gitlab.com/akita/mem/vm/mmu/mpw"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
@@ -159,6 +160,8 @@ func (b *NUMAGPUBuilder) BuildSAs(chiplet *Chiplet) {
 		saBuilder.withConfig("CaPWQL1")
 	case "CaPWQMMUL2":
 		saBuilder.withConfig("CaPWQL2")
+	case "CaPWQMMUL3":
+		saBuilder.withConfig("CaPWQL3")
 	default:
 	}
 
@@ -801,6 +804,8 @@ func (b *NUMAGPUBuilder) buildMMU(chiplet *Chiplet) {
 			b.buildCaPWQMMUL1(chiplet)
 		case "CaPWQMMUL2":
 			b.buildCaPWQMMUL2(chiplet)
+		case "CaPWQMMUL3":
+			b.buildCaPWQMMUL3(chiplet)
 		case "AsyncCaPWQMMU":
 			b.buildAsyncCaPWQMMU(chiplet)
 		default:
@@ -971,7 +976,7 @@ func (b *NUMAGPUBuilder) buildCaPWQMMUL1(chiplet *Chiplet) {
 			WithLog2PageSize(b.log2PageSize).
 			WithPageTable(b.pageTable).
 			WithMaxNumReqInFlight(maxNumReqInFlight / numGPCs).
-			Build(fmt.Sprintf("%s.GPC_%02d.CaPWQMMU", chiplet.name, i))
+			Build(fmt.Sprintf("%s.GPC_%02d.CaPWQMMUL1", chiplet.name, i))
 
 		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
 
@@ -1015,12 +1020,56 @@ func (b *NUMAGPUBuilder) buildCaPWQMMUL2(chiplet *Chiplet) {
 			WithLog2PageSize(b.log2PageSize).
 			WithPageTable(b.pageTable).
 			WithMaxNumReqInFlight(maxNumReqInFlight / numGPCs).
-			Build(fmt.Sprintf("%s.GPC_%02d.CaPWQMMU", chiplet.name, i))
+			Build(fmt.Sprintf("%s.GPC_%02d.CaPWQMMUL2", chiplet.name, i))
 
 		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
 
 		component.(*caPWQL2.CaPWQMMU).PageWalkCache = pageWalkCachePort
 		component.(*caPWQL2.CaPWQMMU).L3TLB = chiplet.L3TLBs[0].GetBottomPort()
+
+		chiplet.MMUs = append(chiplet.MMUs, component)
+		b.gpu.MMUs = append(b.gpu.MMUs, component)
+
+		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
+			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
+		)
+	}
+
+	b.establishMMUToL1RoutingPath(chiplet)
+}
+
+func (b *NUMAGPUBuilder) buildCaPWQMMUL3(chiplet *Chiplet) {
+	maxNumReqInFlight := 16
+
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %v\n", numWalkersInt)
+		}
+
+		maxNumReqInFlight = numWalkersInt
+	}
+
+	maxCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
+
+	if maxNumReqInFlight%numGPCs != 0 {
+		panic("numPageWalkers should be divisible by numGPCs")
+	}
+
+	for i := 0; i < numGPCs; i++ {
+		component := caPWQL3.MakeCaPWQMMUBuilder().
+			WithEngine(b.engine).
+			WithFreq(1 * akita.GHz).
+			WithLog2PageSize(b.log2PageSize).
+			WithPageTable(b.pageTable).
+			WithMaxNumReqInFlight(maxNumReqInFlight / numGPCs).
+			Build(fmt.Sprintf("%s.GPC_%02d.CaPWQMMUL3", chiplet.name, i))
+
+		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
+
+		component.(*caPWQL3.CaPWQMMU).PageWalkCache = pageWalkCachePort
+		component.(*caPWQL3.CaPWQMMU).L3TLB = chiplet.L3TLBs[0].GetBottomPort()
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
@@ -1153,6 +1202,8 @@ func (b *NUMAGPUBuilder) establishMMUToL1RoutingPath(chiplet *Chiplet) {
 		case *caPWQL1.CaPWQMMU:
 			mmu.CacheLowModuleFinder = lowModuleFinder
 		case *caPWQL2.CaPWQMMU:
+			mmu.CacheLowModuleFinder = lowModuleFinder
+		case *caPWQL3.CaPWQMMU:
 			mmu.CacheLowModuleFinder = lowModuleFinder
 		case *asyncCaPWQ.AsyncCaPWQMMU:
 			mmu.CacheLowModuleFinder = lowModuleFinder
