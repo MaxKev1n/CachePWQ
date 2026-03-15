@@ -541,6 +541,10 @@ func (d *Driver) processLaunchKernelCommand(
 		monitor.Start(now)
 	}
 
+	for _, monitor := range d.GPUs[queue.GPUID-1].CaPWQMonitor {
+		monitor.Start(now)
+	}
+
 	return true
 }
 
@@ -602,6 +606,10 @@ func (d *Driver) processLaunchKernelReturn(
 		cmdQueue.Dequeue()
 
 		for _, monitor := range d.GPUs[cmdQueue.GPUID-1].TLBMonitors {
+			monitor.Stop()
+		}
+
+		for _, monitor := range d.GPUs[cmdQueue.GPUID-1].CaPWQMonitor {
 			monitor.Stop()
 		}
 

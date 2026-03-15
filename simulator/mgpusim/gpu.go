@@ -66,7 +66,8 @@ type GPU struct {
 
 	GPUID uint64
 
-	TLBMonitors []*monitor.TLBMonitor
+	TLBMonitors  []*monitor.TLBMonitor
+	CaPWQMonitor []*monitor.CaPWQMonitor
 }
 
 // ExternalPorts returns external ports

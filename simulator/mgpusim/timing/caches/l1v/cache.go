@@ -4,6 +4,7 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
+	"gitlab.com/akita/mem/monitor"
 	"gitlab.com/akita/mem/profile"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/tracing"
@@ -47,6 +48,22 @@ type Cache struct {
 	directoryStatus []profile.CachePSVStatus
 
 	isInstCache bool
+
+	monitorStats *monitor.CaPWQMonitorStats
+}
+
+func (c *Cache) InitMonitorStats() {
+	c.monitorStats = &monitor.CaPWQMonitorStats{
+		Length: 0,
+	}
+}
+
+func (c *Cache) ClearMonitorStats() {
+	c.monitorStats.Clear()
+}
+
+func (c *Cache) GetMonitorStats() interface{} {
+	return c.monitorStats
 }
 
 // SetLowModuleFinder sets the finder that tells which remote port can serve

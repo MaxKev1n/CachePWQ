@@ -92,7 +92,7 @@ func (tlb *LastLevelTLB) ClearMonitorStats() {
 	tlb.monitorStats.Clear()
 }
 
-func (tlb *LastLevelTLB) GetMonitorStats() *monitor.MonitorStats {
+func (tlb *LastLevelTLB) GetMonitorStats() interface{} {
 	return tlb.monitorStats
 }
 
@@ -360,7 +360,9 @@ func (tlb *LastLevelTLB) lookup(now akita.VTimeInSec) bool {
 				"l3tlb_hits",
 			)
 
-			tlb.monitorStats.MSHRHits += 1
+			if tlb.monitorStats != nil {
+				tlb.monitorStats.MSHRHits += 1
+			}
 
 			tlb.lookupBuffer.Pop()
 			// if tlb.stats.sendStateInfo {
@@ -402,7 +404,9 @@ func (tlb *LastLevelTLB) handleTranslationHit(
 	tlb.visit(setID, wayID)
 	tlb.lookupBuffer.Pop()
 
-	tlb.monitorStats.Hits += 1
+	if tlb.monitorStats != nil {
+		tlb.monitorStats.Hits += 1
+	}
 
 	// if tlb.stats.sendStateInfo {
 	tlb.stats.numAccess += 1
@@ -448,7 +452,9 @@ func (tlb *LastLevelTLB) handleTranslationMiss(
 		//tlb.TopPort.Retrieve(now)
 		tlb.lookupBuffer.Pop()
 
-		tlb.monitorStats.Misses += 1
+		if tlb.monitorStats != nil {
+			tlb.monitorStats.Misses += 1
+		}
 
 		// if tlb.stats.sendStateInfo {
 		tlb.stats.numAccess += 1

@@ -10,6 +10,7 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/device"
+	"gitlab.com/akita/mem/monitor"
 	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/util/akitaext"
 	"gitlab.com/akita/util/ca"
@@ -80,6 +81,22 @@ type MMUImpl struct {
 	pageWalkers   []PageWalkerImpl
 	nextPointer   int
 	queueCapacity int
+
+	monitorStats *monitor.CaPWQMonitorStats
+}
+
+func (impl *MMUImpl) InitMonitorStats() {
+	impl.monitorStats = &monitor.CaPWQMonitorStats{
+		Length: 0,
+	}
+}
+
+func (impl *MMUImpl) ClearMonitorStats() {
+	impl.monitorStats.Clear()
+}
+
+func (impl *MMUImpl) GetMonitorStats() interface{} {
+	return impl.monitorStats
 }
 
 // Tick defines how the MMU update state each cycle
@@ -91,6 +108,14 @@ func (impl *MMUImpl) Tick(now akita.VTimeInSec) bool {
 	madeProgress = impl.parseFromPageWalkCache(now) || madeProgress
 	madeProgress = impl.parseFromMem(now) || madeProgress
 	madeProgress = impl.parseFromTop(now) || madeProgress
+
+	if impl.monitorStats != nil {
+		pageWalkQueueLength := 0
+		for _, walker := range impl.pageWalkers {
+			pageWalkQueueLength += len(walker.queue)
+		}
+		impl.monitorStats.Length = uint64(pageWalkQueueLength)
+	}
 
 	return true
 }

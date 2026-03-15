@@ -5,16 +5,16 @@ import (
 	"gitlab.com/akita/util/tracing"
 )
 
-type TLBMonitorComponent interface {
+type MonitorComponent interface {
 	InitMonitorStats()
 	ClearMonitorStats()
-	GetMonitorStats() *MonitorStats
+	GetMonitorStats() interface{}
 }
 
 type TLBMonitor struct {
 	*akita.TickingComponent
 
-	L3TLBs []TLBMonitorComponent
+	L3TLBs []MonitorComponent
 
 	running     bool
 	initialized bool
@@ -49,7 +49,7 @@ func (m *TLBMonitor) Tick(now akita.VTimeInSec) bool {
 	return true
 }
 
-func (m *TLBMonitor) RegisterL3TLB(tlb TLBMonitorComponent) {
+func (m *TLBMonitor) RegisterL3TLB(tlb MonitorComponent) {
 	tlb.InitMonitorStats()
 	m.L3TLBs = append(m.L3TLBs, tlb)
 }
@@ -78,7 +78,7 @@ func (m *TLBMonitor) Stop() {
 
 func (m *TLBMonitor) CollectComponentStats(
 	now akita.VTimeInSec,
-	component TLBMonitorComponent,
+	component MonitorComponent,
 ) {
 	if m.numEpoches == 0 {
 		component.ClearMonitorStats()

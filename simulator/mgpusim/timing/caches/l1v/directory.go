@@ -55,6 +55,10 @@ func (d *directory) collectMSHROccupancy(now akita.VTimeInSec) {
 		tracing.StartTask("", "", now, d.cache,
 			"MSHRuniq_g0", strconv.Itoa(uniqEntries), nil)
 	}
+
+	if d.cache.monitorStats != nil {
+		d.cache.monitorStats.Length = uint64(uniqEntries)
+	}
 }
 
 func (d *directory) processRead(now akita.VTimeInSec, trans *transaction) bool {

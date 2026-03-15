@@ -86,6 +86,19 @@ func (b *NUMAPlatformBuilder) createGPUBuilder(
 		gpuBuilder.WithTLBMonitor()
 	}
 
+	if b.useCaPWQMonitor {
+		gpuBuilder.WithCaPWQMonitor()
+
+		file, err := os.Create("caPWQ.trace")
+		if err != nil {
+			panic(err)
+		}
+		logger := log.New(file, "", 0)
+		tracer := memtraces.NewCaPWQTracer(logger)
+
+		gpuBuilder.WithCaPWQTracer(tracer)
+	}
+
 	if b.useCacheTEA {
 		gpuBuilder.WithCacheTEA()
 	}

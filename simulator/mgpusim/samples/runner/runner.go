@@ -145,6 +145,8 @@ var booksimDir = flag.String("booksim-dir", "",
 	"Specify the path to the booksim directory.")
 var monitorTLBFlag = flag.Bool("tlb-monitor", false,
 	"Enable the TLB monitor that tracks the number of the TLB queues.")
+var monitorCaPWQFlag = flag.Bool("capwq-monitor", false,
+	"Enable the CaPWQ monitor that tracks the number of the capwq queues.")
 var cacheUtilizationFlag = flag.Bool("cache-utilization", false,
 	"Enable the cache utilization tracer that tracks the utilization of the cache.")
 var powerFlag = flag.Bool("power", false,
@@ -1092,6 +1094,10 @@ func (r *Runner) buildTimingPlatform() {
 			b.WithTLBMonitor()
 
 			r.ReportTLBMonitor = true
+		}
+
+		if *monitorCaPWQFlag {
+			b.WithCaPWQMonitor()
 		}
 
 		if *cacheUtilizationFlag {

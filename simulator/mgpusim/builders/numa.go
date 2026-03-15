@@ -36,13 +36,19 @@ type NUMAGPUBuilder struct {
 	*CommonBuilder
 
 	// specific componenets
-	useTLBMonitor bool
-	useCacheTEA   bool
-	ptwTracer     tracing.Tracer
+	useTLBMonitor   bool
+	useCaPWQMonitor bool
+	useCacheTEA     bool
+	ptwTracer       tracing.Tracer
+	caPWQTracer     tracing.Tracer
 }
 
 func (b *NUMAGPUBuilder) WithTLBMonitor() {
 	b.useTLBMonitor = true
+}
+
+func (b *NUMAGPUBuilder) WithCaPWQMonitor() {
+	b.useCaPWQMonitor = true
 }
 
 func (b *NUMAGPUBuilder) WithCacheTEA() {
@@ -53,6 +59,12 @@ func (b *NUMAGPUBuilder) WithPTWTracer(
 	tracer tracing.Tracer,
 ) {
 	b.ptwTracer = tracer
+}
+
+func (b *NUMAGPUBuilder) WithCaPWQTracer(
+	tracer tracing.Tracer,
+) {
+	b.caPWQTracer = tracer
 }
 
 func MakeNUMAGPUBuilder() NUMAGPUBuilder {
@@ -108,6 +120,7 @@ func (b NUMAGPUBuilder) Build(name string, id uint64) *mgpusim.GPU {
 	chiplet.GlobalNoC.Establish()
 
 	b.establishTLBMonitor(chiplet)
+	b.establishCaPWQMonitor(chiplet)
 	b.establishCacheTEA(chiplet)
 
 	return b.gpu
@@ -1314,10 +1327,37 @@ func (b *NUMAGPUBuilder) establishTLBMonitor(c *Chiplet) {
 	)
 
 	for _, l3tlb := range c.L3TLBs {
-		tlbMonitor.RegisterL3TLB(l3tlb.(monitor.TLBMonitorComponent))
+		tlbMonitor.RegisterL3TLB(l3tlb.(monitor.MonitorComponent))
 	}
 
 	b.gpu.TLBMonitors = append(b.gpu.TLBMonitors, tlbMonitor)
+}
+
+func (b *NUMAGPUBuilder) establishCaPWQMonitor(c *Chiplet) {
+	if !b.useCaPWQMonitor {
+		return
+	}
+
+	caPWQMonitor := monitor.NewCaPWQMonitor(
+		fmt.Sprintf("%s.CaPWQMonitor", b.gpuName),
+		b.engine,
+		1*akita.MHz,
+	)
+
+	for _, l1v := range c.L1VCaches {
+		caPWQMonitor.RegisterL1VCache(l1v.(monitor.MonitorComponent))
+	}
+
+	for _, mmu := range c.MMUs {
+		switch walker := mmu.(type) {
+		case *baseline.MMUImpl:
+			caPWQMonitor.RegisterPageWalker(walker)
+		}
+	}
+
+	b.gpu.CaPWQMonitor = append(b.gpu.CaPWQMonitor, caPWQMonitor)
+
+	tracing.CollectTrace(caPWQMonitor, b.caPWQTracer)
 }
 
 func (b *NUMAGPUBuilder) establishCacheTEA(c *Chiplet) {
