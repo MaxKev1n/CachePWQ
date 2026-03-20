@@ -1,0 +1,6 @@
+# =============================
+# MMU Configuration Template
+# =============================
+
+MMU:
+  type: "InfiniteMMU"

@@ -21,6 +21,7 @@ import (
 	"gitlab.com/akita/mem/vm/mmu/caPWQL2"
 	"gitlab.com/akita/mem/vm/mmu/caPWQL3"
 	"gitlab.com/akita/mem/vm/mmu/caPWQL4"
+	"gitlab.com/akita/mem/vm/mmu/infinite"
 	"gitlab.com/akita/mem/vm/mmu/mpw"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
@@ -814,6 +815,8 @@ func (b *NUMAGPUBuilder) buildMMU(chiplet *Chiplet) {
 			b.buildDefaultMMU(chiplet)
 		case "IdealMMU":
 			b.buildIdealMMU(chiplet)
+		case "InfiniteMMU":
+			b.buildInfiniteMMU(chiplet)
 		case "MPWMMU":
 			b.buildMPWMMU(chiplet)
 		case "CaPWQMMUL1":
@@ -869,6 +872,31 @@ func (b *NUMAGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
 		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
 
 		component.(*baseline.MMUImpl).PageWalkCache = pageWalkCachePort
+
+		chiplet.MMUs = append(chiplet.MMUs, component)
+		b.gpu.MMUs = append(b.gpu.MMUs, component)
+
+		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
+			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
+		)
+	}
+}
+
+func (b *NUMAGPUBuilder) buildInfiniteMMU(chiplet *Chiplet) {
+	maxCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
+
+	for i := 0; i < numGPCs; i++ {
+		component := infinite.MakeMMUBuilder().
+			WithEngine(b.engine).
+			WithFreq(1 * akita.GHz).
+			WithLog2PageSize(b.log2PageSize).
+			WithPageTable(b.pageTable).
+			Build(fmt.Sprintf("%s.GPC_%02d.InfiniteMMU", chiplet.name, i))
+
+		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
+
+		component.(*infinite.MMUImpl).PageWalkCache = pageWalkCachePort
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
