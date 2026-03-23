@@ -283,14 +283,14 @@ func (tlb *LastLevelTLB) parseFromTop(now akita.VTimeInSec) bool {
 			tracing.AddTaskStep(
 				tracing.MsgIDAtReceiver(req, tlb),
 				now, tlb,
-				"stalled-l2-tlb-req-count",
+				"stalled-l3-tlb-req-count",
 			)
 		}
 
 		tracing.AddTaskStep(
 			tracing.MsgIDAtReceiver(req, tlb),
 			now, tlb,
-			"l2-tlb-req-count",
+			"l3-tlb-req-count",
 		)
 
 		pipelineItem := tlbPipelineItem{

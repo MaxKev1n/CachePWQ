@@ -347,6 +347,7 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1(now akita.VTimeInSec) {
 
 	err := walker.mmu.ToCache.Send(writeReq)
 	if err != nil {
+		tracing.StartTask(walker.mmu.Name()+"stall", "", now, walker.mmu, "mmu_stall", "", nil)
 		return
 	}
 
@@ -354,6 +355,7 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1(now akita.VTimeInSec) {
 
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(writeReq, walker.mmu),
 		now, walker.mmu, "page_walk_store_l1")
+	tracing.EndTask(walker.mmu.Name()+"stall", now, walker.mmu)
 }
 
 func (walker *CaPWQPageWalker) fillPageWalkCache(

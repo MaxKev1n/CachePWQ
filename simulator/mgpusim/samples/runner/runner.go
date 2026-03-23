@@ -306,6 +306,11 @@ type TLBMSHRStallTracer struct {
 	tlb    tlb.TLB
 }
 
+type MMUStallTracer struct {
+	tracer *tracing.TotalTimeTracer
+	MMU    mmu.MMU
+}
+
 type TLBReqStallTracer struct {
 	tracer *tracing.StepCountTracer
 	tlb    tlb.TLB
@@ -390,6 +395,7 @@ type Runner struct {
 	RemoteReferenceCountTracers      []RemoteReferenceCountTracer
 	TLBSetMissTracers                []TLBSetMissTracer
 	TLBMSHRStallTracers              []TLBMSHRStallTracer
+	MMUStallTracers                  []MMUStallTracer
 	TLBReqStallTracers               []TLBReqStallTracer
 	TLBAverageTracers                []TLBMonitorTracer
 	PowerStatTracer                  *power.PowerStatTracer
@@ -2927,20 +2933,26 @@ func (r *Runner) addTLBMSHRStallTracer() {
 		return
 	}
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewTotalTimeTracer(
 				func(task tracing.Task) bool {
-					if task.Kind == "mshr_stall" {
-						return true
-					}
-					return false
+					return task.Kind == "mshr_stall"
 				})
 			tracing.CollectTrace(tlb, tracer)
 			r.TLBMSHRStallTracers = append(r.TLBMSHRStallTracers,
 				TLBMSHRStallTracer{tracer: tracer, tlb: tlb})
 		}
+
+		for _, MMU := range gpu.MMUs {
+			tracer := tracing.NewTotalTimeTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "mmu_stall"
+				})
+			tracing.CollectTrace(MMU, tracer)
+			r.MMUStallTracers = append(r.MMUStallTracers,
+				MMUStallTracer{tracer: tracer, MMU: MMU})
+		}
 	}
-	return
 }
 
 func (r *Runner) addTLBReqStallTracer() {
@@ -2948,10 +2960,10 @@ func (r *Runner) addTLBReqStallTracer() {
 		return
 	}
 	for _, gpu := range r.GPUDriver.GPUs {
-		for _, tlb := range gpu.L2TLBs {
+		for _, tlb := range gpu.L3TLBs {
 			tracer := tracing.NewStepCountTracer(
 				func(task tracing.Task) bool {
-					return task.Kind == "stalled-l2-tlb-req-count" || task.Kind == "l2-tlb-req-count"
+					return task.Kind == "stalled-l3-tlb-req-count" || task.Kind == "l3-tlb-req-count"
 				})
 			tracing.CollectTrace(tlb, tracer)
 			r.TLBReqStallTracers = append(r.TLBReqStallTracers,
@@ -4207,6 +4219,13 @@ func (r *Runner) reportTLBMSHRStallTracing() {
 		r.metricsCollector.Collect(
 			t.tlb.Name(),
 			"mshr_stall",
+			float64(t.tracer.TotalTime()),
+		)
+	}
+	for _, t := range r.MMUStallTracers {
+		r.metricsCollector.Collect(
+			t.MMU.Name(),
+			"mmu_stall",
 			float64(t.tracer.TotalTime()),
 		)
 	}
