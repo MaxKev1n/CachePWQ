@@ -66,7 +66,11 @@ func (d *directory) processWalkerWrite(
 
 	mshrEntry := d.cache.mshr.Query(pid, cacheLineID)
 	if mshrEntry != nil {
-		return d.processWalkerWriteMSHRHit(trans, mshrEntry)
+		return d.processWalkerWriteMSHRHit(
+			now,
+			trans,
+			mshrEntry,
+		)
 	}
 
 	if d.cache.mshr.IsFull() {
@@ -107,6 +111,13 @@ func (d *directory) fetchPTEsFromBottom(
 		return false
 	}
 
+	tracing.AddTaskStep(
+		trans.id,
+		now,
+		d.cache,
+		"ptw-read-miss",
+	)
+
 	tracing.TraceReqInitiate(readToBottom, now, d.cache, trans.id)
 	trans.readToBottom = readToBottom
 
@@ -119,12 +130,20 @@ func (d *directory) fetchPTEsFromBottom(
 }
 
 func (d *directory) processWalkerWriteMSHRHit(
+	now akita.VTimeInSec,
 	trans *transaction,
 	mshrEntry *cache.MSHREntry,
 ) bool {
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
 
 	d.cache.dirBuf.Pop()
+
+	tracing.AddTaskStep(
+		trans.id,
+		now,
+		d.cache,
+		"ptw-read-mshr-hit",
+	)
 
 	return true
 }
