@@ -83,6 +83,11 @@ func (ds *directoryStage) handleReadMSHRHit(
 		if readReqInfo.ReturnAccessInfo {
 			readReqInfo.AccessResult = mem.ReadMSHRHit
 		}
+		tracing.AddTaskStep(
+			tracing.MsgIDAtReceiver(trans.read, ds.cache),
+			now, ds.cache,
+			"ptw-read-mshr-hit",
+		)
 	}
 
 	tracing.AddTaskStep(
@@ -151,6 +156,11 @@ func (ds *directoryStage) handleReadMiss(
 			if readReqInfo.ReturnAccessInfo {
 				readReqInfo.AccessResult = mem.ReadMiss
 			}
+			tracing.AddTaskStep(
+				tracing.MsgIDAtReceiver(trans.read, ds.cache),
+				now, ds.cache,
+				"ptw-read-miss",
+			)
 		}
 		return ok
 	}
@@ -173,6 +183,11 @@ func (ds *directoryStage) handleReadMiss(
 			if readReqInfo.ReturnAccessInfo {
 				readReqInfo.AccessResult = mem.ReadMiss
 			}
+			tracing.AddTaskStep(
+				tracing.MsgIDAtReceiver(trans.read, ds.cache),
+				now, ds.cache,
+				"ptw-read-miss",
+			)
 		}
 	}
 	return ok
@@ -335,6 +350,14 @@ func (ds *directoryStage) readFromBank(
 		now, ds.cache,
 		"read-hit",
 	)
+
+	if trans.read.Info != nil {
+		tracing.AddTaskStep(
+			tracing.MsgIDAtReceiver(trans.read, ds.cache),
+			now, ds.cache,
+			"ptw-read-hit",
+		)
+	}
 
 	tracing.AddTaskStep(
 		"PowerStat",

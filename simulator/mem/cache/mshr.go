@@ -17,6 +17,7 @@ type MSHREntry struct {
 	ReadReq   *mem.ReadReq
 	DataReady *mem.DataReadyRsp
 	Data      []byte
+	PTW       bool
 }
 
 // NewMSHREntry returns a new MSHR entry object

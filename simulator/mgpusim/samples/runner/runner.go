@@ -372,6 +372,10 @@ type Runner struct {
 	L1MSHRUniqLenTracers             []*tracing.AverageCountTracer
 	L1MSHRLenG0Tracers               []*tracing.AverageCountTracer
 	L1MSHRUniqLenG0Tracers           []*tracing.AverageCountTracer
+	L1WalkMSHRLenTracers             []*tracing.AverageCountTracer
+	L1WalkMSHRUniqLenTracers         []*tracing.AverageCountTracer
+	L1WalkMSHRLenG0Tracers           []*tracing.AverageCountTracer
+	L1WalkMSHRUniqLenG0Tracers       []*tracing.AverageCountTracer
 	ActivePageWalkerTracers          []ActivePageWalkerTracer
 	ActiveMMUPageWalkQueueTracers    []*tracing.AverageCountTracer
 	MaxMMUPageWalkQueueTracers       []*tracing.MaximumCountTracer
@@ -1912,6 +1916,38 @@ func (r *Runner) addL1MSHRLenTracer() {
 			r.L1MSHRUniqLenG0Tracers = append(r.L1MSHRUniqLenG0Tracers, tracer)
 			tracing.CollectTrace(cache, tracer)
 		}
+		for _, cache := range gpu.L1VCaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "WalkMSHRlen"
+				})
+			r.L1WalkMSHRLenTracers = append(r.L1WalkMSHRLenTracers, tracer)
+			tracing.CollectTrace(cache, tracer)
+		}
+		for _, cache := range gpu.L1VCaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "WalkMSHRlen_g0"
+				})
+			r.L1WalkMSHRLenG0Tracers = append(r.L1WalkMSHRLenG0Tracers, tracer)
+			tracing.CollectTrace(cache, tracer)
+		}
+		for _, cache := range gpu.L1VCaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "WalkMSHRuniq"
+				})
+			r.L1WalkMSHRUniqLenTracers = append(r.L1WalkMSHRUniqLenTracers, tracer)
+			tracing.CollectTrace(cache, tracer)
+		}
+		for _, cache := range gpu.L1VCaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "WalkMSHRuniq_g0"
+				})
+			r.L1WalkMSHRUniqLenG0Tracers = append(r.L1WalkMSHRUniqLenG0Tracers, tracer)
+			tracing.CollectTrace(cache, tracer)
+		}
 	}
 }
 
@@ -3438,6 +3474,49 @@ func (r *Runner) reportL1CaPWQCacheLens() {
 			float64(tracer.AverageCount()),
 		)
 	}
+
+	for i, tracer := range r.L1WalkMSHRLenTracers {
+		if tracer.AverageCount() == 0 {
+			continue
+		}
+		r.metricsCollector.Collect(
+			"L1_"+strconv.Itoa(i),
+			"average_walk_mshr_len",
+			float64(tracer.AverageCount()),
+		)
+	}
+	for i, tracer := range r.L1WalkMSHRLenG0Tracers {
+		if tracer.AverageCount() == 0 {
+			continue
+		}
+		r.metricsCollector.Collect(
+			"L1_"+strconv.Itoa(i),
+			"average_walk_mshr_len_g0",
+			float64(tracer.AverageCount()),
+		)
+	}
+
+	for i, tracer := range r.L1WalkMSHRUniqLenTracers {
+		if tracer.AverageCount() == 0 {
+			continue
+		}
+		r.metricsCollector.Collect(
+			"L1_"+strconv.Itoa(i),
+			"average_walk_mshr_uniq_len",
+			float64(tracer.AverageCount()),
+		)
+	}
+
+	for i, tracer := range r.L1WalkMSHRUniqLenG0Tracers {
+		if tracer.AverageCount() == 0 {
+			continue
+		}
+		r.metricsCollector.Collect(
+			"L1_"+strconv.Itoa(i),
+			"average_walk_mshr_uniq_len_g0",
+			float64(tracer.AverageCount()),
+		)
+	}
 }
 
 func (r *Runner) reportPageWalkLatency() {
@@ -3570,12 +3649,16 @@ func (r *Runner) reportCacheHitRate() {
 		readHit := tracer.tracer.GetStepCount("read-hit")
 		readMiss := tracer.tracer.GetStepCount("read-miss")
 		readMSHRHit := tracer.tracer.GetStepCount("read-mshr-hit")
+		readPTWHit := tracer.tracer.GetStepCount("ptw-read-hit")
+		readPTWMiss := tracer.tracer.GetStepCount("ptw-read-miss")
+		readPTWMSHRHit := tracer.tracer.GetStepCount("ptw-read-mshr-hit")
 		writeHit := tracer.tracer.GetStepCount("write-hit")
 		writeMiss := tracer.tracer.GetStepCount("write-miss")
 		writeMSHRHit := tracer.tracer.GetStepCount("write-mshr-hit")
 
 		totalTransaction := readHit + readMiss + readMSHRHit +
-			writeHit + writeMiss + writeMSHRHit
+			writeHit + writeMiss + writeMSHRHit + readPTWHit +
+			readPTWMiss + readPTWMSHRHit
 
 		if totalTransaction == 0 {
 			continue
@@ -3587,6 +3670,12 @@ func (r *Runner) reportCacheHitRate() {
 			tracer.cache.Name(), "read-miss", float64(readMiss))
 		r.metricsCollector.Collect(
 			tracer.cache.Name(), "read-mshr-hit", float64(readMSHRHit))
+		r.metricsCollector.Collect(
+			tracer.cache.Name(), "ptw-read-hit", float64(readPTWHit))
+		r.metricsCollector.Collect(
+			tracer.cache.Name(), "ptw-read-miss", float64(readPTWMiss))
+		r.metricsCollector.Collect(
+			tracer.cache.Name(), "ptw-read-mshr-hit", float64(readPTWMSHRHit))
 		r.metricsCollector.Collect(
 			tracer.cache.Name(), "write-hit", float64(writeHit))
 		r.metricsCollector.Collect(

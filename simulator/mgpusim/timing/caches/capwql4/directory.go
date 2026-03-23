@@ -23,6 +23,7 @@ func (d *directory) Tick(now akita.VTimeInSec) bool {
 	d.status = profile.BASE
 	d.numExecutedReqs = 0
 	d.collectMSHROccupancy(now)
+	d.collectWalkMSHROccupancy(now)
 
 	item := d.cache.dirBuf.Peek()
 	if item == nil {
@@ -91,6 +92,7 @@ func (d *directory) fetchPTEsFromBottom(
 	cacheLineID := addr / blockSize * blockSize
 
 	bottomModule := d.cache.lowModuleFinder.Find(cacheLineID)
+	readReqInfo := &mem.ReadReqInfo{ReturnAccessInfo: true}
 	readToBottom := mem.ReadReqBuilder{}.
 		WithSendTime(now).
 		WithSrc(d.cache.BottomPort).
@@ -98,6 +100,7 @@ func (d *directory) fetchPTEsFromBottom(
 		WithAddress(cacheLineID).
 		WithPID(pid).
 		WithByteSize(blockSize).
+		WithInfo(readReqInfo).
 		Build()
 	err := d.cache.BottomPort.Send(readToBottom)
 	if err != nil {
@@ -110,6 +113,7 @@ func (d *directory) fetchPTEsFromBottom(
 	mshrEntry := d.cache.mshr.Add(pid, cacheLineID)
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
 	mshrEntry.ReadReq = readToBottom
+	mshrEntry.PTW = true
 
 	return true
 }
@@ -142,6 +146,29 @@ func (d *directory) collectMSHROccupancy(now akita.VTimeInSec) {
 			"MSHRlen_g0", strconv.Itoa(totalEntries), nil)
 		tracing.StartTask("", "", now, d.cache,
 			"MSHRuniq_g0", strconv.Itoa(uniqEntries), nil)
+	}
+}
+
+func (d *directory) collectWalkMSHROccupancy(now akita.VTimeInSec) {
+	m := d.cache.mshr
+	uniqEntries := 0
+	totalEntries := 0
+	for _, me := range m.AllEntries() {
+		if me.PTW {
+			uniqEntries++
+			totalEntries += len(me.Requests)
+		}
+	}
+
+	tracing.StartTask("", "", now, d.cache,
+		"WalkMSHRlen", strconv.Itoa(totalEntries), nil)
+	tracing.StartTask("", "", now, d.cache,
+		"WalkMSHRuniq", strconv.Itoa(uniqEntries), nil)
+	if uniqEntries > 0 {
+		tracing.StartTask("", "", now, d.cache,
+			"WalkMSHRlen_g0", strconv.Itoa(totalEntries), nil)
+		tracing.StartTask("", "", now, d.cache,
+			"WalkMSHRuniq_g0", strconv.Itoa(uniqEntries), nil)
 	}
 }
 
