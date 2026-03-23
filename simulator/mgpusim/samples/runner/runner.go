@@ -319,117 +319,119 @@ type TLBMonitorTracer struct {
 
 // Runner is a class that helps running the benchmarks in the official samples.
 type Runner struct {
-	Engine                          akita.Engine
-	GPUDriver                       *driver.Driver
-	maxInstStopper                  *instTracer
-	KernelTimeCounter               *tracing.BusyTimeTracer
-	PerGPUKernelTimeCounter         []*tracing.BusyTimeTracer
-	InstCountTracers                []instCountTracer
-	CacheLatencyTracers             []cacheLatencyTracer
-	CacheDataLatencyTracers         []cacheLatencyTracer
-	CachePageLatencyTracers         []cacheLatencyTracer
-	TLBLatencyTracers               []TLBLatencyTracer
-	DownTLBLatencyTracers           []TLBLatencyTracer
-	LocalDownTLBLatencyTracers      []TLBLatencyTracer
-	RemoteDownTLBLatencyTracers     []TLBLatencyTracer
-	L2PipelineLatencyTracers        []L2PipelineLatencyTracer
-	TLBPipelineLatencyTracers       []TLBPipelineLatencyTracer
-	PageWalkLatencyTracers          []PageWalkLatencyTracer
-	PageWalkLatencyHistogramTracers []*trace.WalkerMemLatencyTracer
-	DRAMLatencyTracers              []DRAMLatencyTracer
-	AddressTranslatorLatencyTracers []AddressTranslatorLatencyTracer
-	CacheHitRateTracers             []cacheHitRateTracer
-	cacheUtilizationTracers         []cacheUtilizationTracer
-	RTUCoalescingTracers            [][][][]*tracing.AverageCountTracer
-	TLBHitRateTracers               []TLBHitRateTracer
-	PWCHitRateTracers               []PWCHitRateTracer
-	TranslationReqTracer            *tracing.TranslationReqTracer
-	MMUCacheReqTracer               *tracing.MMUCacheReqTracer
-	RDMATransactionCounters         []rdmaTransactionCountTracer
-	CDMATransactionCounters         []rdmaTransactionCountTracer
-	CDMATransactionDataCounters     []rdmaTransactionCountTracer
-	CDMATransactionPageCounters     []rdmaTransactionCountTracer
-	PageTransactionCounters         []rdmaTransactionCountTracer
-	RTUTransactionCounters          []rtuTransactionCountTracer
-	CDMAAccessTracers               []CDMAAccessTracer
-	PageAccessTracers               []CDMAAccessTracer
-	BookSimAccessTracers            []BookSimAccessTracer
-	BookSimLatencyTracers           []BookSimLatencyTracer
-	L2AccessSourceTracers           []L2AccessSourceTracer
-	DRAMAccessSourceTracers         []DRAMAccessSourceTracer
-	RTUAccessTracers                []RTUAccessTracer
-	DRAMTransactionCounters         []dramTransactionCountTracer
-	RemoteTLBLatencyTracers         []RemoteTLBLatencyTracer
-	L3TLBBufLenTracers              []*tracing.AverageCountTracer
-	L3TLBBufLenG0Tracers            []*tracing.AverageCountTracer
-	L3TLBCoalesceAddrTracers        []*tracing.AverageCountTracer
-	L3TLBCoalesceTracers            []*tracing.AverageCountTracer
-	L3TLBMSHRLenTracers             []*tracing.AverageCountTracer
-	L3TLBMSHRUniqLenTracers         []*tracing.AverageCountTracer
-	L3TLBMSHRLenG0Tracers           []*tracing.AverageCountTracer
-	L3TLBMSHRUniqLenG0Tracers       []*tracing.AverageCountTracer
-	L1MSHRLenTracers                []*tracing.AverageCountTracer
-	L1MSHRUniqLenTracers            []*tracing.AverageCountTracer
-	L1MSHRLenG0Tracers              []*tracing.AverageCountTracer
-	L1MSHRUniqLenG0Tracers          []*tracing.AverageCountTracer
-	ActivePageWalkerTracers         []ActivePageWalkerTracer
-	ActiveMMUSecondaryQueueTracers  []*tracing.AverageCountTracer
-	MaxMMUSecondaryQueueTracers     []*tracing.MaximumCountTracer
-	L1CaPWQCacheLenTracers          []*tracing.AverageCountTracer
-	L1CaPWQCacheMaxLenTracers       []*tracing.MaximumCountTracer
-	L2TLBMySQLTracer                tracing.MySQLTracer
-	L2TLBQueueingImbalanceTracers   []TLBQueueImbalanceTracer
-	PageWalkerImbalanceTracers      []PageWalkerImbalanceTracer
-	EntropyTracers                  []EntropyTracer
-	RemoteReferenceCountTracers     []RemoteReferenceCountTracer
-	TLBSetMissTracers               []TLBSetMissTracer
-	TLBMSHRStallTracers             []TLBMSHRStallTracer
-	TLBReqStallTracers              []TLBReqStallTracer
-	TLBAverageTracers               []TLBMonitorTracer
-	PowerStatTracer                 *power.PowerStatTracer
-	Benchmarks                      []benchmarks.Benchmark
-	Timing                          bool
-	Verify                          bool
-	Parallel                        bool
-	ReportInstCount                 bool
-	ReportCacheLatency              bool
-	ReportMemoryAccessSource        bool
-	ReportTLBLatency                bool
-	ReportTLBConditionalStats       bool
-	ReportPageWalkLatency           bool
-	ReportL1CaPWQCacheLens          bool
-	ReportDRAMLatency               bool
-	ReportTranslationReqLatency     bool
-	ReportMMUCacheReqLatency        bool
-	ReportAddressTranslatorLatency  bool
-	ReportCacheHitRate              bool
-	ReportTLBCoalesce               bool
-	ReportRTUCoalesce               bool
-	ReportTLBHitRate                bool
-	ReportPWCHitRate                bool
-	ReportL3TLBMSHRLen              bool
-	ReportL1MSHRLen                 bool
-	ReportDRAMTransactionCount      bool
-	ReportRDMATransactionCount      bool
-	ReportCDMATransactionCount      bool
-	ReportBookSimNoc                bool
-	ReportRTUTransactionCount       bool
-	ReportActiveWalkerCount         bool
-	L3TLBSQLTracing                 bool
-	ReportL3TLBQueueImbalance       bool
-	ReportPageWalkerImbalance       bool
-	ReportEntropy                   bool
-	ReportReferenceTracing          bool
-	ReportTLBSetMissTracing         bool
-	ReportTLBMSHRStallTracing       bool
-	ReportTLBReqStalls              bool
-	ReportTLBMonitor                bool
-	ReportCacheUtilization          bool
-	UseUnifiedMemory                bool
-	UseLASPMemoryAlloc              bool
-	UseLASPHSLMemoryAlloc           bool
-	UseCustomHSL                    bool
-	metricsCollector                *collector
+	Engine                           akita.Engine
+	GPUDriver                        *driver.Driver
+	maxInstStopper                   *instTracer
+	KernelTimeCounter                *tracing.BusyTimeTracer
+	PerGPUKernelTimeCounter          []*tracing.BusyTimeTracer
+	InstCountTracers                 []instCountTracer
+	CacheLatencyTracers              []cacheLatencyTracer
+	CacheDataLatencyTracers          []cacheLatencyTracer
+	CachePageLatencyTracers          []cacheLatencyTracer
+	TLBLatencyTracers                []TLBLatencyTracer
+	DownTLBLatencyTracers            []TLBLatencyTracer
+	LocalDownTLBLatencyTracers       []TLBLatencyTracer
+	RemoteDownTLBLatencyTracers      []TLBLatencyTracer
+	L2PipelineLatencyTracers         []L2PipelineLatencyTracer
+	TLBPipelineLatencyTracers        []TLBPipelineLatencyTracer
+	PageWalkLatencyTracers           []PageWalkLatencyTracer
+	PageWalkLatencyHistogramTracers  []*trace.WalkerMemLatencyTracer
+	DRAMLatencyTracers               []DRAMLatencyTracer
+	AddressTranslatorLatencyTracers  []AddressTranslatorLatencyTracer
+	CacheHitRateTracers              []cacheHitRateTracer
+	cacheUtilizationTracers          []cacheUtilizationTracer
+	RTUCoalescingTracers             [][][][]*tracing.AverageCountTracer
+	TLBHitRateTracers                []TLBHitRateTracer
+	PWCHitRateTracers                []PWCHitRateTracer
+	TranslationReqTracer             *tracing.TranslationReqTracer
+	MMUCacheReqTracer                *tracing.MMUCacheReqTracer
+	RDMATransactionCounters          []rdmaTransactionCountTracer
+	CDMATransactionCounters          []rdmaTransactionCountTracer
+	CDMATransactionDataCounters      []rdmaTransactionCountTracer
+	CDMATransactionPageCounters      []rdmaTransactionCountTracer
+	PageTransactionCounters          []rdmaTransactionCountTracer
+	RTUTransactionCounters           []rtuTransactionCountTracer
+	CDMAAccessTracers                []CDMAAccessTracer
+	PageAccessTracers                []CDMAAccessTracer
+	BookSimAccessTracers             []BookSimAccessTracer
+	BookSimLatencyTracers            []BookSimLatencyTracer
+	L2AccessSourceTracers            []L2AccessSourceTracer
+	DRAMAccessSourceTracers          []DRAMAccessSourceTracer
+	RTUAccessTracers                 []RTUAccessTracer
+	DRAMTransactionCounters          []dramTransactionCountTracer
+	RemoteTLBLatencyTracers          []RemoteTLBLatencyTracer
+	L3TLBBufLenTracers               []*tracing.AverageCountTracer
+	L3TLBBufLenG0Tracers             []*tracing.AverageCountTracer
+	L3TLBCoalesceAddrTracers         []*tracing.AverageCountTracer
+	L3TLBCoalesceTracers             []*tracing.AverageCountTracer
+	L3TLBMSHRLenTracers              []*tracing.AverageCountTracer
+	L3TLBMSHRUniqLenTracers          []*tracing.AverageCountTracer
+	L3TLBMSHRLenG0Tracers            []*tracing.AverageCountTracer
+	L3TLBMSHRUniqLenG0Tracers        []*tracing.AverageCountTracer
+	L1MSHRLenTracers                 []*tracing.AverageCountTracer
+	L1MSHRUniqLenTracers             []*tracing.AverageCountTracer
+	L1MSHRLenG0Tracers               []*tracing.AverageCountTracer
+	L1MSHRUniqLenG0Tracers           []*tracing.AverageCountTracer
+	ActivePageWalkerTracers          []ActivePageWalkerTracer
+	ActiveMMUPageWalkQueueTracers    []*tracing.AverageCountTracer
+	MaxMMUPageWalkQueueTracers       []*tracing.MaximumCountTracer
+	ActiveMMUPageWalkRspQueueTracers []*tracing.AverageCountTracer
+	MaxMMUPageWalkRspQueueTracers    []*tracing.MaximumCountTracer
+	L1CaPWQCacheLenTracers           []*tracing.AverageCountTracer
+	L1CaPWQCacheMaxLenTracers        []*tracing.MaximumCountTracer
+	L2TLBMySQLTracer                 tracing.MySQLTracer
+	L2TLBQueueingImbalanceTracers    []TLBQueueImbalanceTracer
+	PageWalkerImbalanceTracers       []PageWalkerImbalanceTracer
+	EntropyTracers                   []EntropyTracer
+	RemoteReferenceCountTracers      []RemoteReferenceCountTracer
+	TLBSetMissTracers                []TLBSetMissTracer
+	TLBMSHRStallTracers              []TLBMSHRStallTracer
+	TLBReqStallTracers               []TLBReqStallTracer
+	TLBAverageTracers                []TLBMonitorTracer
+	PowerStatTracer                  *power.PowerStatTracer
+	Benchmarks                       []benchmarks.Benchmark
+	Timing                           bool
+	Verify                           bool
+	Parallel                         bool
+	ReportInstCount                  bool
+	ReportCacheLatency               bool
+	ReportMemoryAccessSource         bool
+	ReportTLBLatency                 bool
+	ReportTLBConditionalStats        bool
+	ReportPageWalkLatency            bool
+	ReportL1CaPWQCacheLens           bool
+	ReportDRAMLatency                bool
+	ReportTranslationReqLatency      bool
+	ReportMMUCacheReqLatency         bool
+	ReportAddressTranslatorLatency   bool
+	ReportCacheHitRate               bool
+	ReportTLBCoalesce                bool
+	ReportRTUCoalesce                bool
+	ReportTLBHitRate                 bool
+	ReportPWCHitRate                 bool
+	ReportL3TLBMSHRLen               bool
+	ReportL1MSHRLen                  bool
+	ReportDRAMTransactionCount       bool
+	ReportRDMATransactionCount       bool
+	ReportCDMATransactionCount       bool
+	ReportBookSimNoc                 bool
+	ReportRTUTransactionCount        bool
+	ReportActiveWalkerCount          bool
+	L3TLBSQLTracing                  bool
+	ReportL3TLBQueueImbalance        bool
+	ReportPageWalkerImbalance        bool
+	ReportEntropy                    bool
+	ReportReferenceTracing           bool
+	ReportTLBSetMissTracing          bool
+	ReportTLBMSHRStallTracing        bool
+	ReportTLBReqStalls               bool
+	ReportTLBMonitor                 bool
+	ReportCacheUtilization           bool
+	UseUnifiedMemory                 bool
+	UseLASPMemoryAlloc               bool
+	UseLASPHSLMemoryAlloc            bool
+	UseCustomHSL                     bool
+	metricsCollector                 *collector
 
 	GPUIDs []int
 }
@@ -2111,7 +2113,7 @@ func (r *Runner) addActiveWalkerTracer() {
 				})
 			tracer.TracedComponentName = mmu.Name()
 
-			r.ActiveMMUSecondaryQueueTracers = append(r.ActiveMMUSecondaryQueueTracers,
+			r.ActiveMMUPageWalkQueueTracers = append(r.ActiveMMUPageWalkQueueTracers,
 				tracer)
 			tracing.CollectTrace(mmu, tracer)
 		}
@@ -2123,7 +2125,31 @@ func (r *Runner) addActiveWalkerTracer() {
 				})
 			tracer.TracedComponentName = mmu.Name()
 
-			r.MaxMMUSecondaryQueueTracers = append(r.MaxMMUSecondaryQueueTracers,
+			r.MaxMMUPageWalkQueueTracers = append(r.MaxMMUPageWalkQueueTracers,
+				tracer)
+			tracing.CollectTrace(mmu, tracer)
+		}
+
+		for _, mmu := range gpu.MMUs {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "page_walk_rsp_queue_len"
+				})
+			tracer.TracedComponentName = mmu.Name()
+
+			r.ActiveMMUPageWalkRspQueueTracers = append(r.ActiveMMUPageWalkRspQueueTracers,
+				tracer)
+			tracing.CollectTrace(mmu, tracer)
+		}
+
+		for _, mmu := range gpu.MMUs {
+			tracer := tracing.NewMaximumCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "page_walk_rsp_queue_len"
+				})
+			tracer.TracedComponentName = mmu.Name()
+
+			r.MaxMMUPageWalkRspQueueTracers = append(r.MaxMMUPageWalkRspQueueTracers,
 				tracer)
 			tracing.CollectTrace(mmu, tracer)
 		}
@@ -3454,7 +3480,7 @@ func (r *Runner) reportActiveWalkerCount() {
 			float64(tracer.tracer.AverageCount()),
 		)
 	}
-	for _, tracer := range r.ActiveMMUSecondaryQueueTracers {
+	for _, tracer := range r.ActiveMMUPageWalkQueueTracers {
 		if tracer.AverageCount() == 0 {
 			continue
 		}
@@ -3464,13 +3490,34 @@ func (r *Runner) reportActiveWalkerCount() {
 			float64(tracer.AverageCount()),
 		)
 	}
-	for _, tracer := range r.MaxMMUSecondaryQueueTracers {
+	for _, tracer := range r.MaxMMUPageWalkQueueTracers {
 		if tracer.MaximumCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
 			tracer.TracedComponentName,
 			"maximum PageWalkQuque length",
+			float64(tracer.MaximumCount()),
+		)
+	}
+
+	for _, tracer := range r.ActiveMMUPageWalkRspQueueTracers {
+		if tracer.AverageCount() == 0 {
+			continue
+		}
+		r.metricsCollector.Collect(
+			tracer.TracedComponentName,
+			"average PageWalkRspQuque length",
+			float64(tracer.AverageCount()),
+		)
+	}
+	for _, tracer := range r.MaxMMUPageWalkRspQueueTracers {
+		if tracer.MaximumCount() == 0 {
+			continue
+		}
+		r.metricsCollector.Collect(
+			tracer.TracedComponentName,
+			"maximum PageWalkRspQuque length",
 			float64(tracer.MaximumCount()),
 		)
 	}

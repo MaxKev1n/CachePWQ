@@ -1,0 +1,8 @@
+# =============================
+# MMU Configuration Template
+# =============================
+
+MMU:
+  type: "CaPWQMMUL5"
+
+  numPageWalkers: 64

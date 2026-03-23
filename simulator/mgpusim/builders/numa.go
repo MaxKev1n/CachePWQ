@@ -21,6 +21,7 @@ import (
 	"gitlab.com/akita/mem/vm/mmu/caPWQL2"
 	"gitlab.com/akita/mem/vm/mmu/caPWQL3"
 	"gitlab.com/akita/mem/vm/mmu/caPWQL4"
+	"gitlab.com/akita/mem/vm/mmu/caPWQL5"
 	"gitlab.com/akita/mem/vm/mmu/infinite"
 	"gitlab.com/akita/mem/vm/mmu/mpw"
 	"gitlab.com/akita/mem/vm/tlb"
@@ -179,6 +180,8 @@ func (b *NUMAGPUBuilder) BuildSAs(chiplet *Chiplet) {
 		saBuilder.withConfig("CaPWQL3")
 	case "CaPWQMMUL4":
 		saBuilder.withConfig("CaPWQL4")
+	case "CaPWQMMUL5":
+		saBuilder.withConfig("CaPWQL5")
 	default:
 	}
 
@@ -827,6 +830,8 @@ func (b *NUMAGPUBuilder) buildMMU(chiplet *Chiplet) {
 			b.buildCaPWQMMUL3(chiplet)
 		case "CaPWQMMUL4":
 			b.buildCaPWQMMUL4(chiplet)
+		case "CaPWQMMUL5":
+			b.buildCaPWQMMUL5(chiplet)
 		case "AsyncCaPWQMMU":
 			b.buildAsyncCaPWQMMU(chiplet)
 		default:
@@ -1172,6 +1177,50 @@ func (b *NUMAGPUBuilder) buildCaPWQMMUL4(chiplet *Chiplet) {
 	b.establishMMUToL1RoutingPath(chiplet)
 }
 
+func (b *NUMAGPUBuilder) buildCaPWQMMUL5(chiplet *Chiplet) {
+	maxNumReqInFlight := 16
+
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %v\n", numWalkersInt)
+		}
+
+		maxNumReqInFlight = numWalkersInt
+	}
+
+	maxCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
+
+	if maxNumReqInFlight%numGPCs != 0 {
+		panic("numPageWalkers should be divisible by numGPCs")
+	}
+
+	for i := 0; i < numGPCs; i++ {
+		component := caPWQL5.MakeCaPWQMMUBuilder().
+			WithEngine(b.engine).
+			WithFreq(1 * akita.GHz).
+			WithLog2PageSize(b.log2PageSize).
+			WithPageTable(b.pageTable).
+			WithMaxNumReqInFlight(maxNumReqInFlight / numGPCs).
+			Build(fmt.Sprintf("%s.GPC_%02d.CaPWQMMUL5", chiplet.name, i))
+
+		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
+
+		component.(*caPWQL5.CaPWQMMU).PageWalkCache = pageWalkCachePort
+		component.(*caPWQL5.CaPWQMMU).L3TLB = chiplet.L3TLBs[0].GetBottomPort()
+
+		chiplet.MMUs = append(chiplet.MMUs, component)
+		b.gpu.MMUs = append(b.gpu.MMUs, component)
+
+		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
+			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
+		)
+	}
+
+	b.establishMMUToL1RoutingPath(chiplet)
+}
+
 func (b *NUMAGPUBuilder) buildAsyncCaPWQMMU(chiplet *Chiplet) {
 	maxNumReqInFlight := 16
 
@@ -1296,6 +1345,8 @@ func (b *NUMAGPUBuilder) establishMMUToL1RoutingPath(chiplet *Chiplet) {
 		case *caPWQL3.CaPWQMMU:
 			mmu.CacheLowModuleFinder = lowModuleFinder
 		case *caPWQL4.CaPWQMMU:
+			mmu.CacheLowModuleFinder = lowModuleFinder
+		case *caPWQL5.CaPWQMMU:
 			mmu.CacheLowModuleFinder = lowModuleFinder
 		case *asyncCaPWQ.AsyncCaPWQMMU:
 			mmu.CacheLowModuleFinder = lowModuleFinder

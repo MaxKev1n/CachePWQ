@@ -143,7 +143,7 @@ func (b *shaderArrayBuilder) buildComponents(sa *shaderArray) {
 		b.buildCaPWQL2Components(sa)
 	case "CaPWQL3":
 		b.buildCaPWQL3Components(sa)
-	case "CaPWQL4":
+	case "CaPWQL4", "CaPWQL5":
 		b.buildCaPWQL4Components(sa)
 	default:
 		b.buildDefaultComponents(sa)
