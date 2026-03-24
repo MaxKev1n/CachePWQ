@@ -94,7 +94,7 @@ def plot_PICS(
 
     benchmarks = get_benchmarks()
 
-    bar_width = 0.15
+    bar_width = 0.1
     r1 = np.arange(len(benchmarks)) * (1 * bar_width + 0.1)
 
     # # Ave.

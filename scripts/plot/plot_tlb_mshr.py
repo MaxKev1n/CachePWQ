@@ -274,11 +274,11 @@ def plot_mshr_len(
         height = bar.get_height()
         x = bar.get_x() + bar.get_width() / 2
 
-        if height >= 2:
+        if height >= 2.5:
             plt.annotate(
             f"{height:.1f}",
-            xy=(x, 1.8),
-            xytext=(0, 10),  # 相对偏移 (0,15) 表示向上15pt
+            xy=(x, 2.2),
+            xytext=(0, 5),  # 相对偏移 (0,15) 表示向上15pt
             textcoords="offset points",
             ha="center",
             va="bottom",
@@ -302,11 +302,11 @@ def plot_mshr_len(
     )
     plt.ylabel("Average Slot Length", fontsize=24, fontweight="bold")
     plt.yticks(
-        np.arange(0, 2.1, 0.5),
+        np.arange(0, 2.6, 0.5),
         fontsize=22,
         fontweight="bold",
     )
-    plt.ylim(0, 2)
+    plt.ylim(0, 2.5)
     # plt.legend(
     #     loc="upper center",
     #     ncol=1,

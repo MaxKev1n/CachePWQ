@@ -189,7 +189,7 @@ def plot_normalized_time(
         r1,
         baseline["Data"],
         width=bar_width,
-        label="MemSide Monolithic TLB",
+        label="Baseline",
         color="#fcfdf7",
         edgecolor="black",
         linewidth=1.5,
@@ -198,7 +198,7 @@ def plot_normalized_time(
         r2,
         Opt1["Data"],
         width=bar_width,
-        label="MemSide CapWQ 5 Cycle Latency NoC",
+        label="MPW",
         color="#cce5d8",
         edgecolor="black",
         linewidth=1.5,
@@ -207,32 +207,33 @@ def plot_normalized_time(
         r3,
         Opt2["Data"],
         width=bar_width,
-        label="MemSide CapWQ 50 Cycle Latency NoC",
+        label="CaPWQ",
         color="#6ba78b",
         edgecolor="black",
         linewidth=1.5,
     )
 
-    # for bar in bar1 + bar2:
-    #     height = bar.get_height()
-    #     x = bar.get_x() + bar.get_width() / 2
+    for bar in bar1 + bar2 + bar3:
+        height = bar.get_height()
+        x = bar.get_x() + bar.get_width() / 2
 
-    #     plt.annotate(
-    #         f"{height:.1f}",
-    #         xy=(x, height),
-    #         xytext=(0, 10),  # 相对偏移 (0,15) 表示向上15pt
-    #         textcoords="offset points",
-    #         ha="center",
-    #         va="bottom",
-    #         fontsize=20,
-    #         fontweight="bold",
-    #         bbox=dict(
-    #             facecolor="white",
-    #             edgecolor="black",
-    #             boxstyle="round,pad=0.1",
-    #         ),
-    #         # arrowprops=dict(arrowstyle="-", color="red", lw=2),
-    #     )
+        if height >= 8:
+            plt.annotate(
+                f"{height:.1f}",
+                xy=(x, 7.5),
+                xytext=(0, 0),  # 相对偏移 (0,15) 表示向上15pt
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=20,
+                fontweight="bold",
+                bbox=dict(
+                    facecolor="white",
+                    edgecolor="black",
+                    boxstyle="round,pad=0.1",
+                ),
+                # arrowprops=dict(arrowstyle="-", color="red", lw=2),
+            )
 
     plt.xlim(min(r1) - bar_width, max(r3) + bar_width)
     plt.xticks(
@@ -243,11 +244,11 @@ def plot_normalized_time(
     )
     plt.ylabel("Speedup", fontsize=24, fontweight="bold")
     plt.yticks(
-        np.arange(0, 2.1, 0.5),
+        np.arange(0, 8.1, 2),
         fontsize=26,
         fontweight="bold",
     )
-    plt.ylim(0, 2)
+    plt.ylim(0, 8)
     plt.legend(
         loc="upper center",
         ncol=3,
@@ -302,7 +303,7 @@ if __name__ == "__main__":
     for benchmark in get_benchmarks():
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/HierarchicalMemSide-monolithic-tlb",
+            input_dir="../../data/baseline-numa-latency",
         )
 
         baseline = pd.concat(
@@ -320,7 +321,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/HierarchicalMemSide-capwq-5cycles",
+            input_dir="../../data/MPW",
         )
 
         Opt1 = pd.concat(
@@ -338,7 +339,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/HierarchicalMemSide-capwq-50cycles",
+            input_dir="../../data/caPWQL4",
         )
 
         Opt2 = pd.concat(
