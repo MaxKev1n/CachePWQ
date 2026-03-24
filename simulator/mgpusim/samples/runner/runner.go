@@ -20,6 +20,7 @@ import (
 	"gitlab.com/akita/mem/profile"
 	"gitlab.com/akita/mem/trace"
 	"gitlab.com/akita/mgpusim/power"
+	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	"gitlab.com/akita/mgpusim/yamlconfig"
 
 	// ram "gitlab.com/akita/mem/dram"
@@ -322,6 +323,11 @@ type TLBMonitorTracer struct {
 	monitor   *monitor.TLBMonitor
 }
 
+type L1MSHRLenTracer struct {
+	tracer *tracing.AverageCountTracer
+	cache  l1cache.Cache
+}
+
 // Runner is a class that helps running the benchmarks in the official samples.
 type Runner struct {
 	Engine                           akita.Engine
@@ -373,14 +379,14 @@ type Runner struct {
 	L3TLBMSHRUniqLenTracers          []*tracing.AverageCountTracer
 	L3TLBMSHRLenG0Tracers            []*tracing.AverageCountTracer
 	L3TLBMSHRUniqLenG0Tracers        []*tracing.AverageCountTracer
-	L1MSHRLenTracers                 []*tracing.AverageCountTracer
-	L1MSHRUniqLenTracers             []*tracing.AverageCountTracer
-	L1MSHRLenG0Tracers               []*tracing.AverageCountTracer
-	L1MSHRUniqLenG0Tracers           []*tracing.AverageCountTracer
-	L1WalkMSHRLenTracers             []*tracing.AverageCountTracer
-	L1WalkMSHRUniqLenTracers         []*tracing.AverageCountTracer
-	L1WalkMSHRLenG0Tracers           []*tracing.AverageCountTracer
-	L1WalkMSHRUniqLenG0Tracers       []*tracing.AverageCountTracer
+	L1MSHRLenTracers                 []L1MSHRLenTracer
+	L1MSHRUniqLenTracers             []L1MSHRLenTracer
+	L1MSHRLenG0Tracers               []L1MSHRLenTracer
+	L1MSHRUniqLenG0Tracers           []L1MSHRLenTracer
+	L1WalkMSHRLenTracers             []L1MSHRLenTracer
+	L1WalkMSHRUniqLenTracers         []L1MSHRLenTracer
+	L1WalkMSHRLenG0Tracers           []L1MSHRLenTracer
+	L1WalkMSHRUniqLenG0Tracers       []L1MSHRLenTracer
 	ActivePageWalkerTracers          []ActivePageWalkerTracer
 	ActiveMMUPageWalkQueueTracers    []*tracing.AverageCountTracer
 	MaxMMUPageWalkQueueTracers       []*tracing.MaximumCountTracer
@@ -1895,7 +1901,10 @@ func (r *Runner) addL1MSHRLenTracer() {
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRlen"
 				})
-			r.L1MSHRLenTracers = append(r.L1MSHRLenTracers, tracer)
+			r.L1MSHRLenTracers = append(
+				r.L1MSHRLenTracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
 			tracing.CollectTrace(cache, tracer)
 		}
 		for _, cache := range gpu.L1VCaches {
@@ -1903,7 +1912,10 @@ func (r *Runner) addL1MSHRLenTracer() {
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRlen_g0"
 				})
-			r.L1MSHRLenG0Tracers = append(r.L1MSHRLenG0Tracers, tracer)
+			r.L1MSHRLenG0Tracers = append(
+				r.L1MSHRLenG0Tracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
 			tracing.CollectTrace(cache, tracer)
 		}
 		for _, cache := range gpu.L1VCaches {
@@ -1911,7 +1923,10 @@ func (r *Runner) addL1MSHRLenTracer() {
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRuniq"
 				})
-			r.L1MSHRUniqLenTracers = append(r.L1MSHRUniqLenTracers, tracer)
+			r.L1MSHRUniqLenTracers = append(
+				r.L1MSHRUniqLenTracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
 			tracing.CollectTrace(cache, tracer)
 		}
 		for _, cache := range gpu.L1VCaches {
@@ -1919,7 +1934,10 @@ func (r *Runner) addL1MSHRLenTracer() {
 				func(task tracing.Task) bool {
 					return task.Kind == "MSHRuniq_g0"
 				})
-			r.L1MSHRUniqLenG0Tracers = append(r.L1MSHRUniqLenG0Tracers, tracer)
+			r.L1MSHRUniqLenG0Tracers = append(
+				r.L1MSHRUniqLenG0Tracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
 			tracing.CollectTrace(cache, tracer)
 		}
 		for _, cache := range gpu.L1VCaches {
@@ -1927,7 +1945,10 @@ func (r *Runner) addL1MSHRLenTracer() {
 				func(task tracing.Task) bool {
 					return task.Kind == "WalkMSHRlen"
 				})
-			r.L1WalkMSHRLenTracers = append(r.L1WalkMSHRLenTracers, tracer)
+			r.L1WalkMSHRLenTracers = append(
+				r.L1WalkMSHRLenTracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
 			tracing.CollectTrace(cache, tracer)
 		}
 		for _, cache := range gpu.L1VCaches {
@@ -1935,7 +1956,10 @@ func (r *Runner) addL1MSHRLenTracer() {
 				func(task tracing.Task) bool {
 					return task.Kind == "WalkMSHRlen_g0"
 				})
-			r.L1WalkMSHRLenG0Tracers = append(r.L1WalkMSHRLenG0Tracers, tracer)
+			r.L1WalkMSHRLenG0Tracers = append(
+				r.L1WalkMSHRLenG0Tracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
 			tracing.CollectTrace(cache, tracer)
 		}
 		for _, cache := range gpu.L1VCaches {
@@ -1943,7 +1967,10 @@ func (r *Runner) addL1MSHRLenTracer() {
 				func(task tracing.Task) bool {
 					return task.Kind == "WalkMSHRuniq"
 				})
-			r.L1WalkMSHRUniqLenTracers = append(r.L1WalkMSHRUniqLenTracers, tracer)
+			r.L1WalkMSHRUniqLenTracers = append(
+				r.L1WalkMSHRUniqLenTracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
 			tracing.CollectTrace(cache, tracer)
 		}
 		for _, cache := range gpu.L1VCaches {
@@ -1951,7 +1978,99 @@ func (r *Runner) addL1MSHRLenTracer() {
 				func(task tracing.Task) bool {
 					return task.Kind == "WalkMSHRuniq_g0"
 				})
-			r.L1WalkMSHRUniqLenG0Tracers = append(r.L1WalkMSHRUniqLenG0Tracers, tracer)
+			r.L1WalkMSHRUniqLenG0Tracers = append(
+				r.L1WalkMSHRUniqLenG0Tracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
+			tracing.CollectTrace(cache, tracer)
+		}
+
+		for _, cache := range gpu.L1ICaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "MSHRlen"
+				})
+			r.L1MSHRLenTracers = append(
+				r.L1MSHRLenTracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
+			tracing.CollectTrace(cache, tracer)
+		}
+		for _, cache := range gpu.L1ICaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "MSHRlen_g0"
+				})
+			r.L1MSHRLenG0Tracers = append(
+				r.L1MSHRLenG0Tracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
+			tracing.CollectTrace(cache, tracer)
+		}
+		for _, cache := range gpu.L1ICaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "MSHRuniq"
+				})
+			r.L1MSHRUniqLenTracers = append(
+				r.L1MSHRUniqLenTracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
+			tracing.CollectTrace(cache, tracer)
+		}
+		for _, cache := range gpu.L1ICaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "MSHRuniq_g0"
+				})
+			r.L1MSHRUniqLenG0Tracers = append(
+				r.L1MSHRUniqLenG0Tracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
+			tracing.CollectTrace(cache, tracer)
+		}
+		for _, cache := range gpu.L1ICaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "WalkMSHRlen"
+				})
+			r.L1WalkMSHRLenTracers = append(
+				r.L1WalkMSHRLenTracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
+			tracing.CollectTrace(cache, tracer)
+		}
+		for _, cache := range gpu.L1ICaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "WalkMSHRlen_g0"
+				})
+			r.L1WalkMSHRLenG0Tracers = append(
+				r.L1WalkMSHRLenG0Tracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
+			tracing.CollectTrace(cache, tracer)
+		}
+		for _, cache := range gpu.L1ICaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "WalkMSHRuniq"
+				})
+			r.L1WalkMSHRUniqLenTracers = append(
+				r.L1WalkMSHRUniqLenTracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
+			tracing.CollectTrace(cache, tracer)
+		}
+		for _, cache := range gpu.L1ICaches {
+			tracer := tracing.NewAverageCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "WalkMSHRuniq_g0"
+				})
+			r.L1WalkMSHRUniqLenG0Tracers = append(
+				r.L1WalkMSHRUniqLenG0Tracers,
+				L1MSHRLenTracer{tracer: tracer, cache: cache},
+			)
 			tracing.CollectTrace(cache, tracer)
 		}
 	}
@@ -3444,89 +3563,89 @@ func (r *Runner) reportL1CaPWQCacheLens() {
 		)
 	}
 
-	for i, tracer := range r.L1MSHRLenTracers {
-		if tracer.AverageCount() == 0 {
+	for _, tracer := range r.L1MSHRLenTracers {
+		if tracer.tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L1_"+strconv.Itoa(i),
+			tracer.cache.Name(),
 			"average_mshr_len",
-			float64(tracer.AverageCount()),
+			float64(tracer.tracer.AverageCount()),
 		)
 	}
-	for i, tracer := range r.L1MSHRLenG0Tracers {
-		if tracer.AverageCount() == 0 {
+	for _, tracer := range r.L1MSHRLenG0Tracers {
+		if tracer.tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L1_"+strconv.Itoa(i),
+			tracer.cache.Name(),
 			"average_mshr_len_g0",
-			float64(tracer.AverageCount()),
+			float64(tracer.tracer.AverageCount()),
 		)
 	}
 
-	for i, tracer := range r.L1MSHRUniqLenTracers {
-		if tracer.AverageCount() == 0 {
+	for _, tracer := range r.L1MSHRUniqLenTracers {
+		if tracer.tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L1_"+strconv.Itoa(i),
+			tracer.cache.Name(),
 			"average_mshr_uniq_len",
-			float64(tracer.AverageCount()),
+			float64(tracer.tracer.AverageCount()),
 		)
 	}
 
-	for i, tracer := range r.L1MSHRUniqLenG0Tracers {
-		if tracer.AverageCount() == 0 {
+	for _, tracer := range r.L1MSHRUniqLenG0Tracers {
+		if tracer.tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L1_"+strconv.Itoa(i),
+			tracer.cache.Name(),
 			"average_mshr_uniq_len_g0",
-			float64(tracer.AverageCount()),
+			float64(tracer.tracer.AverageCount()),
 		)
 	}
 
-	for i, tracer := range r.L1WalkMSHRLenTracers {
-		if tracer.AverageCount() == 0 {
+	for _, tracer := range r.L1WalkMSHRLenTracers {
+		if tracer.tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L1_"+strconv.Itoa(i),
+			tracer.cache.Name(),
 			"average_walk_mshr_len",
-			float64(tracer.AverageCount()),
+			float64(tracer.tracer.AverageCount()),
 		)
 	}
-	for i, tracer := range r.L1WalkMSHRLenG0Tracers {
-		if tracer.AverageCount() == 0 {
+	for _, tracer := range r.L1WalkMSHRLenG0Tracers {
+		if tracer.tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L1_"+strconv.Itoa(i),
+			tracer.cache.Name(),
 			"average_walk_mshr_len_g0",
-			float64(tracer.AverageCount()),
+			float64(tracer.tracer.AverageCount()),
 		)
 	}
 
-	for i, tracer := range r.L1WalkMSHRUniqLenTracers {
-		if tracer.AverageCount() == 0 {
+	for _, tracer := range r.L1WalkMSHRUniqLenTracers {
+		if tracer.tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L1_"+strconv.Itoa(i),
+			tracer.cache.Name(),
 			"average_walk_mshr_uniq_len",
-			float64(tracer.AverageCount()),
+			float64(tracer.tracer.AverageCount()),
 		)
 	}
 
-	for i, tracer := range r.L1WalkMSHRUniqLenG0Tracers {
-		if tracer.AverageCount() == 0 {
+	for _, tracer := range r.L1WalkMSHRUniqLenG0Tracers {
+		if tracer.tracer.AverageCount() == 0 {
 			continue
 		}
 		r.metricsCollector.Collect(
-			"L1_"+strconv.Itoa(i),
+			tracer.cache.Name(),
 			"average_walk_mshr_uniq_len_g0",
-			float64(tracer.AverageCount()),
+			float64(tracer.tracer.AverageCount()),
 		)
 	}
 }
