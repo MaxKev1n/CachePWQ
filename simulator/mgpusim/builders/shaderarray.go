@@ -278,9 +278,9 @@ func (b *shaderArrayBuilder) buildCaPWQL4Components(sa *shaderArray) {
 	b.buildL1SCache(sa)
 
 	b.buildL1ITLB(sa)
-	b.buildL1IAddressTranslator(sa)
+	b.buildCaPWQL1IAddressTranslator(sa)
 	b.buildL1IReorderBuffer(sa)
-	b.buildL1ICache(sa)
+	b.buildCaPWQL4L1ICache(sa)
 }
 
 func (b *shaderArrayBuilder) connectComponents(sa *shaderArray) {
@@ -438,6 +438,17 @@ func (b *shaderArrayBuilder) buildL1VReorderBuffers(sa *shaderArray) {
 func (b *shaderArrayBuilder) makeAddressTranslatorBuilder() (builder addresstranslator.AddressTranslatorBuilder) {
 
 	builder = addresstranslator.MakeBuilder()
+
+	builder.WithEngine(b.engine)
+	builder.WithFreq(b.freq)
+	builder.WithDeviceID(b.gpuID)
+	builder.WithLog2PageSize(b.log2PageSize)
+	return
+}
+
+func (b *shaderArrayBuilder) makeCaPWQAddressTranslatorBuilder() (builder addresstranslator.AddressTranslatorBuilder) {
+
+	builder = addresstranslator.MakeCaPWQAddressTranslatorBuilder()
 
 	builder.WithEngine(b.engine)
 	builder.WithFreq(b.freq)
@@ -762,6 +773,18 @@ func (b *shaderArrayBuilder) buildL1IAddressTranslator(sa *shaderArray) {
 	// }
 }
 
+func (b *shaderArrayBuilder) buildCaPWQL1IAddressTranslator(sa *shaderArray) {
+	builder := b.makeCaPWQAddressTranslatorBuilder()
+
+	name := fmt.Sprintf("%s.CaPWQL1IAddrTrans", b.name)
+	at := builder.Build(name)
+	sa.l1iAT = at
+
+	// if b.visTracer != nil {
+	// 	tracing.CollectTrace(at, b.visTracer)
+	// }
+}
+
 func (b *shaderArrayBuilder) buildL1ITLB(sa *shaderArray) {
 	builder := tlb.MakeBuilder().
 		WithEngine(b.engine).
@@ -810,13 +833,36 @@ func (b *shaderArrayBuilder) buildL1ICache(sa *shaderArray) {
 		WithNumBanks(1).
 		WithLog2BlockSize(b.log2CacheLineSize).
 		WithWayAssocitivity(16).
-		WithNumMSHREntry(32).
+		WithNumMSHREntry(8).
 		WithTotalByteSize(64 * mem.KB).
 		WithNumReqsPerCycle(4).
 		WithBankLatency(28).
 		WithInstCache()
 
 	name := fmt.Sprintf("%s.L1ICache", b.name)
+	cache := builder.Build(name)
+	sa.l1iCache = cache
+
+	if b.visTracer != nil {
+		tracing.CollectTrace(cache, b.visTracer)
+	}
+}
+
+func (b *shaderArrayBuilder) buildCaPWQL4L1ICache(sa *shaderArray) {
+	builder := CaPWQCacheL4.NewBuilder().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithBankLatency(20).
+		WithNumBanks(1).
+		WithLog2BlockSize(b.log2CacheLineSize).
+		WithWayAssocitivity(16).
+		WithNumMSHREntry(8).
+		WithTotalByteSize(64 * mem.KB).
+		WithNumReqsPerCycle(4).
+		WithBankLatency(28).
+		WithInstCache()
+
+	name := fmt.Sprintf("%s.CaPWQL1ICache", b.name)
 	cache := builder.Build(name)
 	sa.l1iCache = cache
 

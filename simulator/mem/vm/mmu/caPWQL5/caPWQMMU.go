@@ -24,6 +24,7 @@ const (
 	sentToMem
 	l1Done
 	memDone
+	noMshr
 	transactionFinished
 )
 
@@ -229,9 +230,10 @@ func (walker *CaPWQPageWalker) walkSecondaryPageTable(now akita.VTimeInSec) bool
 
 	switch walker.secondaryTransaction.state {
 	case pageWalkCacheDone, l1Done:
-		walker.sendWriteReqToL1(now)
+		walker.sendWriteReqToL1V(now)
 	case transactionFinished:
 		walker.finalizeTransaction(now, walker.secondaryTransaction)
+	case noMshr:
 	default:
 		panic("invalid transaction state")
 	}
@@ -307,7 +309,7 @@ func (walker *CaPWQPageWalker) sendToMem(now akita.VTimeInSec) {
 	)
 }
 
-func (walker *CaPWQPageWalker) sendWriteReqToL1(now akita.VTimeInSec) {
+func (walker *CaPWQPageWalker) sendWriteReqToL1V(now akita.VTimeInSec) {
 	trans := walker.secondaryTransaction
 
 	if trans.state != pageWalkCacheDone && trans.state != l1Done {
@@ -324,7 +326,12 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1(now akita.VTimeInSec) {
 	PPN := trans.PPN
 	PPNWithOffset := walker.mmu.pageTable.AddOffset(PPN, trans.vAddr)
 
-	dstPort := walker.mmu.CacheLowModuleFinder.Find(PPNWithOffset)
+	dstPort := walker.mmu.VCacheLowModuleFinder.Find(PPNWithOffset)
+
+	if _, full := walker.mmu.fullFlags[dstPort.Name()]; full {
+		walker.sendWriteReqToL1I(now)
+		return
+	}
 
 	block := vm.CaPWQBlock{
 		PID:           trans.pid,
@@ -344,6 +351,7 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1(now akita.VTimeInSec) {
 		Build()
 
 	writeReq.TrafficBytes += 12
+	writeReq.PTW = true
 
 	err := walker.mmu.ToCache.Send(writeReq)
 	if err != nil {
@@ -355,6 +363,81 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1(now akita.VTimeInSec) {
 
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(writeReq, walker.mmu),
 		now, walker.mmu, "page_walk_store_l1")
+	tracing.EndTask(walker.mmu.Name()+"stall", now, walker.mmu)
+}
+
+func (walker *CaPWQPageWalker) sendWriteReqToL1I(now akita.VTimeInSec) {
+	trans := walker.secondaryTransaction
+
+	if trans.state != pageWalkCacheDone && trans.state != l1Done {
+		panic("this state shouldn't be here!")
+	}
+
+	PPN := trans.PPN
+	PPNWithOffset := walker.mmu.pageTable.AddOffset(PPN, trans.vAddr)
+
+	dstPort := walker.mmu.ICacheLowModuleFinder.Find(PPNWithOffset)
+	if _, full := walker.mmu.fullFlags[dstPort.Name()]; full {
+		tracing.StartTask(walker.mmu.Name()+"stall", "", now, walker.mmu, "mmu_stall", "", nil)
+		trans.state = noMshr
+		return
+	}
+
+	block := vm.CaPWQBlock{
+		PID:           trans.pid,
+		Address:       trans.Address,
+		PPNWithOffset: PPNWithOffset,
+		Level:         trans.level,
+		MsgID:         trans.msgID,
+	}
+
+	writeReq := mem.WriteReqBuilder{}.
+		WithSendTime(now).
+		WithSrc(walker.mmu.ToCache).
+		WithDst(dstPort).
+		WithPID(trans.pid).
+		WithAddress(PPNWithOffset).
+		WithInfo(block).
+		Build()
+
+	writeReq.TrafficBytes += 12
+	writeReq.PTW = true
+
+	err := walker.mmu.ToCache.Send(writeReq)
+	if err != nil {
+		tracing.StartTask(walker.mmu.Name()+"stall", "", now, walker.mmu, "mmu_stall", "", nil)
+		return
+	}
+
+	walker.secondaryTransaction = nil
+
+	tracing.AddTaskStep(tracing.MsgIDAtReceiver(writeReq, walker.mmu),
+		now, walker.mmu, "page_walk_store_l1")
+	tracing.EndTask(walker.mmu.Name()+"stall", now, walker.mmu)
+}
+
+func (walker *CaPWQPageWalker) revokeSecondaryTransaction(
+	now akita.VTimeInSec,
+	portName string,
+) {
+	trans := walker.secondaryTransaction
+	if trans == nil || trans.state != noMshr {
+		return
+	}
+
+	PPN := trans.PPN
+	PPNWithOffset := walker.mmu.pageTable.AddOffset(PPN, trans.vAddr)
+
+	dstPort := walker.mmu.ICacheLowModuleFinder.Find(PPNWithOffset)
+
+	if dstPort.Name() != portName {
+		return
+	}
+
+	trans.state = pageWalkCacheDone
+
+	walker.TickLater(now)
+
 	tracing.EndTask(walker.mmu.Name()+"stall", now, walker.mmu)
 }
 
@@ -438,8 +521,9 @@ type CaPWQMMU struct {
 	translationSender akitaext.BufferedSender
 	lowModuleFinder   cache.LowModuleFinder
 
-	ToCache              akita.Port
-	CacheLowModuleFinder cache.LowModuleFinder
+	ToCache               akita.Port
+	VCacheLowModuleFinder cache.LowModuleFinder
+	ICacheLowModuleFinder cache.LowModuleFinder
 
 	pageTable *device.PageTableImpl
 
@@ -454,6 +538,8 @@ type CaPWQMMU struct {
 
 	walkReqQueueCapacity int
 	walkRspQueueCapacity int
+
+	fullFlags map[string]bool
 }
 
 // Tick defines how the MMU update state each cycle
@@ -571,9 +657,28 @@ func (mmu *CaPWQMMU) parseFromL1(now akita.VTimeInSec) bool {
 		mmu.ToCache.Retrieve(now)
 
 		return true
+	case *mem.ControlMsg:
+		return mmu.handleControlMsg(msg, now)
 	default:
 		panic("unknown message type")
 	}
+}
+
+func (mmu *CaPWQMMU) handleControlMsg(msg *mem.ControlMsg, now akita.VTimeInSec) bool {
+	isFull := msg.Full
+	if isFull {
+		mmu.fullFlags[msg.Src.Name()] = true
+	} else {
+		delete(mmu.fullFlags, msg.Src.Name())
+
+		for _, walker := range mmu.pageWalkers {
+			walker.revokeSecondaryTransaction(now, msg.Src.Name())
+		}
+	}
+
+	mmu.ToCache.Retrieve(now)
+
+	return true
 }
 
 func (mmu *CaPWQMMU) handleL1ReadResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) bool {

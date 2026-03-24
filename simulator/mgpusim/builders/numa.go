@@ -26,6 +26,7 @@ import (
 	"gitlab.com/akita/mem/vm/mmu/mpw"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
+	CaPWQCacheL4 "gitlab.com/akita/mgpusim/timing/caches/capwql4"
 	"gitlab.com/akita/mgpusim/timing/caches/l1v"
 	"gitlab.com/akita/mgpusim/yamlconfig"
 	noc "gitlab.com/akita/noc/networking/booksim"
@@ -1291,33 +1292,37 @@ func (b *NUMAGPUBuilder) establishMMUToLDSRoutingPath(chiplet *Chiplet) {
 }
 
 func (b *NUMAGPUBuilder) establishMMUToL1RoutingPath(chiplet *Chiplet) {
-	numCUsPerGPC := 16
-	numGPCs := (len(chiplet.CUs)-1)/numCUsPerGPC + 1
+	numVCachesPerGPC := 16
+	numICachesPerGPC := 4
+	numGPCs := (len(chiplet.CUs)-1)/numVCachesPerGPC + 1
 
 	if len(chiplet.MMUs) != numGPCs {
 		panic("number of MMUs should be the same as number of GPCs")
 	}
 
 	for i := 0; i < numGPCs; i++ {
-		lowModuleFinder := cache.NewXORLowModuleFinder(
-			numCUsPerGPC,
+		vlowModuleFinder := cache.NewXORLowModuleFinder(
+			numVCachesPerGPC,
 			4,
-			int(math.Log2(float64(numCUsPerGPC))),
+			int(math.Log2(float64(numVCachesPerGPC))),
 			int(b.log2CacheLineSize))
 
 		switch mmu := chiplet.MMUs[i].(type) {
-		case *caPWQL1.CaPWQMMU:
-			mmu.CacheLowModuleFinder = lowModuleFinder
-		case *caPWQL2.CaPWQMMU:
-			mmu.CacheLowModuleFinder = lowModuleFinder
-		case *caPWQL3.CaPWQMMU:
-			mmu.CacheLowModuleFinder = lowModuleFinder
-		case *caPWQL4.CaPWQMMU:
-			mmu.CacheLowModuleFinder = lowModuleFinder
 		case *caPWQL5.CaPWQMMU:
-			mmu.CacheLowModuleFinder = lowModuleFinder
-		case *asyncCaPWQ.AsyncCaPWQMMU:
-			mmu.CacheLowModuleFinder = lowModuleFinder
+			mmu.VCacheLowModuleFinder = vlowModuleFinder
+		default:
+			panic("MMU is not CaPWQMMU")
+		}
+
+		ilowModuleFinder := cache.NewXORLowModuleFinder(
+			numICachesPerGPC,
+			4,
+			int(math.Log2(float64(numICachesPerGPC))),
+			int(b.log2CacheLineSize))
+
+		switch mmu := chiplet.MMUs[i].(type) {
+		case *caPWQL5.CaPWQMMU:
+			mmu.ICacheLowModuleFinder = ilowModuleFinder
 		default:
 			panic("MMU is not CaPWQMMU")
 		}
@@ -1329,12 +1334,26 @@ func (b *NUMAGPUBuilder) establishMMUToL1RoutingPath(chiplet *Chiplet) {
 
 		conn.PlugIn(chiplet.MMUs[i].ToCachePort(), 16)
 
-		for j := i * numCUsPerGPC; j < (i+1)*numCUsPerGPC; j++ {
-			lowModuleFinder.LowModules = append(
-				lowModuleFinder.LowModules,
+		for j := i * numVCachesPerGPC; j < (i+1)*numVCachesPerGPC; j++ {
+			vlowModuleFinder.LowModules = append(
+				vlowModuleFinder.LowModules,
 				chiplet.L1VCaches[j].GetWalkerPort(),
 			)
 			conn.PlugIn(chiplet.L1VCaches[j].GetWalkerPort(), 16)
+
+			chiplet.L1VCaches[j].(*CaPWQCacheL4.Cache).PageWalker =
+				chiplet.MMUs[i].ToCachePort()
+		}
+
+		for j := i * numICachesPerGPC; j < (i+1)*numICachesPerGPC; j++ {
+			ilowModuleFinder.LowModules = append(
+				ilowModuleFinder.LowModules,
+				chiplet.L1ICaches[j].GetWalkerPort(),
+			)
+			conn.PlugIn(chiplet.L1ICaches[j].GetWalkerPort(), 16)
+
+			chiplet.L1ICaches[j].(*CaPWQCacheL4.Cache).PageWalker =
+				chiplet.MMUs[i].ToCachePort()
 		}
 	}
 }

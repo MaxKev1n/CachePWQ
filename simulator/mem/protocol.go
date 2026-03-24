@@ -453,6 +453,7 @@ type ControlMsg struct {
 	DiscardTransations bool
 	Restart            bool
 	NotifyDone         bool
+	Full               bool
 }
 
 // Meta returns the meta data assocated with the ControlMsg.
@@ -467,6 +468,7 @@ type ControlMsgBuilder struct {
 	discardTransactions bool
 	restart             bool
 	notifyDone          bool
+	full                bool
 }
 
 // WithSendTime sets the send time of the message to build.
@@ -508,6 +510,11 @@ func (b ControlMsgBuilder) ToNotifyDone() ControlMsgBuilder {
 	return b
 }
 
+func (b ControlMsgBuilder) ToFull() ControlMsgBuilder {
+	b.full = true
+	return b
+}
+
 func (b ControlMsgBuilder) Build() *ControlMsg {
 	m := &ControlMsg{}
 	m.ID = akita.GetIDGenerator().Generate()
@@ -519,6 +526,7 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.DiscardTransations = b.discardTransactions
 	m.Restart = b.restart
 	m.NotifyDone = b.notifyDone
+	m.Full = b.full
 
 	return m
 }

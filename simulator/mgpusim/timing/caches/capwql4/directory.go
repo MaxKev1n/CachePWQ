@@ -74,6 +74,7 @@ func (d *directory) processWalkerWrite(
 	}
 
 	if d.cache.mshr.IsFull() {
+		d.cache.notifyWalkerMSHRFull(now)
 		return false
 	}
 
@@ -106,6 +107,9 @@ func (d *directory) fetchPTEsFromBottom(
 		WithByteSize(blockSize).
 		WithInfo(readReqInfo).
 		Build()
+
+	readToBottom.PTW = true
+
 	err := d.cache.BottomPort.Send(readToBottom)
 	if err != nil {
 		return false
@@ -223,7 +227,12 @@ func (d *directory) processMSHRHit(
 
 	if trans.read != nil {
 		tracing.AddTaskStep(trans.id, now, d.cache, "read-mshr-hit")
-		tracing.AddTaskStep("PowerStat", now, d.cache, "l1_read_hits")
+
+		what := "l1_read_hits"
+		if d.cache.isInstCache {
+			what = "l1i_hits"
+		}
+		tracing.AddTaskStep("PowerStat", now, d.cache, what)
 	} else {
 		tracing.AddTaskStep(trans.id, now, d.cache, "write-mshr-hit")
 		tracing.AddTaskStep("PowerStat", now, d.cache, "l1_write_hits")
@@ -255,7 +264,12 @@ func (d *directory) processReadHit(
 	d.cache.dirBuf.Pop()
 	d.numExecutedReqs++
 	tracing.AddTaskStep(trans.id, now, d.cache, "read-hit")
-	tracing.AddTaskStep("PowerStat", now, d.cache, "l1_read_hits")
+
+	what := "l1_read_hits"
+	if d.cache.isInstCache {
+		what = "l1i_hits"
+	}
+	tracing.AddTaskStep("PowerStat", now, d.cache, what)
 
 	return true
 }
@@ -277,6 +291,7 @@ func (d *directory) processReadMiss(
 	}
 
 	if d.cache.mshr.IsFull() {
+		d.cache.notifyWalkerMSHRFull(now)
 		return false
 	}
 
@@ -287,7 +302,12 @@ func (d *directory) processReadMiss(
 	d.cache.dirBuf.Pop()
 	d.numExecutedReqs++
 	tracing.AddTaskStep(trans.id, now, d.cache, "read-miss")
-	tracing.AddTaskStep("PowerStat", now, d.cache, "l1_read_misses")
+
+	what := "l1_read_misses"
+	if d.cache.isInstCache {
+		what = "l1i_misses"
+	}
+	tracing.AddTaskStep("PowerStat", now, d.cache, what)
 
 	d.status = profile.BASE
 
@@ -366,6 +386,7 @@ func (d *directory) partialWriteMiss(
 	trans.fetchAndWrite = true
 
 	if d.cache.mshr.IsFull() {
+		d.cache.notifyWalkerMSHRFull(now)
 		return false
 	}
 
