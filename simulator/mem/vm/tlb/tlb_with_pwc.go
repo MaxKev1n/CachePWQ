@@ -15,7 +15,6 @@ import (
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mem/monitor"
-	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/mem/vm/tlb/internal"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/pipelining"
@@ -74,9 +73,7 @@ type LastLevelTLB struct {
 
 	inflightPageWalkCacheReqs map[string]*device.TranslationReq
 
-	MMUs []mmu.MMU
-
-	rrPtr int
+	dispatcher internal.Dispatcher
 }
 
 func (tlb *LastLevelTLB) InitMonitorStats() {
@@ -144,6 +141,10 @@ func (tlb *LastLevelTLB) SetCommandProcessor(cp akita.Port) {
 
 func (tlb *LastLevelTLB) SetGPCID(id int) {
 	tlb.gpcID = id
+}
+
+func (tlb *LastLevelTLB) RegisterMMU(mmu akita.Port) {
+	tlb.dispatcher.Register(mmu)
 }
 
 // Reset sets all the entries int he LastLevelTLB to be invalid
@@ -615,26 +616,10 @@ func (tlb *LastLevelTLB) parseBottom(now akita.VTimeInSec) bool {
 	tlb.BottomPort.Retrieve(now)
 	tracing.TraceReqFinalize(mshrEntry.reqToBottom, now, tlb)
 
+	tlb.dispatcher.Receive(rsp.Src)
+
 	tracing.EndTask(tlb.Name()+"stall", now, tlb)
 	return true
-}
-
-func (tlb *LastLevelTLB) Distribute() akita.Port {
-	if len(tlb.MMUs) == 0 {
-		panic("no mmu set in tlb!")
-	}
-
-	for i := 0; i < len(tlb.MMUs); i++ {
-		index := (tlb.rrPtr + i) % len(tlb.MMUs)
-
-		if tlb.MMUs[index].CanAccept() {
-			tlb.rrPtr = (index + 1) % len(tlb.MMUs)
-
-			return tlb.MMUs[index].ToTopPort()
-		}
-	}
-
-	return nil
 }
 
 func (tlb *LastLevelTLB) parseFromPageWalkCache(now akita.VTimeInSec) bool {
@@ -654,7 +639,7 @@ func (tlb *LastLevelTLB) parseFromPageWalkCache(now akita.VTimeInSec) bool {
 		panic("not found!")
 	}
 
-	dstPort := tlb.Distribute()
+	dstPort := tlb.dispatcher.Distribute(req)
 	if dstPort == nil {
 		return false
 	}

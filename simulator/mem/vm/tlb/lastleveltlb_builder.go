@@ -7,6 +7,7 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem/cache/writeback"
 	"gitlab.com/akita/mem/device"
+	"gitlab.com/akita/mem/vm/tlb/internal"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/pipelining"
 )
@@ -24,6 +25,7 @@ type LastLevelTLBBuilder struct {
 	numMSHREntry         int
 	useCoalescingTLBPort bool
 	pageWalkCacheSize    uint64
+	dispatchPolicy       string
 }
 
 // MakeLastLevelTLBBuilder returns a LastLevelTLBBuilder
@@ -37,6 +39,7 @@ func MakeLastLevelTLBBuilder() LastLevelTLBBuilder {
 		numMSHREntry:      4,
 		latency:           1,
 		pageWalkCacheSize: 512, //512 bytes
+		dispatchPolicy:    "roundrobin",
 	}
 }
 
@@ -108,6 +111,12 @@ func (b LastLevelTLBBuilder) WithPageWalkCacheSize(size uint64) LastLevelTLBBuil
 	return b
 }
 
+// WithDispatchPolicy sets the dispatch policy of the TLB.
+func (b LastLevelTLBBuilder) WithDispatchPolicy(policy string) LastLevelTLBBuilder {
+	b.dispatchPolicy = policy
+	return b
+}
+
 // Build creates a new LatTLB
 func (b LastLevelTLBBuilder) Build(name string) TLB {
 	tlb := &LastLevelTLB{}
@@ -165,6 +174,17 @@ func (b LastLevelTLBBuilder) Build(name string) TLB {
 	mmuToPageWalkCache.PlugIn(tlb.ToPageWalkCache, 4)
 
 	tlb.inflightPageWalkCacheReqs = make(map[string]*device.TranslationReq)
+
+	switch b.dispatchPolicy {
+	case "roundrobin":
+		tlb.dispatcher = &internal.RoundRobinDispatcher{}
+	case "leasefirst":
+		tlb.dispatcher = &internal.LeaseFirstDispatcher{}
+	case "backtosource":
+		tlb.dispatcher = &internal.BackToSourceDispatcher{}
+	default:
+		panic(fmt.Sprintf("unsupported dispatch policy: %s", b.dispatchPolicy))
+	}
 
 	return tlb
 }

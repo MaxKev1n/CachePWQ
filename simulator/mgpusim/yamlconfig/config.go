@@ -68,7 +68,7 @@ func checkViolations() error {
 			if _, ok := OverrideConfig["MMU.walkLatency"]; !ok {
 				return fmt.Errorf("IdealMMU requires walkLatency to be set")
 			}
-		case "MPWMMU", "BaselineMMU":
+		case "MPWMMU", "BaselineMMU", "CaPWQMMUL1", "CaPWQMMUL2", "CaPWQMMUL3", "CaPWQMMUL4", "CaPWQMMUL5":
 			if _, ok := OverrideConfig["MMU.numPageWalkers"]; !ok {
 				return fmt.Errorf("%s requires numPageWalkers to be set", mmuType)
 			}

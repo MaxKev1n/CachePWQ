@@ -350,6 +350,7 @@ func (b *NUMAGPUBuilder) establishTPC(chiplet *Chiplet) {
 			WithFreq(b.freq).
 			WithDevicePorts([]akita.Port{l1vtlb.GetBottomPort()}).
 			WithNumReqPerCycle(2).
+			WithNetworkPortBufferSize(2).
 			WithFlitByteSize(32).
 			Build(fmt.Sprintf("%s.L1VTLB[%d]", chiplet.name, i))
 
@@ -782,6 +783,8 @@ func (b *NUMAGPUBuilder) buildL3TLB(chiplet *Chiplet) {
 		t = t << 1
 	}
 
+	dispatchPolicy := yamlconfig.OverrideConfig["L3TLB.dispatcher"]
+
 	builder := tlb.MakeLastLevelTLBBuilder().
 		WithEngine(b.engine).
 		WithFreq(b.freq).
@@ -791,6 +794,7 @@ func (b *NUMAGPUBuilder) buildL3TLB(chiplet *Chiplet) {
 		WithNumReqPerCycle(8).
 		WithLog2PageSize(b.log2PageSize).
 		WithPageWalkCacheSize(2048).
+		WithDispatchPolicy(dispatchPolicy).
 		WithLatency(80)
 
 	if b.useCoalescingTLBPort {
@@ -843,6 +847,10 @@ func (b *NUMAGPUBuilder) buildMMU(chiplet *Chiplet) {
 		if b.ptwTracer != nil {
 			tracing.CollectTrace(mmu, b.ptwTracer)
 		}
+
+		b.l3TLBs[0].(*tlb.LastLevelTLB).RegisterMMU(
+			mmu.ToTopPort(),
+		)
 	}
 }
 
@@ -880,10 +888,6 @@ func (b *NUMAGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
-
-		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
-			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
-		)
 	}
 }
 
@@ -905,10 +909,6 @@ func (b *NUMAGPUBuilder) buildInfiniteMMU(chiplet *Chiplet) {
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
-
-		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
-			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
-		)
 	}
 }
 
@@ -946,10 +946,6 @@ func (b *NUMAGPUBuilder) buildMPWMMU(chiplet *Chiplet) {
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
-
-		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
-			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
-		)
 	}
 }
 
@@ -994,10 +990,6 @@ func (b *NUMAGPUBuilder) buildIdealMMU(chiplet *Chiplet) {
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
-
-		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
-			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
-		)
 	}
 }
 
@@ -1036,10 +1028,6 @@ func (b *NUMAGPUBuilder) buildCaPWQMMUL1(chiplet *Chiplet) {
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
-
-		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
-			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
-		)
 	}
 
 	b.establishMMUToL1RoutingPath(chiplet)
@@ -1080,10 +1068,6 @@ func (b *NUMAGPUBuilder) buildCaPWQMMUL2(chiplet *Chiplet) {
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
-
-		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
-			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
-		)
 	}
 
 	b.establishMMUToL1RoutingPath(chiplet)
@@ -1124,10 +1108,6 @@ func (b *NUMAGPUBuilder) buildCaPWQMMUL3(chiplet *Chiplet) {
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
-
-		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
-			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
-		)
 	}
 
 	b.establishMMUToL1RoutingPath(chiplet)
@@ -1168,10 +1148,6 @@ func (b *NUMAGPUBuilder) buildCaPWQMMUL4(chiplet *Chiplet) {
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
-
-		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
-			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
-		)
 	}
 
 	b.establishMMUToL1RoutingPath(chiplet)
@@ -1212,10 +1188,6 @@ func (b *NUMAGPUBuilder) buildCaPWQMMUL5(chiplet *Chiplet) {
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
-
-		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
-			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
-		)
 	}
 
 	b.establishMMUToL1RoutingPath(chiplet)
@@ -1256,10 +1228,6 @@ func (b *NUMAGPUBuilder) buildAsyncCaPWQMMU(chiplet *Chiplet) {
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
-
-		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs = append(
-			chiplet.L3TLBs[0].(*tlb.LastLevelTLB).MMUs, component,
-		)
 	}
 
 	b.establishMMUToL1RoutingPath(chiplet)
@@ -1332,9 +1300,9 @@ func (b *NUMAGPUBuilder) establishMMUToL1RoutingPath(chiplet *Chiplet) {
 
 	for i := 0; i < numGPCs; i++ {
 		lowModuleFinder := cache.NewXORLowModuleFinder(
-			len(chiplet.L1VCaches)/numCUsPerGPC,
+			numCUsPerGPC,
 			4,
-			int(math.Log2(float64(len(chiplet.L1VCaches)/numCUsPerGPC))),
+			int(math.Log2(float64(numCUsPerGPC))),
 			int(b.log2CacheLineSize))
 
 		switch mmu := chiplet.MMUs[i].(type) {

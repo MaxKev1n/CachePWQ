@@ -34,6 +34,7 @@ type MSHR interface {
 	Remove(pid ca.PID, addr uint64) *MSHREntry
 	AllEntries() []*MSHREntry
 	IsFull() bool
+	IsPartialFull(remaining int) bool
 	Reset()
 }
 
@@ -96,6 +97,15 @@ func (m *mshrImpl) AllEntries() []*MSHREntry {
 // IsFull returns true if no more MSHR entries can be added
 func (m *mshrImpl) IsFull() bool {
 	if len(m.entries) >= m.capacity {
+		return true
+	}
+	return false
+}
+
+// IsPartialFull returns true if the number of remaining entries
+// is less than or equal to the given number
+func (m *mshrImpl) IsPartialFull(remaining int) bool {
+	if len(m.entries) >= m.capacity-remaining {
 		return true
 	}
 	return false
