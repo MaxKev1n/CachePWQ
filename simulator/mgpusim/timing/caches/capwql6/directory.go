@@ -32,188 +32,11 @@ func (d *directory) Tick(now akita.VTimeInSec) bool {
 
 	trans := item.(*transaction)
 
-	if trans.fromWalker {
-		return d.processWalkerReq(now, trans)
-	}
-
 	if trans.read != nil {
 		return d.processRead(now, trans)
 	}
 
 	return d.processWrite(now, trans)
-}
-
-func (d *directory) processWalkerReq(
-	now akita.VTimeInSec,
-	trans *transaction,
-) bool {
-	if trans.write == nil {
-		panic("WalkerReq called with nil transaction")
-	}
-
-	return d.processWalkerWrite(now, trans)
-}
-
-func (d *directory) processWalkerWrite(
-	now akita.VTimeInSec,
-	trans *transaction,
-) bool {
-	write := trans.write
-	addr := write.Address
-	pid := write.PID
-	PTEBlockSize := uint64(1 << (d.cache.log2BlockSize + 3))
-	PTEBlockID := addr / PTEBlockSize * PTEBlockSize
-
-	mshrEntry := d.cache.mshr.QueryForWalker(
-		pid,
-		PTEBlockID,
-	)
-	if mshrEntry != nil {
-		offset := (addr >> d.cache.log2BlockSize) & 0x7
-
-		if mshrEntry.OffsetBits[int(offset)] {
-			return d.processWalkerWriteMSHRHit(
-				now,
-				trans,
-				mshrEntry,
-			)
-		}
-		return d.processWalkerWritePartialMSHRHit(
-			now,
-			trans,
-			mshrEntry,
-		)
-	}
-
-	if d.cache.mshr.IsFull() {
-		d.cache.notifyWalkerMSHRFull(now)
-		return false
-	}
-
-	if !d.fetchPTEsFromBottom(now, trans) {
-		return false
-	}
-
-	d.cache.dirBuf.Pop()
-
-	return true
-}
-
-func (d *directory) fetchPTEsFromBottom(
-	now akita.VTimeInSec,
-	trans *transaction,
-) bool {
-	addr := trans.Address()
-	pid := trans.PID()
-	blockSize := uint64(1 << d.cache.log2BlockSize)
-	cacheLineID := addr / blockSize * blockSize
-
-	bottomModule := d.cache.lowModuleFinder.Find(cacheLineID)
-	readReqInfo := &mem.ReadReqInfo{ReturnAccessInfo: true}
-	readToBottom := mem.ReadReqBuilder{}.
-		WithSendTime(now).
-		WithSrc(d.cache.BottomPort).
-		WithDst(bottomModule).
-		WithAddress(cacheLineID).
-		WithPID(pid).
-		WithByteSize(blockSize).
-		WithInfo(readReqInfo).
-		Build()
-
-	readToBottom.PTW = true
-
-	err := d.cache.BottomPort.Send(readToBottom)
-	if err != nil {
-		return false
-	}
-
-	tracing.AddTaskStep(
-		trans.id,
-		now,
-		d.cache,
-		"ptw-read-miss",
-	)
-
-	tracing.TraceReqInitiate(readToBottom, now, d.cache, trans.id)
-	trans.readToBottom = readToBottom
-
-	PTEBlockSize := uint64(1 << (d.cache.log2BlockSize + 3))
-	PTEBlockID := addr / PTEBlockSize * PTEBlockSize
-	PTEOffset := (addr >> d.cache.log2BlockSize) & 0x7
-
-	mshrEntry := d.cache.mshr.AddForWalker(pid, PTEBlockID, PTEOffset)
-	mshrEntry.Requests = append(mshrEntry.Requests, trans)
-	mshrEntry.ReadReq = readToBottom
-
-	return true
-}
-
-func (d *directory) processWalkerWriteMSHRHit(
-	now akita.VTimeInSec,
-	trans *transaction,
-	mshrEntry *cache.MSHREntry,
-) bool {
-	mshrEntry.Requests = append(mshrEntry.Requests, trans)
-
-	d.cache.dirBuf.Pop()
-
-	tracing.AddTaskStep(
-		trans.id,
-		now,
-		d.cache,
-		"ptw-read-mshr-hit",
-	)
-
-	return true
-}
-
-func (d *directory) processWalkerWritePartialMSHRHit(
-	now akita.VTimeInSec,
-	trans *transaction,
-	mshrEntry *cache.MSHREntry,
-) bool {
-	addr := trans.Address()
-	pid := trans.PID()
-	blockSize := uint64(1 << d.cache.log2BlockSize)
-	cacheLineID := addr / blockSize * blockSize
-
-	bottomModule := d.cache.lowModuleFinder.Find(cacheLineID)
-	readReqInfo := &mem.ReadReqInfo{ReturnAccessInfo: true}
-	readToBottom := mem.ReadReqBuilder{}.
-		WithSendTime(now).
-		WithSrc(d.cache.BottomPort).
-		WithDst(bottomModule).
-		WithAddress(cacheLineID).
-		WithPID(pid).
-		WithByteSize(blockSize).
-		WithInfo(readReqInfo).
-		Build()
-
-	readToBottom.PTW = true
-
-	err := d.cache.BottomPort.Send(readToBottom)
-	if err != nil {
-		return false
-	}
-
-	tracing.AddTaskStep(
-		trans.id,
-		now,
-		d.cache,
-		"ptw-read-mshr-partial-hit",
-	)
-
-	tracing.TraceReqInitiate(readToBottom, now, d.cache, trans.id)
-	trans.readToBottom = readToBottom
-
-	PTEOffset := (addr >> d.cache.log2BlockSize) & 0x7
-
-	mshrEntry.Requests = append(mshrEntry.Requests, trans)
-	mshrEntry.OffsetBits[int(PTEOffset)] = true
-
-	d.cache.dirBuf.Pop()
-
-	return true
 }
 
 func (d *directory) collectMSHROccupancy(now akita.VTimeInSec) {
@@ -233,6 +56,10 @@ func (d *directory) collectMSHROccupancy(now akita.VTimeInSec) {
 			"MSHRlen_g0", strconv.Itoa(totalEntries), nil)
 		tracing.StartTask("", "", now, d.cache,
 			"MSHRuniq_g0", strconv.Itoa(uniqEntries), nil)
+	}
+
+	if d.cache.monitorStats != nil {
+		d.cache.monitorStats.L1VLength = uint64(uniqEntries)
 	}
 }
 
@@ -256,6 +83,10 @@ func (d *directory) collectWalkMSHROccupancy(now akita.VTimeInSec) {
 			"WalkMSHRlen_g0", strconv.Itoa(totalEntries), nil)
 		tracing.StartTask("", "", now, d.cache,
 			"WalkMSHRuniq_g0", strconv.Itoa(uniqEntries), nil)
+	}
+
+	if d.cache.monitorStats != nil {
+		d.cache.monitorStats.L1VWalkerLength = uint64(uniqEntries)
 	}
 }
 

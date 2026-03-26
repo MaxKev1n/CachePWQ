@@ -14,9 +14,11 @@ type CaPWQMonitor struct {
 	running     bool
 	initialized bool
 
-	numEpoches        uint64
-	numL1VCacheLength uint64
-	numWalkerLength   uint64
+	numEpoches              uint64
+	numL1VCacheLength       uint64
+	numL1VCacheWalkerLength uint64
+	numWalkerReqLength      uint64
+	numWalkerRspLength      uint64
 }
 
 func NewCaPWQMonitor(
@@ -46,7 +48,9 @@ func (m *CaPWQMonitor) Tick(now akita.VTimeInSec) bool {
 	}
 
 	l1VCacheUtilization := float64(m.numL1VCacheLength) / float64(len(m.L1VCaches))
-	walkerUtilization := float64(m.numWalkerLength) / float64(len(m.Walkers))
+	L1VCacheWalkerUtilization := float64(m.numL1VCacheWalkerLength) / float64(len(m.L1VCaches))
+	walkerReqUtilization := float64(m.numWalkerReqLength) / float64(len(m.Walkers))
+	walkerRspUtilization := float64(m.numWalkerRspLength) / float64(len(m.Walkers))
 
 	tracing.StartTask(
 		"",
@@ -56,15 +60,19 @@ func (m *CaPWQMonitor) Tick(now akita.VTimeInSec) bool {
 		"CaPWQMonitor",
 		"",
 		StatItem{
-			NumEpoches:          m.numEpoches,
-			L1VCacheUtilization: l1VCacheUtilization,
-			WalkerUtilization:   walkerUtilization,
+			NumEpoches:                m.numEpoches,
+			L1VCacheUtilization:       l1VCacheUtilization,
+			L1VCacheWalkerUtilization: L1VCacheWalkerUtilization,
+			WalkerReqUtilization:      walkerReqUtilization,
+			WalkerRspUtilization:      walkerRspUtilization,
 		},
 	)
 
 	m.numEpoches++
 	m.numL1VCacheLength = 0
-	m.numWalkerLength = 0
+	m.numL1VCacheWalkerLength = 0
+	m.numWalkerReqLength = 0
+	m.numWalkerRspLength = 0
 
 	return true
 }
@@ -92,7 +100,9 @@ func (m *CaPWQMonitor) Start(now akita.VTimeInSec) {
 		m.initialized = true
 		m.numEpoches = 0
 		m.numL1VCacheLength = 0
-		m.numWalkerLength = 0
+		m.numL1VCacheWalkerLength = 0
+		m.numWalkerReqLength = 0
+		m.numWalkerRspLength = 0
 	}
 
 	m.running = true
@@ -111,7 +121,9 @@ func (m *CaPWQMonitor) Stop() {
 
 	m.running = false
 	m.numL1VCacheLength = 0
-	m.numWalkerLength = 0
+	m.numL1VCacheWalkerLength = 0
+	m.numWalkerReqLength = 0
+	m.numWalkerRspLength = 0
 }
 
 func (m *CaPWQMonitor) CollectL1VCacheComponentStats(
@@ -124,7 +136,9 @@ func (m *CaPWQMonitor) CollectL1VCacheComponentStats(
 	}
 
 	m.numL1VCacheLength += component.
-		GetMonitorStats().(*CaPWQMonitorStats).Length
+		GetMonitorStats().(*CaPWQMonitorStats).L1VLength
+	m.numL1VCacheWalkerLength += component.
+		GetMonitorStats().(*CaPWQMonitorStats).L1VWalkerLength
 
 	component.ClearMonitorStats()
 }
@@ -138,8 +152,10 @@ func (m *CaPWQMonitor) CollectWalkerComponentStats(
 		return
 	}
 
-	m.numWalkerLength += component.
-		GetMonitorStats().(*CaPWQMonitorStats).Length
+	m.numWalkerReqLength += component.
+		GetMonitorStats().(*CaPWQMonitorStats).ReqLength
+	m.numWalkerRspLength += component.
+		GetMonitorStats().(*CaPWQMonitorStats).RspLength
 
 	component.ClearMonitorStats()
 }
@@ -147,15 +163,23 @@ func (m *CaPWQMonitor) CollectWalkerComponentStats(
 type CaPWQMonitorStats struct {
 	Name string
 
-	Length uint64
+	L1VLength       uint64
+	L1VWalkerLength uint64
+	ReqLength       uint64
+	RspLength       uint64
 }
 
 func (stat *CaPWQMonitorStats) Clear() {
-	stat.Length = 0
+	stat.L1VLength = 0
+	stat.L1VWalkerLength = 0
+	stat.ReqLength = 0
+	stat.RspLength = 0
 }
 
 type StatItem struct {
-	NumEpoches          uint64
-	L1VCacheUtilization float64
-	WalkerUtilization   float64
+	NumEpoches                uint64
+	L1VCacheUtilization       float64
+	L1VCacheWalkerUtilization float64
+	WalkerReqUtilization      float64
+	WalkerRspUtilization      float64
 }

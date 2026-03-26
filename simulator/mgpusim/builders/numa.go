@@ -1531,6 +1531,8 @@ func (b *NUMAGPUBuilder) establishCaPWQMonitor(c *Chiplet) {
 		switch walker := mmu.(type) {
 		case *baseline.MMUImpl:
 			caPWQMonitor.RegisterPageWalker(walker)
+		case *caPWQL5.CaPWQMMU:
+			caPWQMonitor.RegisterPageWalker(walker)
 		}
 	}
 

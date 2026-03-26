@@ -53,9 +53,7 @@ type Cache struct {
 }
 
 func (c *Cache) InitMonitorStats() {
-	c.monitorStats = &monitor.CaPWQMonitorStats{
-		Length: 0,
-	}
+	c.monitorStats = &monitor.CaPWQMonitorStats{}
 }
 
 func (c *Cache) ClearMonitorStats() {

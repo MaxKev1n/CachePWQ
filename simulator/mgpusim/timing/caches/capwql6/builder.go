@@ -140,6 +140,7 @@ func (b *Builder) Build(name string) *Cache {
 		name+".WalkerPort")
 
 	c.dirBuf = util.NewBuffer(b.numReqPerCycle)
+	c.walkerDirBuf = util.NewBuffer(b.numReqPerCycle)
 	c.bankBufs = make([]util.Buffer, b.numBank)
 	for i := 0; i < b.numBank; i++ {
 		c.bankBufs[i] = util.NewBuffer(b.numReqPerCycle)

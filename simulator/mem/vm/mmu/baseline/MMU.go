@@ -86,9 +86,7 @@ type MMUImpl struct {
 }
 
 func (impl *MMUImpl) InitMonitorStats() {
-	impl.monitorStats = &monitor.CaPWQMonitorStats{
-		Length: 0,
-	}
+	impl.monitorStats = &monitor.CaPWQMonitorStats{}
 }
 
 func (impl *MMUImpl) ClearMonitorStats() {
@@ -114,7 +112,7 @@ func (impl *MMUImpl) Tick(now akita.VTimeInSec) bool {
 		for _, walker := range impl.pageWalkers {
 			pageWalkQueueLength += len(walker.queue)
 		}
-		impl.monitorStats.Length = uint64(pageWalkQueueLength)
+		impl.monitorStats.ReqLength = uint64(pageWalkQueueLength)
 	}
 
 	return true

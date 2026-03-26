@@ -10,6 +10,7 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/device"
+	"gitlab.com/akita/mem/monitor"
 	"gitlab.com/akita/mem/vm"
 	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/util/akitaext"
@@ -540,6 +541,20 @@ type CaPWQMMU struct {
 	walkRspQueueCapacity int
 
 	fullFlags map[string]bool
+
+	monitorStats *monitor.CaPWQMonitorStats
+}
+
+func (mmu *CaPWQMMU) InitMonitorStats() {
+	mmu.monitorStats = &monitor.CaPWQMonitorStats{}
+}
+
+func (mmu *CaPWQMMU) ClearMonitorStats() {
+	mmu.monitorStats.Clear()
+}
+
+func (mmu *CaPWQMMU) GetMonitorStats() interface{} {
+	return mmu.monitorStats
 }
 
 // Tick defines how the MMU update state each cycle
@@ -581,6 +596,17 @@ func (mmu *CaPWQMMU) Tick(now akita.VTimeInSec) bool {
 			strconv.Itoa(len(mmu.pageWalkRspQueue)),
 			nil,
 		)
+	}
+
+	if mmu.monitorStats != nil {
+		mmu.monitorStats.ReqLength = uint64(len(mmu.pageWalkReqQueue))
+		mmu.monitorStats.RspLength = uint64(len(mmu.pageWalkRspQueue))
+
+		for i := range mmu.pageWalkers {
+			if mmu.pageWalkers[i].transaction != nil {
+				mmu.monitorStats.ReqLength++
+			}
+		}
 	}
 
 	return true

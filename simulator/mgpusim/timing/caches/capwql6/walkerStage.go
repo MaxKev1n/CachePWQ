@@ -6,6 +6,7 @@ import (
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
+	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -16,28 +17,48 @@ type walkerStage struct {
 func (c *walkerStage) Reset() {}
 
 func (c *walkerStage) Tick(now akita.VTimeInSec) bool {
+	madeProgress := false
+
+	madeProgress = c.processTransFromBuf(now) || madeProgress
+	madeProgress = c.processReqFromWalker(now) || madeProgress
+
+	return madeProgress
+}
+
+func (c *walkerStage) processTransFromBuf(now akita.VTimeInSec) bool {
+	item := c.cache.walkerDirBuf.Peek()
+	if item == nil {
+		return false
+	}
+
+	trans := item.(*transaction)
+
+	if trans.fromWalker {
+		return c.processWalkerReq(now, trans)
+	}
+	panic("transaction in walkerDirBuf is not from walker")
+}
+
+func (c *walkerStage) processReqFromWalker(
+	now akita.VTimeInSec,
+) bool {
 	item := c.cache.WalkerPort.Peek()
 	if item == nil {
 		return false
 	}
 
-	return c.processReqFromWalker(now, item.(mem.AccessReq))
-}
-
-func (c *walkerStage) processReqFromWalker(
-	now akita.VTimeInSec,
-	req mem.AccessReq,
-) bool {
-	if !c.cache.dirBuf.CanPush() {
+	if !c.cache.walkerDirBuf.CanPush() {
 		return false
 	}
+
+	req := item.(mem.AccessReq)
 
 	trans := c.createTransaction(req)
 	c.cache.transactions = append(c.cache.transactions, trans)
 	c.cache.postCoalesceTransactions = append(c.cache.postCoalesceTransactions,
 		trans)
 
-	c.cache.dirBuf.Push(trans)
+	c.cache.walkerDirBuf.Push(trans)
 
 	c.cache.WalkerPort.Retrieve(now)
 
@@ -64,4 +85,177 @@ func (c *walkerStage) createTransaction(req mem.AccessReq) *transaction {
 		log.Panicf("cannot process request of type %s\n", reflect.TypeOf(req))
 		return nil
 	}
+}
+
+func (c *walkerStage) processWalkerReq(
+	now akita.VTimeInSec,
+	trans *transaction,
+) bool {
+	if trans.write == nil {
+		panic("WalkerReq called with nil transaction")
+	}
+
+	return c.processWalkerWrite(now, trans)
+}
+
+func (c *walkerStage) processWalkerWrite(
+	now akita.VTimeInSec,
+	trans *transaction,
+) bool {
+	write := trans.write
+	addr := write.Address
+	pid := write.PID
+	PTEBlockSize := uint64(1 << (c.cache.log2BlockSize + 3))
+	PTEBlockID := addr / PTEBlockSize * PTEBlockSize
+
+	mshrEntry := c.cache.mshr.QueryForWalker(
+		pid,
+		PTEBlockID,
+	)
+	if mshrEntry != nil {
+		offset := (addr >> c.cache.log2BlockSize) & 0x7
+
+		if mshrEntry.OffsetBits[int(offset)] {
+			return c.processWalkerWriteMSHRHit(
+				now,
+				trans,
+				mshrEntry,
+			)
+		}
+		return c.processWalkerWritePartialMSHRHit(
+			now,
+			trans,
+			mshrEntry,
+		)
+	}
+
+	if c.cache.mshr.IsFull() {
+		c.cache.notifyWalkerMSHRFull(now)
+		return false
+	}
+
+	if !c.fetchPTEsFromBottom(now, trans) {
+		return false
+	}
+
+	c.cache.walkerDirBuf.Pop()
+
+	return true
+}
+
+func (c *walkerStage) fetchPTEsFromBottom(
+	now akita.VTimeInSec,
+	trans *transaction,
+) bool {
+	addr := trans.Address()
+	pid := trans.PID()
+	blockSize := uint64(1 << c.cache.log2BlockSize)
+	cacheLineID := addr / blockSize * blockSize
+
+	bottomModule := c.cache.lowModuleFinder.Find(cacheLineID)
+	readReqInfo := &mem.ReadReqInfo{ReturnAccessInfo: true}
+	readToBottom := mem.ReadReqBuilder{}.
+		WithSendTime(now).
+		WithSrc(c.cache.BottomPort).
+		WithDst(bottomModule).
+		WithAddress(cacheLineID).
+		WithPID(pid).
+		WithByteSize(blockSize).
+		WithInfo(readReqInfo).
+		Build()
+
+	readToBottom.PTW = true
+
+	err := c.cache.BottomPort.Send(readToBottom)
+	if err != nil {
+		return false
+	}
+
+	tracing.AddTaskStep(
+		trans.id,
+		now,
+		c.cache,
+		"ptw-read-miss",
+	)
+
+	tracing.TraceReqInitiate(readToBottom, now, c.cache, trans.id)
+	trans.readToBottom = readToBottom
+
+	PTEBlockSize := uint64(1 << (c.cache.log2BlockSize + 3))
+	PTEBlockID := addr / PTEBlockSize * PTEBlockSize
+	PTEOffset := (addr >> c.cache.log2BlockSize) & 0x7
+
+	mshrEntry := c.cache.mshr.AddForWalker(pid, PTEBlockID, PTEOffset)
+	mshrEntry.Requests = append(mshrEntry.Requests, trans)
+	mshrEntry.ReadReq = readToBottom
+
+	return true
+}
+
+func (c *walkerStage) processWalkerWriteMSHRHit(
+	now akita.VTimeInSec,
+	trans *transaction,
+	mshrEntry *cache.MSHREntry,
+) bool {
+	mshrEntry.Requests = append(mshrEntry.Requests, trans)
+
+	c.cache.walkerDirBuf.Pop()
+
+	tracing.AddTaskStep(
+		trans.id,
+		now,
+		c.cache,
+		"ptw-read-mshr-hit",
+	)
+
+	return true
+}
+
+func (c *walkerStage) processWalkerWritePartialMSHRHit(
+	now akita.VTimeInSec,
+	trans *transaction,
+	mshrEntry *cache.MSHREntry,
+) bool {
+	addr := trans.Address()
+	pid := trans.PID()
+	blockSize := uint64(1 << c.cache.log2BlockSize)
+	cacheLineID := addr / blockSize * blockSize
+
+	bottomModule := c.cache.lowModuleFinder.Find(cacheLineID)
+	readReqInfo := &mem.ReadReqInfo{ReturnAccessInfo: true}
+	readToBottom := mem.ReadReqBuilder{}.
+		WithSendTime(now).
+		WithSrc(c.cache.BottomPort).
+		WithDst(bottomModule).
+		WithAddress(cacheLineID).
+		WithPID(pid).
+		WithByteSize(blockSize).
+		WithInfo(readReqInfo).
+		Build()
+
+	readToBottom.PTW = true
+
+	err := c.cache.BottomPort.Send(readToBottom)
+	if err != nil {
+		return false
+	}
+
+	tracing.AddTaskStep(
+		trans.id,
+		now,
+		c.cache,
+		"ptw-read-mshr-partial-hit",
+	)
+
+	tracing.TraceReqInitiate(readToBottom, now, c.cache, trans.id)
+	trans.readToBottom = readToBottom
+
+	PTEOffset := (addr >> c.cache.log2BlockSize) & 0x7
+
+	mshrEntry.Requests = append(mshrEntry.Requests, trans)
+	mshrEntry.OffsetBits[int(PTEOffset)] = true
+
+	c.cache.walkerDirBuf.Pop()
+
+	return true
 }

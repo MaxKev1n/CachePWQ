@@ -57,7 +57,7 @@ func (d *directory) collectMSHROccupancy(now akita.VTimeInSec) {
 	}
 
 	if d.cache.monitorStats != nil {
-		d.cache.monitorStats.Length = uint64(uniqEntries)
+		d.cache.monitorStats.L1VLength = uint64(uniqEntries)
 	}
 }
 
