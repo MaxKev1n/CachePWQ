@@ -3,9 +3,9 @@
 # =============================
 
 MMU:
-  type: "CaPWQMMUL5"
+  type: "CaPWQMMUL6"
 
   numPageWalkers: 64
 
 L3TLB:
-  dispatcher: "roundrobin"
+  dispatcher: "leasefirst"

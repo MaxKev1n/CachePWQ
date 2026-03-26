@@ -3783,13 +3783,14 @@ func (r *Runner) reportCacheHitRate() {
 		readPTWHit := tracer.tracer.GetStepCount("ptw-read-hit")
 		readPTWMiss := tracer.tracer.GetStepCount("ptw-read-miss")
 		readPTWMSHRHit := tracer.tracer.GetStepCount("ptw-read-mshr-hit")
+		readPTWMSHRPartialHit := tracer.tracer.GetStepCount("ptw-read-mshr-partial-hit")
 		writeHit := tracer.tracer.GetStepCount("write-hit")
 		writeMiss := tracer.tracer.GetStepCount("write-miss")
 		writeMSHRHit := tracer.tracer.GetStepCount("write-mshr-hit")
 
 		totalTransaction := readHit + readMiss + readMSHRHit +
 			writeHit + writeMiss + writeMSHRHit + readPTWHit +
-			readPTWMiss + readPTWMSHRHit
+			readPTWMiss + readPTWMSHRHit + readPTWMSHRPartialHit
 
 		if totalTransaction == 0 {
 			continue
@@ -3807,6 +3808,8 @@ func (r *Runner) reportCacheHitRate() {
 			tracer.cache.Name(), "ptw-read-miss", float64(readPTWMiss))
 		r.metricsCollector.Collect(
 			tracer.cache.Name(), "ptw-read-mshr-hit", float64(readPTWMSHRHit))
+		r.metricsCollector.Collect(
+			tracer.cache.Name(), "ptw-read-mshr-partial-hit", float64(readPTWMSHRPartialHit))
 		r.metricsCollector.Collect(
 			tracer.cache.Name(), "write-hit", float64(writeHit))
 		r.metricsCollector.Collect(

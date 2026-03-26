@@ -10,28 +10,33 @@ import (
 
 // MSHREntry is an entry in MSHR
 type MSHREntry struct {
-	PID       ca.PID
-	Address   uint64
-	Requests  []interface{}
-	Block     *Block
-	ReadReq   *mem.ReadReq
-	DataReady *mem.DataReadyRsp
-	Data      []byte
-	PTW       bool
+	PID        ca.PID
+	Address    uint64
+	Requests   []interface{}
+	Block      *Block
+	ReadReq    *mem.ReadReq
+	DataReady  *mem.DataReadyRsp
+	Data       []byte
+	PTW        bool
+	OffsetBits []bool
 }
 
 // NewMSHREntry returns a new MSHR entry object
 func NewMSHREntry() *MSHREntry {
 	e := new(MSHREntry)
 	e.Requests = make([]interface{}, 0)
+	e.OffsetBits = make([]bool, 8)
 	return e
 }
 
 // MSHR is an interface that controls MSHR entries
 type MSHR interface {
 	Query(pid ca.PID, addr uint64) *MSHREntry
+	QueryForWalker(pid ca.PID, addr uint64) *MSHREntry
 	Add(pid ca.PID, addr uint64) *MSHREntry
+	AddForWalker(pid ca.PID, addr uint64, offset uint64) *MSHREntry
 	Remove(pid ca.PID, addr uint64) *MSHREntry
+	RemoveForWalker(pid ca.PID, addr uint64) *MSHREntry
 	AllEntries() []*MSHREntry
 	IsFull() bool
 	IsPartialFull(remaining int) bool
@@ -70,6 +75,10 @@ func (m *mshrImpl) Add(pid ca.PID, addr uint64) *MSHREntry {
 	return entry
 }
 
+func (m *mshrImpl) AddForWalker(pid ca.PID, addr uint64, offset uint64) *MSHREntry {
+	panic("AddForWalker is not supported in this MSHR")
+}
+
 func (m *mshrImpl) Query(pid ca.PID, addr uint64) *MSHREntry {
 	for _, e := range m.entries {
 		if e.PID == pid && e.Address == addr {
@@ -77,6 +86,10 @@ func (m *mshrImpl) Query(pid ca.PID, addr uint64) *MSHREntry {
 		}
 	}
 	return nil
+}
+
+func (m *mshrImpl) QueryForWalker(pid ca.PID, addr uint64) *MSHREntry {
+	panic("QueryWithOffset is not supported in this MSHR")
 }
 
 func (m *mshrImpl) Remove(pid ca.PID, addr uint64) *MSHREntry {
@@ -87,6 +100,10 @@ func (m *mshrImpl) Remove(pid ca.PID, addr uint64) *MSHREntry {
 		}
 	}
 	panic("trying to remove an non-exist entry")
+}
+
+func (m *mshrImpl) RemoveForWalker(pid ca.PID, addr uint64) *MSHREntry {
+	panic("RemoveForWalker is not supported in this MSHR")
 }
 
 // AllEntries returns all the MSHREntries that are currently in the MSHR

@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/mem/device"
 )
 
 type Dispatcher interface {
@@ -100,5 +101,34 @@ func (d *BackToSourceDispatcher) Distribute(msg akita.Msg) akita.Port {
 }
 
 func (d *BackToSourceDispatcher) Receive(port akita.Port) {
+	// Do nothing
+}
+
+type InterleavedDispatcher struct {
+	ports  []akita.Port
+	Offset uint64
+}
+
+func (d *InterleavedDispatcher) Register(port akita.Port) {
+	d.ports = append(d.ports, port)
+}
+
+func (d *InterleavedDispatcher) Distribute(msg akita.Msg) akita.Port {
+	if len(d.ports) == 0 {
+		return nil
+	}
+
+	index := uint64(0)
+	address := msg.(*device.TranslationReq).VAddr >> d.Offset
+	mask := (uint64(1) << 3) - 1
+	for i := 0; i < 4; i++ {
+		index = index ^ (address & mask)
+		address = address >> 3
+	}
+
+	return d.ports[index]
+}
+
+func (d *InterleavedDispatcher) Receive(port akita.Port) {
 	// Do nothing
 }

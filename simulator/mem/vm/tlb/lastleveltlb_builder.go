@@ -182,6 +182,10 @@ func (b LastLevelTLBBuilder) Build(name string) TLB {
 		tlb.dispatcher = &internal.LeaseFirstDispatcher{}
 	case "backtosource":
 		tlb.dispatcher = &internal.BackToSourceDispatcher{}
+	case "interleaved":
+		tlb.dispatcher = &internal.InterleavedDispatcher{
+			Offset: tlb.log2PageSize + 6,
+		}
 	default:
 		panic(fmt.Sprintf("unsupported dispatch policy: %s", b.dispatchPolicy))
 	}

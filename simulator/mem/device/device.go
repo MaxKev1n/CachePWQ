@@ -69,6 +69,11 @@ func (d *Device) allocatePageTablePage(vAddr uint64, pAddr uint64) uint64 {
 	d.mustHaveSpaceLeft()
 	pAddrToReturn := d.MemState.allocatePageTablePage(vAddr, pAddr)
 
+	// check 256 Bytes alignment
+	if pAddrToReturn%256 != 0 {
+		panic("page table page is not 256 Bytes aligned")
+	}
+
 	return pAddrToReturn
 }
 
