@@ -22,7 +22,7 @@ def run_all_scripts(base_dir, eda_mode=False):
                 os.chdir(root)
 
                 if eda_mode:
-                    cmd = f"bsub < {file}"
+                    cmd = f"sbatch < {file}"
                 else:
                     out_file = f"{benchmark_name}.out"
                     err_file = f"{benchmark_name}.err"

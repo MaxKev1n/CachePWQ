@@ -1,57 +1,35 @@
 benchmarks = [
-    "kmeans",
-    "mis",
-    "stencil2d",
-    "pagerank",
-    "matrixtranspose",
-    "spmv",
-    "gups",
-    "gesummv",
-    "simpleconvolution",
-    "jacobi2d",
     "fastwalshtransform",
-    "jacobi1d",
-    "shoc-reduction",
-]
-
-low_mpki_benchmarks = [
-    "simpleconvolution",
-    "jacobi2d",
-    "fastwalshtransform",
-    "jacobi1d",
-    "shoc-reduction",
-]
-
-high_mpki_benchmarks = [
-    "kmeans",
-    "mis",
-    "stencil2d",
-    "pagerank",
-    "matrixtranspose",
-    "spmv",
     "gups",
+    "jacobi1d",
+    "jacobi2d",
+    "kmeans",
+    "matrixtranspose",
+    "mis",
+    "pagerank",
+    "spmv",
+    "simpleconvolution",
+    "shoc-reduction",
+    "stencil2d",
     "gesummv",
 ]
 
 
 memory_overhead = {
-    "convolution2d": 8129,
-    "fastwalshtransform": 1660,
-    "gups": 1300,
-    "jacobi1d": 10894,
-    "jacobi2d": 2883,
-    "kmeans": 3174,
-    "matrixtranspose": 1245,
-    "mis": 1271,
-    "pagerank": 5104,
-    "shoc-reduction": 9313,
-    "simpleconvolution": 10808,
-    "stencil2d": 1367,
-    "syr2k": 1045,
-    "syrk": 1083,
-    "spmv": 5837,
+    "fastwalshtransform": 12817,
+    "gups": 25571,
+    "jacobi1d": 43281,
+    "jacobi2d": 47072,
+    "kmeans": 28810,
+    "matrixtranspose": 21837,
+    "mis": 8281,
+    "pagerank": 31996,
+    "spmv": 43753,
+    "shoc-reduction": 36918,
+    "simpleconvolution": 33928,
+    "stencil2d": 45778,
+    "gesummv": 45778,
 }
-
 
 def get_booksim_tlb_nodes(
     config: str,
@@ -107,7 +85,6 @@ def get_short_name(benchmark: str) -> str:
     Returns a short name for each benchmark.
     """
     dict_short_names = {
-        "convolution2d": "C2D",
         "fastwalshtransform": "FWT",
         "gups": "GUPS",
         "jacobi1d": "J1D",
@@ -120,8 +97,6 @@ def get_short_name(benchmark: str) -> str:
         "shoc-reduction": "RED",
         "spmv": "SPMV",
         "stencil2d": "ST",
-        "syrk": "SYRK",
-        "syr2k": "SYR2",
         "gesummv": "GEV",
     }
 

@@ -1,5 +1,9 @@
 #!/bin/bash
 
+module load cmake
+
+module load compilers/gcc-13.1.0 
+
 # 1. ensure the script is sourced, not executed
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "❌ Error: This script must be SOURCED, not executed directly."
@@ -22,6 +26,8 @@ mkdir -p build
 
 cd build
 
+rm -rf *
+
 cmake ..
 
 make -j$(nproc)
@@ -39,6 +45,8 @@ cd $CAPWQ_ROOT/simulator/intersim2
 mkdir -p build
 
 cd build
+
+rm -rf *
 
 cmake ..
 
@@ -67,6 +75,8 @@ export CGO_CFLAGS="-I${PROJECT_DIR}/simulator/GPUWattch/ -I${PROJECT_DIR}/simula
 export CGO_LDFLAGS="-L${PROJECT_DIR}/simulator/libs/ -lgpuwattch -lintersim"
 
 export LD_LIBRARY_PATH="${PROJECT_DIR}/simulator/libs/:$LD_LIBRARY_PATH"
+
+export PATH=/hpc2hdd/home/zchen097/go1.23/go/bin:$PATH
 
 # 6. print success message and the value of the environment variable
 echo "✅ Project environment variables have been set."
