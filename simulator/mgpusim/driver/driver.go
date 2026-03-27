@@ -10,6 +10,7 @@ import (
 	"github.com/rs/xid"
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
+	"gitlab.com/akita/mem/cache/writeback"
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/kernels"
@@ -518,6 +519,12 @@ func (d *Driver) processLaunchKernelCommand(
 	if dev.Type == device.DeviceTypeUnifiedGPU {
 		return d.processUnifiedMultiGPULaunchKernelCommand(now, cmd, queue)
 	}
+
+	for _, a := range writeback.AgentImpls {
+		a.TickLater(now)
+	}
+
+	return true
 
 	req := protocol.NewLaunchKernelReq(now,
 		d.ToGPUs, d.GPUs[queue.GPUID-1].CommandProcessor.ToDriver)

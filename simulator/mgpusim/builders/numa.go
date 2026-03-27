@@ -274,6 +274,26 @@ func (b *NUMAGPUBuilder) establishL1ToL2RoutingPath(chiplet *Chiplet) {
 			l2.TopPort)
 	}
 	chiplet.lowModuleFinderForL1 = lowModuleFinder
+
+	srcPorts := make([]akita.Port, 0)
+	for i := 0; i < len(chiplet.L1VCaches); i++ {
+		l1v := chiplet.L1VCaches[i]
+
+		srcPorts = append(srcPorts, l1v.GetBottomPort())
+	}
+
+	for i := 0; i < len(chiplet.L2Caches); i++ {
+		l2 := chiplet.L2Caches[i]
+
+		writeback.NewAgent(
+			b.engine,
+			1*akita.MHz,
+			srcPorts,
+			l2.TopPort,
+			0x84001000+uint64(i)*0x1000,
+			256,
+		)
+	}
 }
 
 func (b *NUMAGPUBuilder) establishL1TLBToL2TLBRoutingPath(chiplet *Chiplet) {
