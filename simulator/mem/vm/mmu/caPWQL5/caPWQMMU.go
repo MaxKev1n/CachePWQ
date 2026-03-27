@@ -96,6 +96,7 @@ func (walker *CaPWQPageWalker) AcceptReqFromTop(
 	root := walker.mmu.pageTable.GetRoot(req.PID)
 
 	transaction := &transactionImpl{
+		req:     req,
 		state:   pageWalkCacheDone,
 		Address: req.VAddr,
 		pid:     req.PID,
@@ -118,7 +119,6 @@ func (walker *CaPWQPageWalker) AcceptReqFromTop(
 
 	if walker.transaction == nil {
 		walker.transaction = transaction
-		walker.transaction.req = req
 	} else {
 		walker.secondaryTransaction = transaction
 	}
@@ -150,6 +150,7 @@ func (walker *CaPWQPageWalker) AcceptL1CacheRsp(
 	block := rsp.Info.(vm.CaPWQBlock)
 
 	newTrans := &transactionImpl{
+		req:     block.Req,
 		state:   l1Done,
 		Address: block.Address,
 		pid:     block.PID,
@@ -335,6 +336,7 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1V(now akita.VTimeInSec) {
 	}
 
 	block := vm.CaPWQBlock{
+		Req:           trans.req,
 		PID:           trans.pid,
 		Address:       trans.Address,
 		PPNWithOffset: PPNWithOffset,
@@ -385,6 +387,7 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1I(now akita.VTimeInSec) {
 	}
 
 	block := vm.CaPWQBlock{
+		Req:           trans.req,
 		PID:           trans.pid,
 		Address:       trans.Address,
 		PPNWithOffset: PPNWithOffset,
@@ -470,6 +473,10 @@ func (walker *CaPWQPageWalker) finalizeTransaction(
 		return
 	}
 
+	if trans.req.Bypass && !walker.mmu.bypassSender.CanSend(1) {
+		return
+	}
+
 	page, found := walker.mmu.pageTable.Find(trans.pid, trans.Address)
 	if !found {
 		panic("page not found")
@@ -496,6 +503,17 @@ func (walker *CaPWQPageWalker) finalizeTransaction(
 
 	walker.mmu.topSender.Send(rsp)
 
+	if trans.req.Bypass {
+		bypassRsp := device.TranslationRspBuilder{}.
+			WithSendTime(now).
+			WithSrc(walker.mmu.ToLocal).
+			WithDst(walker.mmu.L2TLB).
+			WithPage(newPage).
+			Build()
+
+		walker.mmu.bypassSender.Send(bypassRsp)
+	}
+
 	walker.mmu.numInflightPTWRequests--
 
 	if walker.transaction == trans {
@@ -511,12 +529,15 @@ func (walker *CaPWQPageWalker) finalizeTransaction(
 type CaPWQMMU struct {
 	akita.TickingComponent
 
-	ToTop akita.Port
-	L3TLB akita.Port
+	ToTop   akita.Port
+	L3TLB   akita.Port
+	ToLocal akita.Port
+	L2TLB   akita.Port
 
 	ToPageWalkCache akita.Port
 	PageWalkCache   akita.Port
 	topSender       akitaext.BufferedSender
+	bypassSender    akitaext.BufferedSender
 
 	TranslationPort   akita.Port
 	translationSender akitaext.BufferedSender
@@ -560,6 +581,7 @@ func (mmu *CaPWQMMU) GetMonitorStats() interface{} {
 // Tick defines how the MMU update state each cycle
 func (mmu *CaPWQMMU) Tick(now akita.VTimeInSec) bool {
 	mmu.topSender.Tick(now)
+	mmu.bypassSender.Tick(now)
 	mmu.translationSender.Tick(now)
 	mmu.processPageWalkRspQueue(now)
 	mmu.parseFromMem(now)

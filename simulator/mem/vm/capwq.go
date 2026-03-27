@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/util/ca"
 )
 
@@ -15,4 +16,5 @@ type CaPWQBlock struct {
 
 	// For debugging.
 	MsgID string
+	Req   *device.TranslationReq
 }

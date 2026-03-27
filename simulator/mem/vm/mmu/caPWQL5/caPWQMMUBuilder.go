@@ -85,6 +85,8 @@ func (b CaPWQMMUBuilder) Build(name string) mmu.MMU {
 		name, b.engine, b.freq, mmu)
 
 	mmu.ToTop = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToTop")
+	mmu.ToLocal = akita.NewLimitNumMsgPort(mmu, 16, name+".ToLocal")
+	mmu.bypassSender = akitaext.NewBufferedSender(mmu.ToLocal, util.NewBuffer(16))
 	mmu.ToCache = akita.NewLimitNumMsgPort(mmu, 16, name+".ToCache")
 	mmu.TranslationPort = akita.NewLimitNumMsgPort(mmu, 16, name+".TranslationPort")
 	mmu.translationSender = akitaext.NewBufferedSender(mmu.TranslationPort, util.NewBuffer(16))

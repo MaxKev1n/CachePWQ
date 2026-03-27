@@ -55,7 +55,6 @@ type LastLevelTLB struct {
 	lookupBuffer util.Buffer
 
 	mshr                mshr
-	extensionmshr       mshr
 	respondingMSHREntry *mshrEntry
 
 	isPaused bool
@@ -74,6 +73,8 @@ type LastLevelTLB struct {
 	inflightPageWalkCacheReqs map[string]*device.TranslationReq
 
 	dispatcher internal.Dispatcher
+
+	allowBypass bool
 }
 
 func (tlb *LastLevelTLB) InitMonitorStats() {
@@ -91,10 +92,6 @@ func (tlb *LastLevelTLB) ClearMonitorStats() {
 
 func (tlb *LastLevelTLB) GetMonitorStats() interface{} {
 	return tlb.monitorStats
-}
-
-func (tlb *LastLevelTLB) SetMaxExtensionMisses(num int) {
-	tlb.extensionmshr = newMSHR(num)
 }
 
 // GetPipeline gets the pipeline in the LastLevelTLB
@@ -443,6 +440,9 @@ func (tlb *LastLevelTLB) handleTranslationMiss(
 	setID int,
 ) bool {
 	if tlb.mshr.IsFull() {
+		if tlb.allowBypass {
+			return tlb.handleTranslationMissBypass(now, req, setID)
+		}
 		tracing.StartTask(tlb.Name()+"stall", "", now, tlb, "mshr_stall", "", nil)
 		tlb.stats.numMSHRStallsInCurEpoch++
 		return false
@@ -484,6 +484,48 @@ func (tlb *LastLevelTLB) handleTranslationMiss(
 		if tlb.mode4Kstrip {
 			tlb.updateReverseSwitchStats(req.VAddr)
 		}
+
+		return true
+	}
+
+	return false
+}
+
+func (tlb *LastLevelTLB) handleTranslationMissBypass(
+	now akita.VTimeInSec,
+	req *device.TranslationReq,
+	setID int,
+) bool {
+	fetched := tlb.bypassFetchBottom(now, req)
+	if fetched {
+		//tlb.TopPort.Retrieve(now)
+		tlb.lookupBuffer.Pop()
+
+		if tlb.monitorStats != nil {
+			tlb.monitorStats.Misses += 1
+		}
+
+		// if tlb.stats.sendStateInfo {
+		tlb.stats.numAccess += 1
+		tlb.stats.accessesInCurEpoch++
+		tlb.stats.numMiss += 1
+		tlb.stats.missesInCurEpoch++
+		// }
+		// tracing.TraceReqReceive(req, now, tlb)
+		tracing.AddTaskDetailedStep(
+			tracing.MsgIDAtReceiver(req, tlb),
+			now, tlb,
+			"tlb-bypass-miss",
+			req.VAddr,
+		)
+		tracing.AddTaskStep(
+			"PowerStat",
+			now,
+			tlb,
+			"l3tlb_misses",
+		)
+
+		tracing.TraceReqFinalize(req, now, tlb)
 
 		return true
 	}
@@ -576,6 +618,25 @@ func (tlb *LastLevelTLB) fetchBottom(now akita.VTimeInSec, req *device.Translati
 	return true
 }
 
+func (tlb *LastLevelTLB) bypassFetchBottom(now akita.VTimeInSec, req *device.TranslationReq) bool {
+	readReq := mem.ReadReqBuilder{}.
+		WithSendTime(now).
+		WithSrc(tlb.ToPageWalkCache).
+		WithDst(tlb.PageWalkCache).
+		WithPID(req.PID).
+		WithAddress(req.VAddr).
+		WithByteSize(8).
+		Build()
+	err := tlb.ToPageWalkCache.Send(readReq)
+	if err != nil {
+		return false
+	}
+
+	tlb.inflightPageWalkCacheReqs[readReq.ID] = req
+
+	return true
+}
+
 func (tlb *LastLevelTLB) parseBottom(now akita.VTimeInSec) bool {
 	if tlb.respondingMSHREntry != nil {
 		return false
@@ -590,7 +651,7 @@ func (tlb *LastLevelTLB) parseBottom(now akita.VTimeInSec) bool {
 	page := rsp.Page
 
 	mshrEntryPresent := tlb.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
-	if !mshrEntryPresent {
+	if !mshrEntryPresent && !tlb.allowBypass {
 		panic("oh no!")
 	}
 
@@ -603,6 +664,14 @@ func (tlb *LastLevelTLB) parseBottom(now akita.VTimeInSec) bool {
 	}
 	set.Update(wayID, page)
 	set.Visit(wayID)
+
+	if !mshrEntryPresent && tlb.allowBypass {
+		tlb.BottomPort.Retrieve(now)
+		tlb.dispatcher.Receive(rsp.Src)
+
+		tracing.EndTask(tlb.Name()+"stall", now, tlb)
+		return true
+	}
 
 	mshrEntry := tlb.mshr.GetEntry(rsp.Page.PID, rsp.Page.VAddr)
 	tlb.respondingMSHREntry = mshrEntry
@@ -659,12 +728,16 @@ func (tlb *LastLevelTLB) parseFromPageWalkCache(now akita.VTimeInSec) bool {
 	}
 
 	mshrEntryPresent := tlb.mshr.IsEntryPresent(req.PID, req.VAddr)
-	if !mshrEntryPresent {
+	if !mshrEntryPresent && !tlb.allowBypass {
 		panic("oh no!")
 	}
 
-	mshrEntry := tlb.mshr.GetEntry(req.PID, req.VAddr)
-	mshrEntry.reqToBottom = fetchBottom
+	if !mshrEntryPresent && tlb.allowBypass {
+		req.Bypass = true
+	} else {
+		mshrEntry := tlb.mshr.GetEntry(req.PID, req.VAddr)
+		mshrEntry.reqToBottom = fetchBottom
+	}
 
 	delete(tlb.inflightPageWalkCacheReqs, rsp.RespondTo)
 
@@ -673,50 +746,6 @@ func (tlb *LastLevelTLB) parseFromPageWalkCache(now akita.VTimeInSec) bool {
 	tracing.TraceReqInitiate(fetchBottom, now, tlb,
 		tracing.MsgIDAtReceiver(req, tlb))
 
-	return true
-}
-
-func (tlb *LastLevelTLB) parseBottomExtend(now akita.VTimeInSec) bool {
-	if tlb.respondingMSHREntry != nil {
-		return false
-	}
-
-	item := tlb.BottomPort.Peek()
-	if item == nil {
-		return false
-	}
-
-	rsp := item.(*device.TranslationRsp)
-	page := rsp.Page
-
-	mshrEntryPresent := tlb.extensionmshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
-	if !mshrEntryPresent {
-		panic("oh no!")
-		tlb.BottomPort.Retrieve(now)
-		tracing.TraceReqFinalize(rsp, now, tlb)
-		return true
-	}
-
-	setID := tlb.vAddrToSetID(page.VAddr)
-	// setID := tlb.vAddrToSetIDxor7(page.VAddr)
-	set := tlb.Sets[setID]
-	wayID, ok := tlb.Sets[setID].Evict()
-	if !ok {
-		panic("failed to evict")
-	}
-	set.Update(wayID, page)
-	set.Visit(wayID)
-
-	mshrEntry := tlb.extensionmshr.GetEntry(rsp.Page.PID, rsp.Page.VAddr)
-	tlb.respondingMSHREntry = mshrEntry
-	mshrEntry.page = page
-
-	tlb.extensionmshr.Remove(rsp.Page.PID, rsp.Page.VAddr)
-
-	tlb.BottomPort.Retrieve(now)
-	tracing.TraceReqFinalize(mshrEntry.reqToBottom, now, tlb)
-
-	tracing.EndTask(tlb.Name()+"stall", now, tlb)
 	return true
 }
 
@@ -778,7 +807,6 @@ func (tlb *LastLevelTLB) handleTLBFlush(now akita.VTimeInSec, req *TLBFlushReq) 
 	}
 
 	tlb.mshr.Reset()
-	tlb.extensionmshr.Reset()
 	tlb.isPaused = true
 	return true
 }

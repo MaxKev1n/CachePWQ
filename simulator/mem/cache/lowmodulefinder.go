@@ -110,6 +110,24 @@ func NewXORLowModuleFinder(numModules int, numTerms int, numBitsPerTerm int,
 	return f
 }
 
+type RRLowModuleFinder struct {
+	ptr        uint64
+	LowModules []akita.Port
+}
+
+func (f *RRLowModuleFinder) Find(address uint64) akita.Port {
+	index := uint64(0)
+	index = f.ptr % uint64(len(f.LowModules))
+	f.ptr++
+	return f.LowModules[index]
+}
+
+func NewRRLowModuleFinder() *RRLowModuleFinder {
+	f := new(RRLowModuleFinder)
+
+	return f
+}
+
 type PartitionedXORLowModuleFinder struct {
 	NumTerms         int
 	NumBitsPerTerm   int

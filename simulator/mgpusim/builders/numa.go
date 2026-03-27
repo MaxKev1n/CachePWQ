@@ -507,6 +507,20 @@ func (b *NUMAGPUBuilder) establishGPC(chiplet *Chiplet) {
 		mux.AddRoute(mmu.ToPageWalkCachePort(), localPort)
 		mux.AddRoute(mmu.ToTopPort(), localPort)
 	}
+
+	for i := 0; i < len(chiplet.MMUs); i++ {
+		if mmu, ok := chiplet.MMUs[i].(*caPWQL5.CaPWQMMU); ok {
+			conn := akita.NewDirectConnection(
+				fmt.Sprintf("%s.MMU[%d].ToL2TLBConn", chiplet.name, i),
+				b.engine, b.freq)
+
+			conn.PlugIn(mmu.ToLocal, 4)
+			conn.PlugIn(chiplet.L2TLBs[i].(*tlb.LatTLB).ToLocalMMU, 4)
+
+			mmu.L2TLB = chiplet.L2TLBs[i].(*tlb.LatTLB).ToLocalMMU
+		}
+	}
+
 }
 
 func (b *NUMAGPUBuilder) establishL2Partition(chiplet *Chiplet) {
@@ -1414,11 +1428,12 @@ func (b *NUMAGPUBuilder) establishMMUToCaPWQL6L1RoutingPath(chiplet *Chiplet) {
 	}
 
 	for i := 0; i < numGPCs; i++ {
-		vlowModuleFinder := cache.NewXORLowModuleFinder(
-			numVCachesPerGPC,
-			4,
-			int(math.Log2(float64(numVCachesPerGPC))),
-			int(b.log2CacheLineSize)+3)
+		//vlowModuleFinder := cache.NewXORLowModuleFinder(
+		//	numVCachesPerGPC,
+		//	4,
+		//	int(math.Log2(float64(numVCachesPerGPC))),
+		//	int(b.log2CacheLineSize)+3)
+		vlowModuleFinder := cache.NewRRLowModuleFinder()
 
 		switch mmu := chiplet.MMUs[i].(type) {
 		case *caPWQL5.CaPWQMMU:
@@ -1427,11 +1442,12 @@ func (b *NUMAGPUBuilder) establishMMUToCaPWQL6L1RoutingPath(chiplet *Chiplet) {
 			panic("MMU is not CaPWQMMU")
 		}
 
-		ilowModuleFinder := cache.NewXORLowModuleFinder(
-			numICachesPerGPC,
-			4,
-			int(math.Log2(float64(numICachesPerGPC))),
-			int(b.log2CacheLineSize)+3)
+		//ilowModuleFinder := cache.NewXORLowModuleFinder(
+		//	numICachesPerGPC,
+		//	4,
+		//	int(math.Log2(float64(numICachesPerGPC))),
+		//	int(b.log2CacheLineSize)+3)
+		ilowModuleFinder := cache.NewRRLowModuleFinder()
 
 		switch mmu := chiplet.MMUs[i].(type) {
 		case *caPWQL5.CaPWQMMU:

@@ -29,6 +29,7 @@ type TranslationReq struct {
 	TLBID       int
 	PartitionID int
 	GPCID       int
+	Bypass      bool
 }
 
 // Meta returns the meta data associated with the message.
