@@ -5,6 +5,8 @@ import (
 	"log"
 	"math"
 	"strconv"
+	"path/filepath"
+	"os"
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
@@ -246,8 +248,20 @@ func (b *NUMAGPUBuilder) createGlobalNoC(chiplet *Chiplet) {
 	log.Printf("%s has %d SM side components and %d Mem side components\n",
 		chiplet.GlobalNoC.Name(), chiplet.GlobalNoC.MaxNumSMSidePort, chiplet.GlobalNoC.MaxNumMemSidePort)
 
+	root := os.Getenv("CAPWQ_ROOT")
+	if root == "" {
+		panic("PROJECT_ROOT is not set")
+	}
+
+	libPath := filepath.Join(
+		root,
+		"simulator",
+		"libs",
+		"libintersim.so",
+	)
+
 	chiplet.GlobalNoC.CreateNetworkWithLib(
-		b.booksimDir+"libintersim.so", b.booksimGlobal,
+		libPath, b.booksimGlobal,
 	)
 }
 

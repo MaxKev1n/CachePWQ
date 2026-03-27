@@ -127,7 +127,7 @@ func (p *ScratchpadPreparerImpl) Prepare(
 		log.Panicf("Inst format %s is not supported", inst.Format.FormatName)
 	}
 
-	p.Init()
+	// p.Init()
 }
 
 func (p *ScratchpadPreparerImpl) prepareSOP1(

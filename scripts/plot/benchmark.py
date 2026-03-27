@@ -39,23 +39,22 @@ high_mpki_benchmarks = [
 
 
 memory_overhead = {
-    "convolution2d": 8129,
-    "fastwalshtransform": 1660,
-    "gups": 1300,
-    "jacobi1d": 10894,
-    "jacobi2d": 2883,
-    "kmeans": 3174,
-    "matrixtranspose": 1245,
-    "mis": 1271,
-    "pagerank": 5104,
-    "shoc-reduction": 9313,
-    "simpleconvolution": 10808,
-    "stencil2d": 1367,
-    "syr2k": 1045,
-    "syrk": 1083,
-    "spmv": 5837,
+    "convolution2d": 33603,
+    "fastwalshtransform": 12817,
+    "gups": 1925,
+    "jacobi1d": 43281,
+    "jacobi2d": 47072,
+    "kmeans": 28810,
+    "matrixtranspose": 21837,
+    "mis": 8281,
+    "pagerank": 31996,
+    "spmv": 43753,
+    "shoc-reduction": 36918,
+    "simpleconvolution": 33928,
+    "stencil2d": 45778,
+    "syr2k": 52848,
+    "syrk": 26594,
 }
-
 
 def get_booksim_tlb_nodes(
     config: str,
