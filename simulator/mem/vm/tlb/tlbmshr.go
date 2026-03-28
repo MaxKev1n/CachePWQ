@@ -27,11 +27,14 @@ type mshr interface {
 	Query(pid ca.PID, addr uint64) *mshrEntry
 	Add(pid ca.PID, addr uint64) *mshrEntry
 	Remove(pid ca.PID, addr uint64) *mshrEntry
+	RemoveEntries(entries []*mshrEntry)
 	AllEntries() []*mshrEntry
 	IsFull() bool
 	Reset()
 	GetEntry(pid ca.PID, vAddr uint64) *mshrEntry
+	GetEntries(page device.Page) []*mshrEntry
 	IsEntryPresent(pid ca.PID, vAddr uint64) bool
+	IsEntriesPresent(page device.Page) bool
 }
 
 type mshrImpl struct {
@@ -83,6 +86,18 @@ func (m *mshrImpl) Remove(pid ca.PID, vAddr uint64) *mshrEntry {
 	panic("trying to remove an non-exist entry")
 }
 
+func (m *mshrImpl) RemoveEntries(entries []*mshrEntry) {
+	for _, entry := range entries {
+		for i, e := range m.entries {
+			if e.pid == entry.pid && e.vAddr == entry.vAddr {
+				m.entries = append(m.entries[:i], m.entries[i+1:]...)
+				return
+			}
+		}
+		panic("trying to remove an non-exist entry")
+	}
+}
+
 func (m *mshrImpl) AllEntries() []*mshrEntry {
 	return m.entries
 }
@@ -95,6 +110,18 @@ func (m *mshrImpl) Reset() {
 	m.entries = nil
 }
 
+func (m *mshrImpl) GetEntries(page device.Page) []*mshrEntry {
+	pid := page.PID
+	vAddr := page.VAddr
+
+	for _, e := range m.entries {
+		if e.pid == pid && e.vAddr == vAddr {
+			return []*mshrEntry{e}
+		}
+	}
+	return nil
+}
+
 func (m *mshrImpl) GetEntry(pid ca.PID, vAddr uint64) *mshrEntry {
 	for _, e := range m.entries {
 		if e.pid == pid && e.vAddr == vAddr {
@@ -102,6 +129,18 @@ func (m *mshrImpl) GetEntry(pid ca.PID, vAddr uint64) *mshrEntry {
 		}
 	}
 	return nil
+}
+
+func (m *mshrImpl) IsEntriesPresent(page device.Page) bool {
+	pid := page.PID
+	vAddr := page.VAddr
+
+	for _, e := range m.entries {
+		if e.pid == pid && e.vAddr == vAddr {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *mshrImpl) IsEntryPresent(pid ca.PID, vAddr uint64) bool {

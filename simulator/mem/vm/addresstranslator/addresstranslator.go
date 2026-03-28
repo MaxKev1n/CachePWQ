@@ -344,8 +344,8 @@ func (t *DefaultAddressTranslator) createTranslatedReadReq(
 	req *mem.ReadReq,
 	page device.Page,
 ) *mem.ReadReq {
-	offset := req.Address % (1 << t.log2PageSize)
-	addr := page.PAddr + offset
+	addr := page.PAddr + (req.Address - page.VAddr)
+
 	clone := mem.ReadReqBuilder{}.
 		WithSrc(t.BottomPort).
 		WithDst(t.lowModuleFinder.Find(addr)).
@@ -362,8 +362,8 @@ func (t *DefaultAddressTranslator) createTranslatedWriteReq(
 	req *mem.WriteReq,
 	page device.Page,
 ) *mem.WriteReq {
-	offset := req.Address % (1 << t.log2PageSize)
-	addr := page.PAddr + offset
+	addr := page.PAddr + (req.Address - page.VAddr)
+
 	clone := mem.WriteReqBuilder{}.
 		WithSrc(t.BottomPort).
 		WithDst(t.lowModuleFinder.Find(addr)).

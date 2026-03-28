@@ -27,6 +27,13 @@ type MemoryAllocator interface {
 		vAddr uint64,
 		unified bool,
 	) Page
+	AllocateMultiplePageWithGivenVAddr(
+		pid ca.PID,
+		deviceID int,
+		vAddr uint64,
+		numPages int,
+		unified bool,
+	) []Page
 }
 
 // NewMemoryAllocator creates a new memory allocator.
@@ -144,7 +151,13 @@ func (a *memoryAllocatorImpl) AllocateUnified(
 
 	pageSize := uint64(1 << a.log2PageSize)
 	numPages := (byteSize-1)/pageSize + 1
-	return a.allocatePages(int(numPages), pid, 1, true)
+
+	deviceState := a.devices[1].MemState
+	if _, ok := deviceState.(*deviceDemandPagingMemoryState); ok {
+		return a.allocateInvalidPages(int(numPages), pid, 1, true)
+	}
+
+	panic("only demand paging memory supports unified memory allocation")
 }
 
 func (a *memoryAllocatorImpl) allocatePages(
@@ -163,6 +176,11 @@ func (a *memoryAllocatorImpl) allocatePages(
 
 	pageSize := uint64(1 << a.log2PageSize)
 	nextVAddr := pState.nextVAddr
+
+	chunkSize := pageSize * 16
+	numPages = ((numPages-1)/16 + 1) * 16                             // round up to multiple of 16 pages
+	nextVAddr = ((nextVAddr + chunkSize - 1) / chunkSize) * chunkSize // align to chunk size
+
 	pAddrs := device.allocateMultiplePages(numPages)
 	fmt.Println(numPages)
 	for i := 0; i < numPages; i++ {
@@ -180,6 +198,51 @@ func (a *memoryAllocatorImpl) allocatePages(
 		if page.DeviceID != uint64(deviceID) {
 			panic("gpuid != deviceid")
 		}
+		a.pageTable.Insert(page)
+	}
+
+	pState.nextVAddr += pageSize * uint64(numPages)
+	// fmt.Println("#########", nextVAddr, numPages)
+	return nextVAddr
+}
+
+func (a *memoryAllocatorImpl) allocateInvalidPages(
+	numPages int, pid ca.PID, deviceID int, unified bool,
+) (firstPageVAddr uint64) {
+	fmt.Println("num pages", numPages)
+	pState, found := a.processMemoryStates[pid]
+	if !found {
+		a.processMemoryStates[pid] = &processMemoryState{
+			pid:       pid,
+			nextVAddr: uint64(1 << a.log2PageSize),
+		}
+		pState = a.processMemoryStates[pid]
+	}
+
+	pageSize := uint64(1 << a.log2PageSize)
+	nextVAddr := pState.nextVAddr
+	fmt.Println(numPages)
+
+	chunkSize := pageSize * 16
+	numPages = ((numPages-1)/16 + 1) * 16                             // round up to multiple of 16 pages
+	nextVAddr = ((nextVAddr + chunkSize - 1) / chunkSize) * chunkSize // align to chunk size
+
+	for i := 0; i < numPages; i++ {
+		pAddr := uint64(0)
+		vAddr := nextVAddr + uint64(i)*pageSize
+		page := Page{
+			PID:      pid,
+			VAddr:    vAddr,
+			PAddr:    pAddr,
+			PageSize: pageSize,
+			Valid:    false,
+			Unified:  unified,
+			DeviceID: uint64(deviceID),
+		}
+		if page.DeviceID != uint64(deviceID) {
+			panic("gpuid != deviceid")
+		}
+
 		a.pageTable.Insert(page)
 	}
 
@@ -258,6 +321,40 @@ func (a *memoryAllocatorImpl) AllocatePageWithGivenVAddr(
 	defer a.Unlock()
 
 	return a.allocatePageWithGivenVAddr(pid, deviceID, vAddr, isUnified)
+}
+
+func (a *memoryAllocatorImpl) AllocateMultiplePageWithGivenVAddr(
+	pid ca.PID,
+	deviceID int,
+	vAddr uint64,
+	numPages int,
+	isUnified bool,
+) []Page {
+	a.Lock()
+	defer a.Unlock()
+
+	// start from numPages * 4KB boundary
+	pageSize := uint64(1 << a.log2PageSize)
+	chunkSize := pageSize * 16
+	vAddr = (vAddr / chunkSize) * chunkSize
+
+	vAddrs := make([]uint64, 0)
+	for i := 0; i < 16; i++ {
+		nextVAddr := vAddr + uint64(i)*(1<<a.log2PageSize)
+
+		page, found := a.pageTable.Find(pid, nextVAddr)
+		if !found {
+			panic("not found in page table")
+		}
+
+		if page.Valid {
+			panic("page already valid")
+		}
+
+		vAddrs = append(vAddrs, nextVAddr)
+	}
+
+	return a.allocateMultiplePagesWithGivenVAddrs(pid, deviceID, vAddrs, isUnified)
 }
 
 func (a *memoryAllocatorImpl) allocatePageWithGivenVAddr(

@@ -55,7 +55,6 @@ type LastLevelTLB struct {
 	lookupBuffer util.Buffer
 
 	mshr                mshr
-	extensionmshr       mshr
 	respondingMSHREntry *mshrEntry
 
 	isPaused bool
@@ -96,10 +95,6 @@ func (tlb *LastLevelTLB) ClearMonitorStats() {
 
 func (tlb *LastLevelTLB) GetMonitorStats() interface{} {
 	return tlb.monitorStats
-}
-
-func (tlb *LastLevelTLB) SetMaxExtensionMisses(num int) {
-	tlb.extensionmshr = newMSHR(num)
 }
 
 // GetPipeline gets the pipeline in the LastLevelTLB
@@ -683,50 +678,6 @@ func (tlb *LastLevelTLB) parseFromPageWalkCache(now akita.VTimeInSec) bool {
 	return true
 }
 
-func (tlb *LastLevelTLB) parseBottomExtend(now akita.VTimeInSec) bool {
-	if tlb.respondingMSHREntry != nil {
-		return false
-	}
-
-	item := tlb.BottomPort.Peek()
-	if item == nil {
-		return false
-	}
-
-	rsp := item.(*device.TranslationRsp)
-	page := rsp.Page
-
-	mshrEntryPresent := tlb.extensionmshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
-	if !mshrEntryPresent {
-		panic("oh no!")
-		tlb.BottomPort.Retrieve(now)
-		tracing.TraceReqFinalize(rsp, now, tlb)
-		return true
-	}
-
-	setID := tlb.vAddrToSetID(page.VAddr)
-	// setID := tlb.vAddrToSetIDxor7(page.VAddr)
-	set := tlb.Sets[setID]
-	wayID, ok := tlb.Sets[setID].Evict()
-	if !ok {
-		panic("failed to evict")
-	}
-	set.Update(wayID, page)
-	set.Visit(wayID)
-
-	mshrEntry := tlb.extensionmshr.GetEntry(rsp.Page.PID, rsp.Page.VAddr)
-	tlb.respondingMSHREntry = mshrEntry
-	mshrEntry.page = page
-
-	tlb.extensionmshr.Remove(rsp.Page.PID, rsp.Page.VAddr)
-
-	tlb.BottomPort.Retrieve(now)
-	tracing.TraceReqFinalize(mshrEntry.reqToBottom, now, tlb)
-
-	tracing.EndTask(tlb.Name()+"stall", now, tlb)
-	return true
-}
-
 func (tlb *LastLevelTLB) performCtrlReq(now akita.VTimeInSec) bool {
 	item := tlb.ControlPort.Peek()
 	if item == nil {
@@ -785,7 +736,6 @@ func (tlb *LastLevelTLB) handleTLBFlush(now akita.VTimeInSec, req *TLBFlushReq) 
 	}
 
 	tlb.mshr.Reset()
-	tlb.extensionmshr.Reset()
 	tlb.isPaused = true
 	return true
 }

@@ -328,6 +328,11 @@ type L1MSHRLenTracer struct {
 	cache  l1cache.Cache
 }
 
+type PageFaultTracer struct {
+	tracer *tracing.StepCountTracer
+	mmu    mmu.MMU
+}
+
 // Runner is a class that helps running the benchmarks in the official samples.
 type Runner struct {
 	Engine                           akita.Engine
@@ -404,6 +409,7 @@ type Runner struct {
 	MMUStallTracers                  []MMUStallTracer
 	TLBReqStallTracers               []TLBReqStallTracer
 	TLBAverageTracers                []TLBMonitorTracer
+	PageFaultTracers                 []PageFaultTracer
 	PowerStatTracer                  *power.PowerStatTracer
 	Benchmarks                       []benchmarks.Benchmark
 	Timing                           bool
@@ -2361,6 +2367,18 @@ func (r *Runner) addPWCHitRateTracer() {
 			tracing.CollectTrace(mmu, tracer)
 		}
 	}
+
+	for _, gpu := range r.GPUDriver.GPUs {
+		for _, mmu := range gpu.MMUs {
+			tracer := tracing.NewStepCountTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "page_fault"
+				})
+			tracing.CollectTrace(mmu, tracer)
+			r.PageFaultTracers = append(r.PageFaultTracers,
+				PageFaultTracer{tracer: tracer, mmu: mmu})
+		}
+	}
 }
 
 func (r *Runner) addCacheHitRateTracer() {
@@ -3932,6 +3950,13 @@ func (r *Runner) reportPWCHitRate() {
 			r.metricsCollector.Collect(
 				tracer.mmu.Name(), "page-walk-lds-store", float64(ptwLDSStore))
 		}
+	}
+
+	for _, tracer := range r.PageFaultTracers {
+		num := tracer.tracer.GetStepCount("page_fault")
+
+		r.metricsCollector.Collect(
+			tracer.mmu.Name(), "num_page_fault", float64(num))
 	}
 }
 

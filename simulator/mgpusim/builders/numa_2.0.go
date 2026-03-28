@@ -260,6 +260,17 @@ func (b *MGPUSimNUMAGPUBuilder) establishL1ToL2RoutingPath(chiplet *Chiplet) {
 		b.l1Tol2Connection.PlugIn(l2.TopPort, 64)
 	}
 	chiplet.lowModuleFinderForL1 = lowModuleFinder
+
+	for _, comp := range chiplet.MMUs {
+		switch walker := comp.(type) {
+		case *baseline.MMUImpl:
+			walker.DramLowModuleFinder = lowModuleFinder
+		case *caPWQL5.CaPWQMMU:
+			walker.DramLowModuleFinder = lowModuleFinder
+		default:
+			panic("MMU type not supported in establishL1ToL2RoutingPath")
+		}
+	}
 }
 
 func (b *MGPUSimNUMAGPUBuilder) establishL1TLBToL2TLBRoutingPath(chiplet *Chiplet) {
@@ -579,6 +590,20 @@ func (b *MGPUSimNUMAGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
+
+		for _, dram := range chiplet.DRAMs {
+			component.(*baseline.MMUImpl).Drams = append(
+				component.(*baseline.MMUImpl).Drams, dram,
+			)
+		}
+
+		for _, l2 := range chiplet.L2Caches {
+			component.(*baseline.MMUImpl).L2Caches = append(
+				component.(*baseline.MMUImpl).L2Caches, l2,
+			)
+		}
+
+		component.(*baseline.MMUImpl).CPU = b.cpuStorage
 	}
 }
 
@@ -957,6 +982,20 @@ func (b *MGPUSimNUMAGPUBuilder) buildCaPWQMMUL6(chiplet *Chiplet) {
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
+
+		for _, dram := range chiplet.DRAMs {
+			component.(*caPWQL5.CaPWQMMU).Drams = append(
+				component.(*caPWQL5.CaPWQMMU).Drams, dram,
+			)
+		}
+
+		for _, l2 := range chiplet.L2Caches {
+			component.(*caPWQL5.CaPWQMMU).L2Caches = append(
+				component.(*caPWQL5.CaPWQMMU).L2Caches, l2,
+			)
+		}
+
+		component.(*caPWQL5.CaPWQMMU).CPU = b.cpuStorage
 	}
 
 	b.establishMMUToCaPWQL6L1RoutingPath(chiplet)

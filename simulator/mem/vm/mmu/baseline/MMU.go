@@ -1,6 +1,7 @@
 package baseline
 
 import (
+	"bytes"
 	"encoding/binary"
 	"log"
 	"reflect"
@@ -9,7 +10,10 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
+	"gitlab.com/akita/mem/cache/writeback"
+	"gitlab.com/akita/mem/cpu"
 	"gitlab.com/akita/mem/device"
+	"gitlab.com/akita/mem/idealmemcontroller"
 	"gitlab.com/akita/mem/monitor"
 	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/util/akitaext"
@@ -83,6 +87,12 @@ type MMUImpl struct {
 	queueCapacity int
 
 	monitorStats *monitor.CaPWQMonitorStats
+
+	CPU *cpu.CPUStorage
+
+	Drams               []*idealmemcontroller.Comp
+	DramLowModuleFinder *cache.StripedLocalVRemoteLowModuleFinder
+	L2Caches            []*writeback.Cache
 }
 
 func (m *MMUImpl) SentCommand(info interface{}) {
@@ -395,6 +405,8 @@ func (impl *MMUImpl) parseFromTop(now akita.VTimeInSec) bool {
 			log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(req))
 		}
 
+		impl.checkDemandPaging(req)
+
 		for i := 0; i < len(impl.pageWalkers); i++ {
 			index := (impl.nextPointer + i) % len(impl.pageWalkers)
 			if len(impl.pageWalkers[index].queue) < impl.queueCapacity {
@@ -503,4 +515,161 @@ func (mmu *MMUImpl) CanAccept() bool {
 
 func (mmu *MMUImpl) ToPageWalkCachePort() akita.Port {
 	return mmu.ToPageWalkCache
+}
+
+func (impl *MMUImpl) checkDemandPaging(
+	req *device.TranslationReq,
+) {
+	// Demand Paging
+	page, ok := impl.pageTable.Find(req.PID, req.VAddr)
+	if !ok {
+		log.Panicf("not found: PID %d, VAddr %x", req.PID, req.VAddr)
+	}
+
+	if !page.Valid {
+		if page.Unified {
+			newPages := impl.pageTable.AllocateMultiplePages(
+				req.PID,
+				1,
+				page.VAddr,
+				16,
+				true,
+			)
+
+			newVAddrs := make([]uint64, 0)
+
+			cachelineSet := make(map[uint64]struct{})
+			cachelines := make([]uint64, 0)
+			for _, page := range newPages {
+				newVAddrs = append(newVAddrs, page.VAddr)
+
+				cacheline := page.PAddr & ^uint64(63)
+
+				if _, found := cachelineSet[cacheline]; !found {
+					cachelineSet[cacheline] = struct{}{}
+					cachelines = append(cachelines, cacheline)
+				}
+			}
+
+			for _, cacheline := range cachelines {
+				for _, cache := range impl.L2Caches {
+					res := cache.Invalidate(req.PID, cacheline)
+
+					if res {
+						log.Printf("Invalidated cacheline %x for PID %d in cache %s due to demand paging",
+							cacheline, req.PID, cache.Name())
+					}
+				}
+			}
+
+			impl.writePageTablePage(req.PID)
+			impl.writeMultiplePages(page.PID, page.VAddr)
+
+			impl.pageTable.ProcessNewAllocations(req.PID, newVAddrs)
+
+			tracing.AddTaskStep(
+				"",
+				0,
+				impl,
+				"page_fault",
+			)
+		} else {
+			log.Panicf("invalid page: PID %d, VAddr %x", req.PID, req.VAddr)
+		}
+	} else {
+		if page.PAddr == 0 {
+			log.Panicf("invalid page address: PID %d, VAddr %x", req.PID, req.VAddr)
+		}
+	}
+}
+
+func (impl *MMUImpl) writePageTablePage(
+	pid ca.PID,
+) {
+	pageTablePages := impl.pageTable.PageTablePagesAsBytes(pid)
+
+	for len(pageTablePages) > 0 {
+		pAddr := pageTablePages[0]
+		children := pageTablePages[1:513]
+		pageTablePages = pageTablePages[513:]
+		buffer := bytes.NewBuffer(nil)
+		err := binary.Write(buffer, binary.LittleEndian, children)
+		if err != nil {
+			panic(err)
+		}
+		rawBytes := buffer.Bytes()
+
+		impl.writeToDRAM(
+			pAddr,
+			rawBytes,
+		)
+	}
+}
+
+func (impl *MMUImpl) writeMultiplePages(
+	pid ca.PID,
+	addr uint64,
+) {
+	chunkSize := uint64(16) * impl.pageTable.PageSize()
+	vAddr := addr - (addr % chunkSize)
+
+	for i := uint64(0); i < 16; i++ {
+		pageVAddr := vAddr + i*impl.pageTable.PageSize()
+
+		if !impl.CPU.CheckAddr(pageVAddr) {
+			continue
+		}
+
+		data := impl.CPU.Read(pageVAddr)
+		if len(data) != int(impl.pageTable.PageSize()) {
+			log.Panicf("data size %d does not match page size %d", len(data), impl.pageTable.PageSize())
+		}
+
+		page, found := impl.pageTable.Find(pid, pageVAddr)
+		if !found {
+			log.Panicf("page not found for vaddr %x", pageVAddr)
+		}
+
+		impl.writeToDRAM(
+			page.PAddr,
+			data,
+		)
+	}
+}
+
+func (mmu *MMUImpl) writeToDRAM(
+	pAddr uint64,
+	data []byte,
+) {
+	offset := uint64(0)
+	lengthLeft := uint64(len(data))
+	addr := pAddr
+
+	log2AccessSize := uint64(6)
+
+	for lengthLeft > 0 {
+		addrUnitFirstByte := addr & (^uint64(0) << log2AccessSize)
+		unitOffset := addr - addrUnitFirstByte
+		lengthInUnit := (1 << log2AccessSize) - unitOffset
+
+		length := lengthLeft
+		if lengthInUnit < length {
+			length = lengthInUnit
+		}
+
+		dramIndex := mmu.DramLowModuleFinder.Index(pAddr)
+		if dramIndex < 0 || dramIndex >= uint64(len(mmu.Drams)) {
+			log.Panicf("cannot find dram for address %x", pAddr)
+		}
+		module := mmu.Drams[dramIndex]
+
+		err := module.DirectWrite(addr, data[offset:offset+length])
+		if err != nil {
+			panic(err)
+		}
+
+		addr += length
+		lengthLeft -= length
+		offset += length
+	}
 }
