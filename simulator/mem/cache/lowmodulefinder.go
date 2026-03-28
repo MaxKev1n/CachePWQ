@@ -202,6 +202,16 @@ func (f *StripedLocalVRemoteLowModuleFinder) Find(address uint64) akita.Port {
 	return f.ModuleForOtherAddresses
 }
 
+// FinIndexd returns the index that can provide the data.
+func (f *StripedLocalVRemoteLowModuleFinder) Index(address uint64) uint64 {
+	address = address - f.MemAddrOffset
+	i := (address % (f.NumBanks * f.Striping)) / f.Striping
+	if f.LocalBankStart <= i && i <= f.LocalBankEnd {
+		return i - f.LocalBankStart
+	}
+	panic("address is not in local range")
+}
+
 // NewBankedLowModuleFinder returns a new BankedLowModuleFinder.
 func NewStripedLocalVRemoteLowModuleFinder(memAddrOffset, numBanks, striping, start, end uint64) *StripedLocalVRemoteLowModuleFinder {
 	f := new(StripedLocalVRemoteLowModuleFinder)

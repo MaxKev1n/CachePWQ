@@ -30,13 +30,21 @@ type PageTable interface {
 	Update(page Page)
 	FindAddr(pid ca.PID, vAddr uint64, level uint64) uint64
 	PageTablePagesAsBytes(pid ca.PID) []uint64
+	PageSize() uint64
+	AllocateMultiplePages(
+		pid ca.PID,
+		gpuID uint64,
+		vAddr uint64,
+		numPages int,
+		isUnified bool,
+	) []Page
 	// GetPageTableAsBuffer(pid ca.PID)
 }
 
 // NewPageTable creates a new page table
 func NewPageTable(log2PageSize uint64) *PageTableImpl {
 	return &PageTableImpl{
-		log2PageSize: log2PageSize,
+		Log2PageSize: log2PageSize,
 		tables:       make(map[ca.PID]*processTableImpl),
 	}
 }
@@ -44,11 +52,51 @@ func NewPageTable(log2PageSize uint64) *PageTableImpl {
 // PageTableImpl is the default implementation of a Page Table
 type PageTableImpl struct {
 	sync.Mutex
-	log2PageSize uint64
+	Log2PageSize uint64
 	tables       map[ca.PID]*processTableImpl
 	memAllocator MemoryAllocator
 	entries      *list.List
 	entriesTable map[uint64]*list.Element
+}
+
+func (pt *PageTableImpl) PageSize() uint64 {
+	return uint64(1) << pt.Log2PageSize
+}
+
+func (pt *PageTableImpl) GetMemoryAllocator() MemoryAllocator {
+	return pt.memAllocator
+}
+
+func (pt *PageTableImpl) AllocateMultiplePages(
+	pid ca.PID,
+	gpuID uint64,
+	vAddr uint64,
+	numPages int,
+	isUnified bool,
+) []Page {
+	return pt.memAllocator.AllocateMultiplePageWithGivenVAddr(
+		pid,
+		int(gpuID),
+		vAddr,
+		numPages,
+		isUnified,
+	)
+}
+
+func (pt *PageTableImpl) GetAllVirtualPages(
+	pid ca.PID,
+) []uint64 {
+	table := pt.getTable(pid)
+	vAddrs := make([]uint64, 0)
+	for e := table.entries.Front(); e != nil; e = e.Next() {
+		page := e.Value.(Page)
+
+		if page.Valid {
+			vAddrs = append(vAddrs, page.VAddr)
+		}
+	}
+
+	return vAddrs
 }
 
 func (pt *PageTableImpl) getTable(pid ca.PID) *processTableImpl {
@@ -56,7 +104,7 @@ func (pt *PageTableImpl) getTable(pid ca.PID) *processTableImpl {
 	defer pt.Unlock()
 	table, found := pt.tables[pid]
 	if !found {
-		table = newProcessTable(pt.log2PageSize, 4, 9, pt.memAllocator)
+		table = newProcessTable(pt.Log2PageSize, 4, 9, pt.memAllocator)
 		pt.tables[pid] = table
 	}
 
@@ -69,7 +117,11 @@ func (pt *PageTableImpl) FindAddr(pid ca.PID, vAddr uint64, level uint64) uint64
 }
 
 func (pt *PageTableImpl) AlignToPage(addr uint64) uint64 {
-	return (addr >> pt.log2PageSize) << pt.log2PageSize
+	return (addr >> pt.Log2PageSize) << pt.Log2PageSize
+}
+
+func (pt *PageTableImpl) GetVPN(addr uint64) uint64 {
+	return addr >> pt.Log2PageSize
 }
 
 // Insert put a new page into the PageTable

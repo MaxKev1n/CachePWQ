@@ -6,3 +6,6 @@ MMU:
   type: "MPWMMU"
 
   numPageWalkers: 32
+
+L3TLB:
+  dispatcher: "roundrobin"

@@ -10,6 +10,7 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/cache/writeback"
+	"gitlab.com/akita/mem/cpu"
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mem/idealmemcontroller"
 	"gitlab.com/akita/mem/vm/addresstranslator"
@@ -124,6 +125,8 @@ type CommonBuilder struct {
 	booksimMemory string
 	booksimTLB    string
 	booksimDir    string
+
+	cpuStorage *cpu.CPUStorage
 }
 
 // MakeCommonBuilder provides a GPU builder that can builds the MCM GPU.
@@ -283,6 +286,10 @@ func (b *CommonBuilder) WithBookSimTLB(config string) {
 
 func (b *CommonBuilder) WithBookSimDir(dir string) {
 	b.booksimDir = dir
+}
+
+func (b *CommonBuilder) WithCPU(cpuStorage *cpu.CPUStorage) {
+	b.cpuStorage = cpuStorage
 }
 
 // CalculateMemoryParameters calculates

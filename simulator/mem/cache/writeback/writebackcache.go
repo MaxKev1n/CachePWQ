@@ -6,6 +6,7 @@ import (
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/akitaext"
+	"gitlab.com/akita/util/ca"
 	"gitlab.com/akita/util/pipelining"
 )
 
@@ -68,6 +69,13 @@ type Cache struct {
 
 	state                cacheState
 	inFlightTransactions []*transaction
+}
+
+func (c *Cache) Invalidate(
+	pid ca.PID,
+	cachelineID uint64,
+) bool {
+	return c.directory.Invalidate(pid, cachelineID)
 }
 
 func (c *Cache) GetPipeline() pipelining.Pipeline {
