@@ -24,10 +24,15 @@ def parse_csv(
             "Benchmark",
             "L1VCacheHit",
             "L1VCacheMiss",
+            "L1VCachePTWMiss",
+            "L1VCachePTWMSHRHit",
             "L1SCacheHit",
             "L1SCacheMiss",
             "L2CacheHit",
             "L2CacheMiss",
+            "L2CachePTWHit",
+            "L2CachePTWMiss",
+            "L2CachePTWMSHRHit",
             "L1VTLBHit",
             "L1VTLBMiss",
             "L3TLBHit",
@@ -39,10 +44,15 @@ def parse_csv(
     df.at[0, "Benchmark"] = benchmark
     df.at[0, "L1VCacheHit"] = 0
     df.at[0, "L1VCacheMiss"] = 0
+    df.at[0, "L1VCachePTWMiss"] = 0
+    df.at[0, "L1VCachePTWMSHRHit"] = 0
     df.at[0, "L1SCacheHit"] = 0
     df.at[0, "L1SCacheMiss"] = 0
     df.at[0, "L2CacheHit"] = 0
     df.at[0, "L2CacheMiss"] = 0
+    df.at[0, "L2CachePTWHit"] = 0
+    df.at[0, "L2CachePTWMiss"] = 0
+    df.at[0, "L2CachePTWMSHRHit"] = 0
     df.at[0, "L1VTLBHit"] = 0
     df.at[0, "L1VTLBMiss"] = 0
     df.at[0, "L3TLBHit"] = 0
@@ -71,6 +81,10 @@ def parse_csv(
                             df.at[0, "L1VCacheHit"] += value
                         elif what == "read-miss" or what == "write-miss":
                             df.at[0, "L1VCacheMiss"] += value
+                        elif what == "ptw-miss":
+                            df.at[0, "L1VCachePTWMiss"] += value
+                        elif what == "ptw-mshr-hit":
+                            df.at[0, "L1VCachePTWMSHRHit"] += value
                     elif "L1SCache" in where:
                         if what == "read-hit" or what == "write-hit":
                             df.at[0, "L1SCacheHit"] += value
@@ -81,6 +95,12 @@ def parse_csv(
                             df.at[0, "L2CacheHit"] += value
                         elif what == "read-miss" or what == "write-miss":
                             df.at[0, "L2CacheMiss"] += value
+                        elif what == "ptw-hit":
+                            df.at[0, "L2CachePTWHit"] += value
+                        elif what == "ptw-miss":
+                            df.at[0, "L2CachePTWMiss"] += value
+                        elif what == "ptw-mshr-hit":
+                            df.at[0, "L2CachePTWMSHRHit"] += value
                     elif "L1VTLB" in where:
                         if what == "tlb-hit":
                             df.at[0, "L1VTLBHit"] += value
@@ -132,10 +152,15 @@ if __name__ == "__main__":
             "Benchmark",
             "L1VCacheHit",
             "L1VCacheMiss",
+            "L1VCachePTWMiss",
+            "L1VCachePTWMSHRHit",
             "L1SCacheHit",
             "L1SCacheMiss",
             "L2CacheHit",
             "L2CacheMiss",
+            "L2CachePTWHit",
+            "L2CachePTWMiss",
+            "L2CachePTWMSHRHit",
             "L1VTLBHit",
             "L1VTLBMiss",
             "L3TLBHit",
@@ -155,10 +180,16 @@ if __name__ == "__main__":
                     "Benchmark": benchmark,
                     "L1VCacheHit": 0,
                     "L1VCacheMiss": 0,
+                    "L1VCachePTWMiss": 0,
+                    "L1VCachePTWMSHRHit": 0,
                     "L1SCacheHit": 0,
                     "L1SCacheMiss": 0,
                     "L2CacheHit": 0,
                     "L2CacheMiss": 0,
+                    "L2CacheHit": 0,
+                    "L2CachePTWHit": 0,
+                    "L2CachePTWMiss": 0,
+                    "L2CachePTWMSHRHit": 0,
                     "L1VTLBHit": 0,
                     "L1VTLBMiss": 0,
                     "L3TLBHit": 0,
@@ -172,4 +203,4 @@ if __name__ == "__main__":
 
         df = pd.concat([df, parsed_df], ignore_index=True)
 
-    df.to_csv(os.path.join(args.outDir, "miss_rate_report.csv"), index=False)
+    df.to_csv(os.path.join(args.outDir, "mpw_miss_rate_report.csv"), index=False)
