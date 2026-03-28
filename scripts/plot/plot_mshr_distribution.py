@@ -21,21 +21,35 @@ def process_gpu_data(file_path):
             what = str(row.iloc[2])   # 假设数值在第二列
             # 1. 检查关键字匹配
             print(what)
-            if "CaPWQL1VCache" in where and "ptw-read-" in what:
+            # if "CaPWQL1VCache" in where and "ptw-read-" in what:
+            #     GPC = where.strip().split('.')[2][5]
+            #     SA = where.strip().split('.')[3][4]
+            #     Cache = where.strip().split('.')[4][-1]
+                
+            #     gpc_id = int(GPC)
+            #     sa_id = int(SA)
+            #     cache_id = int(Cache)
+                
+            #     # 3. 提取最后的数值 (假设数值在最后一部分)
+            #     # 示例数据最后一部分是 2004.000000000000
+            #     value = float(str(row.iloc[-1]).strip())
+                
+            #     # 4. 计算 Index: GPC*16 + SA*4 + CaPWQL1VCache
+            #     calc_index = gpc_id * 16 + sa_id * 4 + cache_id
+            #     results[calc_index] = value
+            if "CaPWQL1ICache" in where and "ptw-read-" in what:
                 GPC = where.strip().split('.')[2][5]
                 SA = where.strip().split('.')[3][4]
-                Cache = where.strip().split('.')[4][-1]
                 
                 gpc_id = int(GPC)
                 sa_id = int(SA)
-                cache_id = int(Cache)
                 
                 # 3. 提取最后的数值 (假设数值在最后一部分)
                 # 示例数据最后一部分是 2004.000000000000
                 value = float(str(row.iloc[-1]).strip())
                 
                 # 4. 计算 Index: GPC*16 + SA*4 + CaPWQL1VCache
-                calc_index = gpc_id * 16 + sa_id * 4 + cache_id
+                calc_index = gpc_id * 4 + sa_id
                 results[calc_index] = value
 
         if not results:

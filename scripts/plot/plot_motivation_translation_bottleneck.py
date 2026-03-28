@@ -198,7 +198,7 @@ def plot_normalized_time(
         r2,
         Opt1["Data"],
         width=bar_width,
-        label="MPW",
+        label="Infinite Walker",
         color="#cce5d8",
         edgecolor="black",
         linewidth=1.5,
@@ -207,7 +207,7 @@ def plot_normalized_time(
         r3,
         Opt2["Data"],
         width=bar_width,
-        label="CaPWQ",
+        label="Ideal Translation",
         color="#6ba78b",
         edgecolor="black",
         linewidth=1.5,
@@ -220,12 +220,12 @@ def plot_normalized_time(
         if height >= 8:
             plt.annotate(
                 f"{height:.1f}",
-                xy=(x, 7.5),
+                xy=(x, 7.0),
                 xytext=(0, 0),  # 相对偏移 (0,15) 表示向上15pt
                 textcoords="offset points",
                 ha="center",
                 va="bottom",
-                fontsize=20,
+                fontsize=26,
                 fontweight="bold",
                 bbox=dict(
                     facecolor="white",
@@ -239,13 +239,13 @@ def plot_normalized_time(
     plt.xticks(
         [r + 1 * bar_width for r in r1],
         [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
-        fontsize=24,
+        fontsize=28,
         fontweight="bold",
     )
-    plt.ylabel("Speedup", fontsize=24, fontweight="bold")
+    plt.ylabel("Speedup", fontsize=28, fontweight="bold")
     plt.yticks(
         np.arange(0, 8.1, 2),
-        fontsize=26,
+        fontsize=28,
         fontweight="bold",
     )
     plt.ylim(0, 8)
@@ -257,7 +257,7 @@ def plot_normalized_time(
         frameon=True,
         fancybox=True,
         framealpha=0.7,
-        prop={"weight": "bold", "size": 20},
+        prop={"weight": "bold", "size": 26},
     )
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.grid(axis="y", alpha=0.3)
@@ -270,7 +270,7 @@ def plot_normalized_time(
         spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
 
     output_file = os.path.join(
-        out_dir, "CaPWQMMU_Normalized_Time"
+        out_dir, "motivation_translation_bottleneck"
     )
     plt.savefig(output_file + ".png")
     plt.savefig(output_file + ".pdf")
@@ -321,7 +321,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/MPW",
+            input_dir="../../data/infiniteMMU",
         )
 
         Opt1 = pd.concat(
@@ -339,7 +339,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/caPWQL4",
+            input_dir="../../data/idealMMU",
         )
 
         Opt2 = pd.concat(

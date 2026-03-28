@@ -37,7 +37,7 @@ def read_data_to_dataframe(benchmark_name: str, input_dir: str):
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             for i, line in enumerate(f):
-                if i >= 5000:
+                if i >= 2000:
                     break
                 
                 # 去除换行符并按逗号分割
@@ -94,10 +94,10 @@ def plot_data(
     # 添加图表信息
     plt.xlabel(r'Sampling Interval Index', fontsize=24, fontweight='bold')
     plt.ylabel('Occupancy (%)', fontsize=24, fontweight='bold')
-    plt.xlim(-100, 5100)
+    plt.xlim(-100, 2100)
     plt.xticks(
-        [i for i in range(0, 5100, 1000)],
-        [str(i) for i in range(0, 5100, 1000)],
+        [i for i in range(0, 2100, 400)],
+        [str(i) for i in range(0, 2100, 400)],
         fontsize=24,
         fontweight="bold",
         # rotation=90,
