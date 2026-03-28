@@ -1,6 +1,8 @@
 package tlb
 
 import (
+	"math"
+
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/pipelining"
@@ -102,6 +104,9 @@ func (b Builder) Build(name string) *TLBImpl {
 	tlb.pageSize = b.pageSize
 	tlb.latency = b.latency
 	tlb.LowModule = b.lowModule
+	tlb.log2NumSets = uint64(math.Log2(float64(tlb.numSets)))
+	tlb.log2NumWays = uint64(math.Log2(float64(b.numWays)))
+	tlb.log2PageSize = uint64(math.Log2(float64(tlb.pageSize)))
 
 	tlb.TopPort = akita.NewLimitNumMsgPort(tlb, b.numReqPerCycle,
 		name+".TopPort")
@@ -109,7 +114,7 @@ func (b Builder) Build(name string) *TLBImpl {
 		name+".BottomPort")
 	tlb.ControlPort = akita.NewLimitNumMsgPort(tlb, 1,
 		name+".ControlPort")
-	tlb.mshr = newMSHR(b.numMSHREntry)
+	tlb.mshr = newMultiLevelMshr(b.numMSHREntry, tlb.log2PageSize)
 
 	tlb.lookupBuffer = util.NewBuffer(2 * tlb.numReqPerCycle)
 	pipelineBuilder := pipelining.MakeBuilder().WithPipelineWidth(tlb.numReqPerCycle).WithNumStage(tlb.latency).WithCyclePerStage(1).WithPostPipelineBuffer(tlb.lookupBuffer)

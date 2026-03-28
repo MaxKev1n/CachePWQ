@@ -48,6 +48,8 @@ func NewDeviceMemoryState(log2pagesize uint64, memAllocatorType string) DeviceMe
 		return newdevicePartitionedMemState(log2pagesize)
 	case "partitionedpta":
 		return newdevicePartitionedXorPtaMemState(log2pagesize)
+	case "demandpaging" /*AllocatorTypeDemandPaging*/ :
+		return newdeviceDemandPagingMemoryState(log2pagesize)
 	case "lasp":
 		return newdeviceLASPMemState(log2pagesize)
 	case "lasptpp":
@@ -71,7 +73,7 @@ func newDeviceRegularMemoryState(log2pagesize uint64) DeviceMemoryState {
 	}
 }
 
-//original implementation of DeviceMemoryState holding free addresses in array
+// original implementation of DeviceMemoryState holding free addresses in array
 type deviceMemoryStateImpl struct {
 	log2PageSize    uint64
 	initialAddress  uint64

@@ -122,6 +122,7 @@ func (b LatTLBBuilder) Build(name string) TLB {
 	tlb.numSets = b.numSets
 
 	tlb.log2NumSets = uint64(math.Log2(float64(tlb.numSets)))
+	tlb.log2NumWays = uint64(math.Log2(float64(b.numWays)))
 	tlb.setMask = uint64(tlb.numSets - 1)
 	tlb.numTerms = (48-b.log2PageSize)/tlb.log2NumSets - 1
 
@@ -149,8 +150,7 @@ func (b LatTLBBuilder) Build(name string) TLB {
 		name+".BottomPort")
 	tlb.ControlPort = akita.NewLimitNumMsgPort(tlb, 1,
 		name+".ControlPort")
-	tlb.mshr = newMSHR(b.numMSHREntry)
-	tlb.extensionmshr = newMSHR(0)
+	tlb.mshr = newMultiLevelMshr(b.numMSHREntry, tlb.log2PageSize)
 	tlb.lookupBuffer = util.NewBuffer(2 * tlb.numReqPerCycle)
 	pipelineBuilder := pipelining.MakeBuilder().WithPipelineWidth(tlb.numReqPerCycle).WithNumStage(tlb.latency).WithCyclePerStage(1).WithPostPipelineBuffer(tlb.lookupBuffer)
 	tlb.pipeline = pipelineBuilder.Build(tlb.Name() + "_pipeline")

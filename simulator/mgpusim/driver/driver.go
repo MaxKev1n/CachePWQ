@@ -10,6 +10,7 @@ import (
 	"github.com/rs/xid"
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
+	"gitlab.com/akita/mem/cpu"
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/kernels"
@@ -60,6 +61,8 @@ type Driver struct {
 	isCurrentlyMigratingOnePage     bool
 
 	RemotePMCPorts []akita.Port
+
+	CPUSideStorage *cpu.CPUStorage
 }
 
 // Run starts a new threads that handles all commands in the command queues
@@ -302,6 +305,56 @@ func (d *Driver) processMemCopyH2DCommand(
 	cmd *MemCopyH2DCommand,
 	queue *CommandQueue,
 ) bool {
+	if d.memAllocatorType == "demandpaging" {
+		log.Printf("Warning: MemCopyH2D storage at %X in demand paging mode.\n", uint64(cmd.Dst))
+
+		pageSize := 1 << d.Log2PageSize
+		if cmd.Dst%GPUPtr(pageSize) != 0 {
+			panic("destination address is not page aligned")
+		}
+
+		page, ok := d.PageTable.Find(queue.Context.pid, uint64(cmd.Dst))
+		if !ok {
+			panic("destination page not allocated")
+		}
+
+		if !page.Valid {
+			buffer := bytes.NewBuffer(nil)
+			err := binary.Write(buffer, binary.LittleEndian, cmd.Src)
+			if err != nil {
+				panic(err)
+			}
+			rawBytes := buffer.Bytes()
+
+			numPages := uint64(len(rawBytes)+pageSize-1) / uint64(pageSize)
+
+			for i := uint64(0); i < numPages; i++ {
+				pageAddr := uint64(cmd.Dst) + i*uint64(pageSize)
+
+				if d.CheckCPUPointer(pageAddr) {
+					panic("already allocated in CPU memory")
+				}
+
+				leftSize := uint64(len(rawBytes)) - i*uint64(pageSize)
+				if leftSize < uint64(pageSize) {
+					leftSize = uint64(pageSize)
+
+					rawBytes = append(rawBytes, make([]byte, leftSize)...)
+				}
+
+				pageData := rawBytes[i*uint64(pageSize) : (i+1)*uint64(pageSize)]
+
+				d.CPUSideStorage.Write(pageAddr, pageData)
+			}
+
+			queue.Dequeue()
+
+			return true
+		}
+
+		log.Printf("Warning: MemCopyH2D storage at %X in GPU memory.\n", uint64(cmd.Dst))
+	}
+
 	buffer := bytes.NewBuffer(nil)
 	err := binary.Write(buffer, binary.LittleEndian, cmd.Src)
 	if err != nil {
@@ -533,6 +586,10 @@ func (d *Driver) processLaunchKernelCommand(
 	d.requestsToSend = append(d.requestsToSend, req)
 
 	queue.Context.l2Dirty = true
+
+	allAllocatedPages := d.PageTable.GetAllVirtualPages(req.PID)
+
+	d.PageTable.ProcessNewAllocations(req.PID, allAllocatedPages)
 
 	d.logCmdStart(cmd, now)
 	d.logTaskToGPUInitiate(now, cmd, req)
@@ -999,6 +1056,21 @@ func (d *Driver) sendToMMU(now akita.VTimeInSec) bool {
 	return false
 }
 
+// CheckCPUPointer checks whether the CPU pointer is valid
+func (d *Driver) CheckCPUPointer(ptr uint64) bool {
+	return d.CPUSideStorage.CheckAddr(ptr)
+}
+
+// InsertCPUStorage inserts data into CPU storage
+func (d *Driver) InsertCPUStorage(ptr uint64, data []byte) {
+	d.CPUSideStorage.Write(ptr, data)
+}
+
+// GetCPUStorage gets data from CPU storage
+func (d *Driver) GetCPUStorage(ptr uint64) []byte {
+	return d.CPUSideStorage.Read(ptr)
+}
+
 // NewDriver creates a new driver
 func NewDriver(
 	engine akita.Engine,
@@ -1029,6 +1101,8 @@ func NewDriver(
 	driver.driverStopped = make(chan bool)
 
 	driver.createCPU()
+
+	driver.CPUSideStorage = cpu.NewCPUStorage()
 
 	return driver
 }
