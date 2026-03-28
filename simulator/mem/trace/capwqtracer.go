@@ -25,12 +25,15 @@ func (t *CaPWQTracer) StartTask(task tracing.Task) {
 		panic("invalid task detail for CaPWQMonitor")
 	}
 
-	t.logger.Printf("%v, %v, %v, %v, %v\n",
+	t.logger.Printf("%v, %v, %v, %v, %v, %v, %v, %.2f\n",
 		item.NumEpoches,
 		item.L1VCacheUtilization,
 		item.L1VCacheWalkerUtilization,
 		item.WalkerReqUtilization,
 		item.WalkerRspUtilization,
+		item.NumL1VCacheArbitration,
+		item.NumMMUArbitration,
+		item.NumGPCMuxArbitration,
 	)
 }
 

@@ -113,6 +113,10 @@ func (c *walkerStage) processWalkerWrite(
 		PTEBlockID,
 	)
 	if mshrEntry != nil {
+		if c.cache.monitorStats != nil {
+			c.cache.monitorStats.NumArbitration++
+		}
+
 		offset := (addr >> c.cache.log2BlockSize) & 0x7
 
 		if mshrEntry.OffsetBits[int(offset)] {
@@ -184,6 +188,10 @@ func (c *walkerStage) fetchPTEsFromBottom(
 	PTEBlockSize := uint64(1 << (c.cache.log2BlockSize + 3))
 	PTEBlockID := addr / PTEBlockSize * PTEBlockSize
 	PTEOffset := (addr >> c.cache.log2BlockSize) & 0x7
+
+	if c.cache.monitorStats != nil {
+		c.cache.monitorStats.NumArbitration++
+	}
 
 	mshrEntry := c.cache.mshr.AddForWalker(pid, PTEBlockID, PTEOffset)
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)

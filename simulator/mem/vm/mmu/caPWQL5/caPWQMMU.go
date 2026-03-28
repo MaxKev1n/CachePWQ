@@ -171,6 +171,10 @@ func (walker *CaPWQPageWalker) AcceptL1CacheRsp(
 		walker.secondaryTransaction = newTrans
 	}
 
+	if walker.mmu.monitorStats != nil {
+		walker.mmu.monitorStats.NumGPCMuxArbitration += 0.5
+	}
+
 	walker.TickLater(now)
 }
 
@@ -212,6 +216,10 @@ func (walker *CaPWQPageWalker) walkPageTable(now akita.VTimeInSec) bool {
 		return walker.walkSecondaryPageTable(now)
 	}
 
+	if walker.mmu.monitorStats != nil {
+		walker.mmu.monitorStats.NumArbitration++
+	}
+
 	switch walker.transaction.state {
 	case pageWalkCacheDone, memDone, l1Done:
 		walker.sendToMem(now)
@@ -227,6 +235,10 @@ func (walker *CaPWQPageWalker) walkPageTable(now akita.VTimeInSec) bool {
 func (walker *CaPWQPageWalker) walkSecondaryPageTable(now akita.VTimeInSec) bool {
 	if walker.secondaryTransaction == nil {
 		return false
+	}
+
+	if walker.mmu.monitorStats != nil {
+		walker.mmu.monitorStats.NumArbitration++
 	}
 
 	switch walker.secondaryTransaction.state {
@@ -365,6 +377,10 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1V(now akita.VTimeInSec) {
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(writeReq, walker.mmu),
 		now, walker.mmu, "page_walk_store_l1")
 	tracing.EndTask(walker.mmu.Name()+"stall", now, walker.mmu)
+
+	if walker.mmu.monitorStats != nil {
+		walker.mmu.monitorStats.NumGPCMuxArbitration += 0.25
+	}
 }
 
 func (walker *CaPWQPageWalker) sendWriteReqToL1I(now akita.VTimeInSec) {

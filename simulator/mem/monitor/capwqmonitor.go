@@ -10,6 +10,7 @@ type CaPWQMonitor struct {
 
 	L1VCaches []MonitorComponent
 	Walkers   []MonitorComponent
+	GPCMuxs   []MonitorComponent
 
 	running     bool
 	initialized bool
@@ -19,6 +20,9 @@ type CaPWQMonitor struct {
 	numL1VCacheWalkerLength uint64
 	numWalkerReqLength      uint64
 	numWalkerRspLength      uint64
+	numMMUArbitration       uint64
+	numL1VCacheArbitration  uint64
+	numGPCMuxArbitration    float64
 }
 
 func NewCaPWQMonitor(
@@ -47,6 +51,10 @@ func (m *CaPWQMonitor) Tick(now akita.VTimeInSec) bool {
 		m.CollectWalkerComponentStats(walker)
 	}
 
+	for _, mux := range m.GPCMuxs {
+		m.CollectGPCMuxComponentStats(mux)
+	}
+
 	l1VCacheUtilization := float64(m.numL1VCacheLength) / float64(len(m.L1VCaches))
 	L1VCacheWalkerUtilization := float64(m.numL1VCacheWalkerLength) / float64(len(m.L1VCaches))
 	walkerReqUtilization := float64(m.numWalkerReqLength) / float64(len(m.Walkers))
@@ -65,6 +73,9 @@ func (m *CaPWQMonitor) Tick(now akita.VTimeInSec) bool {
 			L1VCacheWalkerUtilization: L1VCacheWalkerUtilization,
 			WalkerReqUtilization:      walkerReqUtilization,
 			WalkerRspUtilization:      walkerRspUtilization,
+			NumMMUArbitration:         m.numMMUArbitration,
+			NumL1VCacheArbitration:    m.numL1VCacheArbitration,
+			NumGPCMuxArbitration:      m.numGPCMuxArbitration,
 		},
 	)
 
@@ -73,6 +84,9 @@ func (m *CaPWQMonitor) Tick(now akita.VTimeInSec) bool {
 	m.numL1VCacheWalkerLength = 0
 	m.numWalkerReqLength = 0
 	m.numWalkerRspLength = 0
+	m.numMMUArbitration = 0
+	m.numL1VCacheArbitration = 0
+	m.numGPCMuxArbitration = 0
 
 	return true
 }
@@ -87,6 +101,11 @@ func (m *CaPWQMonitor) RegisterPageWalker(walker MonitorComponent) {
 	m.Walkers = append(m.Walkers, walker)
 }
 
+func (m *CaPWQMonitor) RegisterGPCMux(gpcMux MonitorComponent) {
+	gpcMux.InitMonitorStats()
+	m.GPCMuxs = append(m.GPCMuxs, gpcMux)
+}
+
 func (m *CaPWQMonitor) Start(now akita.VTimeInSec) {
 	if !m.initialized {
 		for _, l1v := range m.L1VCaches {
@@ -97,12 +116,19 @@ func (m *CaPWQMonitor) Start(now akita.VTimeInSec) {
 			walker.ClearMonitorStats()
 		}
 
+		for _, mux := range m.GPCMuxs {
+			mux.ClearMonitorStats()
+		}
+
 		m.initialized = true
 		m.numEpoches = 0
 		m.numL1VCacheLength = 0
 		m.numL1VCacheWalkerLength = 0
 		m.numWalkerReqLength = 0
 		m.numWalkerRspLength = 0
+		m.numMMUArbitration = 0
+		m.numL1VCacheArbitration = 0
+		m.numGPCMuxArbitration = 0
 	}
 
 	m.running = true
@@ -119,11 +145,18 @@ func (m *CaPWQMonitor) Stop() {
 		walker.ClearMonitorStats()
 	}
 
+	for _, mux := range m.GPCMuxs {
+		mux.ClearMonitorStats()
+	}
+
 	m.running = false
 	m.numL1VCacheLength = 0
 	m.numL1VCacheWalkerLength = 0
 	m.numWalkerReqLength = 0
 	m.numWalkerRspLength = 0
+	m.numMMUArbitration = 0
+	m.numL1VCacheArbitration = 0
+	m.numGPCMuxArbitration = 0
 }
 
 func (m *CaPWQMonitor) CollectL1VCacheComponentStats(
@@ -139,6 +172,8 @@ func (m *CaPWQMonitor) CollectL1VCacheComponentStats(
 		GetMonitorStats().(*CaPWQMonitorStats).L1VLength
 	m.numL1VCacheWalkerLength += component.
 		GetMonitorStats().(*CaPWQMonitorStats).L1VWalkerLength
+	m.numL1VCacheArbitration += component.
+		GetMonitorStats().(*CaPWQMonitorStats).NumArbitration
 
 	component.ClearMonitorStats()
 }
@@ -156,6 +191,25 @@ func (m *CaPWQMonitor) CollectWalkerComponentStats(
 		GetMonitorStats().(*CaPWQMonitorStats).ReqLength
 	m.numWalkerRspLength += component.
 		GetMonitorStats().(*CaPWQMonitorStats).RspLength
+	m.numMMUArbitration += component.
+		GetMonitorStats().(*CaPWQMonitorStats).NumArbitration
+	m.numGPCMuxArbitration += component.
+		GetMonitorStats().(*CaPWQMonitorStats).NumGPCMuxArbitration
+
+	component.ClearMonitorStats()
+}
+
+func (m *CaPWQMonitor) CollectGPCMuxComponentStats(
+	component MonitorComponent,
+) {
+	if m.numEpoches == 0 {
+		component.ClearMonitorStats()
+
+		return
+	}
+
+	m.numGPCMuxArbitration += component.
+		GetMonitorStats().(*CaPWQMonitorStats).NumGPCMuxArbitration
 
 	component.ClearMonitorStats()
 }
@@ -163,10 +217,12 @@ func (m *CaPWQMonitor) CollectWalkerComponentStats(
 type CaPWQMonitorStats struct {
 	Name string
 
-	L1VLength       uint64
-	L1VWalkerLength uint64
-	ReqLength       uint64
-	RspLength       uint64
+	L1VLength            uint64
+	L1VWalkerLength      uint64
+	ReqLength            uint64
+	RspLength            uint64
+	NumArbitration       uint64
+	NumGPCMuxArbitration float64
 }
 
 func (stat *CaPWQMonitorStats) Clear() {
@@ -174,6 +230,8 @@ func (stat *CaPWQMonitorStats) Clear() {
 	stat.L1VWalkerLength = 0
 	stat.ReqLength = 0
 	stat.RspLength = 0
+	stat.NumArbitration = 0
+	stat.NumGPCMuxArbitration = 0
 }
 
 type StatItem struct {
@@ -182,4 +240,7 @@ type StatItem struct {
 	L1VCacheWalkerUtilization float64
 	WalkerReqUtilization      float64
 	WalkerRspUtilization      float64
+	NumMMUArbitration         uint64
+	NumL1VCacheArbitration    uint64
+	NumGPCMuxArbitration      float64
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/mem/monitor"
 	"gitlab.com/akita/noc"
 	"gitlab.com/akita/noc/networking/internal/arbitration"
 	"gitlab.com/akita/util"
@@ -57,6 +58,20 @@ type Multiplexer struct {
 	bufferSizeInNumFlit int
 
 	RoutingTable RoutingTable
+
+	monitorStats *monitor.CaPWQMonitorStats
+}
+
+func (m *Multiplexer) InitMonitorStats() {
+	m.monitorStats = &monitor.CaPWQMonitorStats{}
+}
+
+func (m *Multiplexer) ClearMonitorStats() {
+	m.monitorStats.Clear()
+}
+
+func (m *Multiplexer) GetMonitorStats() interface{} {
+	return m.monitorStats
 }
 
 func (m *Multiplexer) Tick(now akita.VTimeInSec) bool {
@@ -129,6 +144,10 @@ func (m *Multiplexer) route(now akita.VTimeInSec) bool {
 		} else {
 			highSideComplex := m.portToComplexMapping[m.HighSidePort]
 			flit.OutputBuf = highSideComplex.sendOutBuffer
+		}
+
+		if m.monitorStats != nil {
+			m.monitorStats.NumGPCMuxArbitration++
 		}
 
 		routeBuf.Pop()

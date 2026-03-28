@@ -133,6 +133,10 @@ func (d *directory) processMSHRHit(
 		tracing.AddTaskStep("PowerStat", now, d.cache, "l1_write_hits")
 	}
 
+	if d.cache.monitorStats != nil {
+		d.cache.monitorStats.NumArbitration++
+	}
+
 	return true
 }
 
@@ -431,6 +435,10 @@ func (d *directory) fetchFromBottom(
 	tracing.TraceReqInitiate(readToBottom, now, d.cache, trans.id)
 	trans.readToBottom = readToBottom
 	trans.block = victim
+
+	if d.cache.monitorStats != nil {
+		d.cache.monitorStats.NumArbitration++
+	}
 
 	mshrEntry := d.cache.mshr.Add(pid, cacheLineID)
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)

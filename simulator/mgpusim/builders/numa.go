@@ -1536,6 +1536,10 @@ func (b *NUMAGPUBuilder) establishCaPWQMonitor(c *Chiplet) {
 		}
 	}
 
+	for _, mux := range c.gpcMux {
+		caPWQMonitor.RegisterGPCMux(mux)
+	}
+
 	b.gpu.CaPWQMonitor = append(b.gpu.CaPWQMonitor, caPWQMonitor)
 
 	tracing.CollectTrace(caPWQMonitor, b.caPWQTracer)
