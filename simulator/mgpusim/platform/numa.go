@@ -81,6 +81,7 @@ func (b *NUMAPlatformBuilder) createGPUBuilder(
 	gpuBuilder.WithSchedulingPartition(b.partition)
 	gpuBuilder.WithBooksimGlobal(b.booksimGlobal)
 	gpuBuilder.WithBookSimDir(b.booksimDir)
+	gpuBuilder.WithCPU(gpuDriver.CPUSideStorage)
 
 	if b.useTLBMonitor {
 		gpuBuilder.WithTLBMonitor()

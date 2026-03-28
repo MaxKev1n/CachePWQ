@@ -274,6 +274,15 @@ func (b *NUMAGPUBuilder) establishL1ToL2RoutingPath(chiplet *Chiplet) {
 			l2.TopPort)
 	}
 	chiplet.lowModuleFinderForL1 = lowModuleFinder
+
+	for _, comp := range chiplet.MMUs {
+		switch walker := comp.(type) {
+		case *baseline.MMUImpl:
+			walker.DramLowModuleFinder = lowModuleFinder
+		default:
+			panic("MMU type not supported in establishL1ToL2RoutingPath")
+		}
+	}
 }
 
 func (b *NUMAGPUBuilder) establishL1TLBToL2TLBRoutingPath(chiplet *Chiplet) {
@@ -894,6 +903,20 @@ func (b *NUMAGPUBuilder) buildDefaultMMU(chiplet *Chiplet) {
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
+
+		for _, dram := range chiplet.DRAMs {
+			component.(*baseline.MMUImpl).Drams = append(
+				component.(*baseline.MMUImpl).Drams, dram,
+			)
+		}
+
+		for _, l2 := range chiplet.L2Caches {
+			component.(*baseline.MMUImpl).L2Caches = append(
+				component.(*baseline.MMUImpl).L2Caches, l2,
+			)
+		}
+
+		component.(*baseline.MMUImpl).CPU = b.cpuStorage
 	}
 }
 

@@ -31,6 +31,7 @@ type Directory interface {
 	WayAssociativity() int
 	GetSets() []Set
 	Reset()
+	Invalidate(pid ca.PID, address uint64) bool
 }
 
 // A DirectoryImpl is the default implementation of a Directory
@@ -130,6 +131,18 @@ func (d *DirectoryImpl) Reset() {
 			d.Sets[i].LRUQueue = append(d.Sets[i].LRUQueue, block)
 		}
 	}
+}
+
+// Invalidate marks the block that stores the address as invalid
+func (d *DirectoryImpl) Invalidate(PID ca.PID, addr uint64) bool {
+	block := d.Lookup(PID, addr)
+	if block != nil {
+		block.IsValid = false
+
+		return true
+	}
+
+	return false
 }
 
 // WayAssociativity returns the number of ways per set in the cache.

@@ -1,6 +1,7 @@
 package baseline
 
 import (
+	"bytes"
 	"encoding/binary"
 	"log"
 	"reflect"
@@ -9,7 +10,10 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
+	"gitlab.com/akita/mem/cache/writeback"
+	"gitlab.com/akita/mem/cpu"
 	"gitlab.com/akita/mem/device"
+	"gitlab.com/akita/mem/idealmemcontroller"
 	"gitlab.com/akita/mem/monitor"
 	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/util/akitaext"
@@ -33,10 +37,12 @@ type transactionImpl struct {
 	memReq            *mem.ReadReq
 	page              device.Page
 	level             int
+	promotionLevel    int
 	msgID             string
 	state             transactionState
 	Address           uint64
 	PPN               uint64
+	lastPPNWithOffset uint64
 	vAddr             uint64
 	remoteMemAccesses int
 	pid               ca.PID
@@ -83,6 +89,12 @@ type MMUImpl struct {
 	queueCapacity int
 
 	monitorStats *monitor.CaPWQMonitorStats
+
+	CPU *cpu.CPUStorage
+
+	Drams               []*idealmemcontroller.Comp
+	DramLowModuleFinder *cache.StripedLocalVRemoteLowModuleFinder
+	L2Caches            []*writeback.Cache
 }
 
 func (impl *MMUImpl) InitMonitorStats() {
@@ -141,7 +153,11 @@ func (impl *MMUImpl) walkPageTable(now akita.VTimeInSec) bool {
 		case pageWalkCacheDone:
 			impl.sendToMem(now, inflightTrans)
 		case memDone:
-			impl.sendToMem(now, inflightTrans)
+			if inflightTrans.level >= 4 {
+				impl.sendToMemForPromotion(now, inflightTrans)
+			} else {
+				impl.sendToMem(now, inflightTrans)
+			}
 		case transactionFinished:
 			impl.pageWalkers[i].inflightTrans = nil
 		}
@@ -186,6 +202,67 @@ func (impl *MMUImpl) parseFromMem(now akita.VTimeInSec) bool {
 	return madeProgress
 }
 
+func (impl *MMUImpl) sendToMemForPromotion(now akita.VTimeInSec, trans *transactionImpl) {
+	transState := trans.state
+	if transState != memDone {
+		panic("this state shouldn't be here!")
+	}
+
+	groupStride := uint64(1) << (3 * trans.promotionLevel)
+	baseVPN := ((trans.req.VAddr / impl.pageTable.PageSize()) & ^(uint64(8)*groupStride - 1))
+
+	PPNWithOffset := trans.lastPPNWithOffset - ((trans.req.VAddr/impl.pageTable.PageSize())-baseVPN)*8
+
+	srcPort := impl.TranslationPort
+	readReqInfo := &mem.ReadReqInfo{ReturnAccessInfo: true}
+	dstPort := impl.lowModuleFinder.Find(PPNWithOffset)
+
+	readReq := mem.ReadReqBuilder{}.
+		WithSendTime(now).
+		WithSrc(srcPort).
+		WithDst(dstPort).
+		WithPID(trans.req.PID).
+		WithAddress(PPNWithOffset).
+		WithByteSize(8).
+		WithInfo(readReqInfo).
+		Build()
+
+	readReq.PTW = true
+
+	err := srcPort.Send(readReq)
+	if err != nil {
+		return
+	}
+
+	trans.promotionLevel++
+	trans.msgID = readReq.ID
+	trans.state = sentToMem
+	trans.memReq = readReq // For tracing
+
+	partitionID := mmu.ExtractMPID(dstPort.Name())
+
+	if partitionID < 4 {
+		tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, impl),
+			now, impl, "page_walk_req_left")
+	} else {
+		tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, impl),
+			now, impl, "page_walk_req_right")
+	}
+
+	tracing.AddTaskStep(tracing.MsgIDAtReceiver(trans.req, impl),
+		now, impl, "page_walk_req_local")
+
+	tracing.StartTask(
+		readReq.ID,
+		"",
+		now,
+		impl,
+		"walker_mem_latency",
+		reflect.TypeOf(readReq).String(),
+		readReq,
+	)
+}
+
 func (impl *MMUImpl) sendToMem(now akita.VTimeInSec, trans *transactionImpl) {
 	transState := trans.state
 	if transState != pageWalkCacheDone && transState != memDone {
@@ -194,6 +271,10 @@ func (impl *MMUImpl) sendToMem(now akita.VTimeInSec, trans *transactionImpl) {
 
 	PPN := trans.PPN
 	PPNWithOffset := impl.pageTable.AddOffset(PPN, trans.vAddr)
+
+	if trans.level == 3 {
+		trans.lastPPNWithOffset = PPNWithOffset
+	}
 
 	srcPort := impl.TranslationPort
 	readReqInfo := &mem.ReadReqInfo{ReturnAccessInfo: true}
@@ -264,7 +345,7 @@ func (impl *MMUImpl) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInS
 				trans,
 			)
 
-			if trans.level+1 == 4 {
+			if trans.level+1 >= 4 {
 				impl.finalizeTransaction(now, i)
 			} else {
 				impl.fillPageWalkCache(now, i)
@@ -312,6 +393,15 @@ func (impl *MMUImpl) finalizeTransaction(
 	now akita.VTimeInSec,
 	walkingIndex int,
 ) bool {
+	promotion := impl.checkValidBits(now, walkingIndex)
+	if promotion {
+		return true
+	}
+
+	if impl.pageWalkers[walkingIndex].inflightTrans.promotionLevel > 0 {
+		return impl.finalizePromotedTransaction(now, walkingIndex)
+	}
+
 	req := impl.pageWalkers[walkingIndex].inflightTrans.req
 
 	page, found := impl.pageTable.Find(req.PID, req.VAddr)
@@ -324,7 +414,14 @@ func (impl *MMUImpl) finalizeTransaction(
 		panic("addresses don't match!")
 	}
 
-	newPage := device.Page{PID: req.PID, VAddr: req.VAddr, PAddr: pAddr, Valid: true}
+	newPage := device.Page{
+		PID:       req.PID,
+		VAddr:     req.VAddr,
+		PAddr:     page.PAddr,
+		Valid:     true,
+		SizeBits:  page.SizeBits,
+		ValidBits: page.ValidBits,
+	}
 
 	impl.pageWalkers[walkingIndex].inflightTrans.page = newPage
 	impl.pageWalkers[walkingIndex].inflightTrans.state = transactionFinished
@@ -357,6 +454,91 @@ func (impl *MMUImpl) doPageWalkHit(
 	return true
 }
 
+func (mmu *MMUImpl) checkValidBits(
+	now akita.VTimeInSec,
+	walkingIndex int,
+) bool {
+	// check ValidBits
+	trans := mmu.pageWalkers[walkingIndex].inflightTrans
+	req := trans.req
+
+	page, found := mmu.pageTable.Find(req.PID, req.VAddr)
+	if !found {
+		panic("page not found")
+	}
+
+	if trans.promotionLevel == 0 {
+		trans.promotionLevel = int(page.SizeBits)
+	}
+
+	for {
+		if page.ValidBits != 0xFF {
+			break
+		}
+
+		groupStride := uint64(1) << (3 * trans.promotionLevel)
+		baseVAddr := ((req.VAddr / mmu.pageTable.PageSize()) & ^(uint64(8)*groupStride - 1)) * mmu.pageTable.PageSize()
+		page, found = mmu.pageTable.Find(req.PID, baseVAddr)
+		if !found || !page.Valid {
+			break
+		}
+
+		trans.promotionLevel = int(page.SizeBits)
+	}
+
+	return false
+}
+
+func (mmu *MMUImpl) finalizePromotedTransaction(
+	now akita.VTimeInSec,
+	walkingIndex int,
+) bool {
+	trans := mmu.pageWalkers[walkingIndex].inflightTrans
+	req := trans.req
+
+	groupStride := uint64(1) << (3 * (trans.promotionLevel - 1))
+	baseVAddr := ((req.VAddr / mmu.pageTable.PageSize()) & ^(uint64(8)*groupStride - 1)) * mmu.pageTable.PageSize()
+	page, found := mmu.pageTable.Find(req.PID, baseVAddr)
+	if !found {
+		panic("page not found")
+	}
+
+	newPage := device.Page{
+		PID:       req.PID,
+		VAddr:     page.VAddr,
+		PAddr:     page.PAddr,
+		Valid:     true,
+		SizeBits:  page.SizeBits,
+		ValidBits: page.ValidBits,
+	}
+
+	// check
+	groupStride = uint64(1) << (3 * (page.SizeBits - 1))
+	baseVAddr = ((req.VAddr / mmu.pageTable.PageSize()) & ^(uint64(8)*groupStride - 1)) * mmu.pageTable.PageSize()
+	page, found = mmu.pageTable.Find(req.PID, baseVAddr)
+	if !found {
+		panic("page not found")
+	}
+	basePAddr := page.PAddr
+
+	for i := uint64(0); i < groupStride; i++ {
+		vAddr := baseVAddr + mmu.pageTable.PageSize()
+		pAddr := basePAddr + mmu.pageTable.PageSize()
+		pg, found := mmu.pageTable.Find(req.PID, vAddr)
+		if !found {
+			panic("page not found")
+		}
+		if pg.PAddr != pAddr {
+			panic("addresses don't match!")
+		}
+	}
+
+	mmu.pageWalkers[walkingIndex].inflightTrans.page = newPage
+	mmu.pageWalkers[walkingIndex].inflightTrans.state = transactionFinished
+
+	return mmu.doPageWalkHit(now, walkingIndex)
+}
+
 func (impl *MMUImpl) parseFromTop(now akita.VTimeInSec) bool {
 	madeProgress := false
 
@@ -367,6 +549,8 @@ func (impl *MMUImpl) parseFromTop(now akita.VTimeInSec) bool {
 		if !ok {
 			log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(req))
 		}
+
+		impl.checkDemandPaging(req)
 
 		for i := 0; i < len(impl.pageWalkers); i++ {
 			index := (impl.nextPointer + i) % len(impl.pageWalkers)
@@ -435,6 +619,163 @@ func (impl *MMUImpl) parseFromTop(now akita.VTimeInSec) bool {
 	}
 
 	return madeProgress
+}
+
+func (impl *MMUImpl) checkDemandPaging(
+	req *device.TranslationReq,
+) {
+	// Demand Paging
+	page, ok := impl.pageTable.Find(req.PID, req.VAddr)
+	if !ok {
+		log.Panicf("not found: PID %d, VAddr %x", req.PID, req.VAddr)
+	}
+
+	if !page.Valid {
+		if page.Unified {
+			newPages := impl.pageTable.AllocateMultiplePages(
+				req.PID,
+				1,
+				page.VAddr,
+				16,
+				true,
+			)
+
+			newVAddrs := make([]uint64, 0)
+
+			cachelineSet := make(map[uint64]struct{})
+			cachelines := make([]uint64, 0)
+			for _, page := range newPages {
+				newVAddrs = append(newVAddrs, page.VAddr)
+
+				cacheline := page.PAddr & ^uint64(63)
+
+				if _, found := cachelineSet[cacheline]; !found {
+					cachelineSet[cacheline] = struct{}{}
+					cachelines = append(cachelines, cacheline)
+				}
+			}
+
+			for _, cacheline := range cachelines {
+				for _, cache := range impl.L2Caches {
+					res := cache.Invalidate(req.PID, cacheline)
+
+					if res {
+						log.Printf("Invalidated cacheline %x for PID %d in cache %s due to demand paging",
+							cacheline, req.PID, cache.Name())
+					}
+				}
+			}
+
+			impl.writePageTablePage(req.PID)
+			impl.writeMultiplePages(page.PID, page.VAddr)
+
+			impl.pageTable.ProcessNewAllocations(req.PID, newVAddrs)
+
+			tracing.AddTaskStep(
+				"",
+				0,
+				impl,
+				"page_fault",
+			)
+		} else {
+			log.Panicf("invalid page: PID %d, VAddr %x", req.PID, req.VAddr)
+		}
+	} else {
+		if page.PAddr == 0 {
+			log.Panicf("invalid page address: PID %d, VAddr %x", req.PID, req.VAddr)
+		}
+	}
+}
+
+func (impl *MMUImpl) writePageTablePage(
+	pid ca.PID,
+) {
+	pageTablePages := impl.pageTable.PageTablePagesAsBytes(pid)
+
+	for len(pageTablePages) > 0 {
+		pAddr := pageTablePages[0]
+		children := pageTablePages[1:513]
+		pageTablePages = pageTablePages[513:]
+		buffer := bytes.NewBuffer(nil)
+		err := binary.Write(buffer, binary.LittleEndian, children)
+		if err != nil {
+			panic(err)
+		}
+		rawBytes := buffer.Bytes()
+
+		impl.writeToDRAM(
+			pAddr,
+			rawBytes,
+		)
+	}
+}
+
+func (impl *MMUImpl) writeMultiplePages(
+	pid ca.PID,
+	addr uint64,
+) {
+	chunkSize := uint64(16) * impl.pageTable.PageSize()
+	vAddr := addr - (addr % chunkSize)
+
+	for i := uint64(0); i < 16; i++ {
+		pageVAddr := vAddr + i*impl.pageTable.PageSize()
+
+		if !impl.CPU.CheckAddr(pageVAddr) {
+			continue
+		}
+
+		data := impl.CPU.Read(pageVAddr)
+		if len(data) != int(impl.pageTable.PageSize()) {
+			log.Panicf("data size %d does not match page size %d", len(data), impl.pageTable.PageSize())
+		}
+
+		page, found := impl.pageTable.Find(pid, pageVAddr)
+		if !found {
+			log.Panicf("page not found for vaddr %x", pageVAddr)
+		}
+
+		impl.writeToDRAM(
+			page.PAddr,
+			data,
+		)
+	}
+}
+
+func (mmu *MMUImpl) writeToDRAM(
+	pAddr uint64,
+	data []byte,
+) {
+	offset := uint64(0)
+	lengthLeft := uint64(len(data))
+	addr := pAddr
+
+	log2AccessSize := uint64(6)
+
+	for lengthLeft > 0 {
+		addrUnitFirstByte := addr & (^uint64(0) << log2AccessSize)
+		unitOffset := addr - addrUnitFirstByte
+		lengthInUnit := (1 << log2AccessSize) - unitOffset
+
+		length := lengthLeft
+		if lengthInUnit < length {
+			length = lengthInUnit
+		}
+
+		dramIndex := mmu.DramLowModuleFinder.Index(pAddr)
+		if dramIndex < 0 || dramIndex >= uint64(len(mmu.Drams)) {
+			log.Panicf("cannot find dram for address %x", pAddr)
+		}
+		module := mmu.Drams[dramIndex]
+
+		err := module.DirectWrite(addr, data[offset:offset+length])
+		if err != nil {
+			panic(err)
+		}
+
+		addr += length
+		lengthLeft -= length
+		offset += length
+	}
 }
 
 // SetLowModuleFinder sets the table recording where to find an address.

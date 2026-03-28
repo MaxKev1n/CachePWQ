@@ -62,6 +62,11 @@ func (d *PageWalkCacheDirectoryImpl) getSet(reqAddr uint64) (set *Set, setID int
 	return
 }
 
+// Invalidate marks the block that stores the address as invalid
+func (d *PageWalkCacheDirectoryImpl) Invalidate(PID ca.PID, addr uint64) bool {
+	panic("Invalidate is not implemented for PageWalkCacheDirectoryImpl")
+}
+
 // Lookup finds the block that reqAddr. If the reqAddr is valid
 // in the cache, return the block information. Otherwise, return nil
 func (d *PageWalkCacheDirectoryImpl) Lookup(PID ca.PID, reqAddr uint64) *Block {

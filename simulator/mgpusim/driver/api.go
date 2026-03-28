@@ -1,6 +1,8 @@
 package driver
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"log"
 	"math"
@@ -280,6 +282,53 @@ func (d *Driver) enqueueFinalFlush(queue *CommandQueue) {
 
 // MemCopyH2D copies a memory from the host to a GPU device.
 func (d *Driver) MemCopyH2D(ctx *Context, dst GPUPtr, src interface{}) {
+	if d.memAllocatorType == "demandpaging" {
+		log.Printf("Warning: MemCopyH2D storage at %X in demand paging mode.\n", uint64(dst))
+
+		pageSize := 1 << d.Log2PageSize
+		if dst%GPUPtr(pageSize) != 0 {
+			panic("destination address is not page aligned")
+		}
+
+		page, ok := d.PageTable.Find(ctx.pid, uint64(dst))
+		if !ok {
+			panic("destination page not allocated")
+		}
+
+		if !page.Valid {
+			buffer := bytes.NewBuffer(nil)
+			err := binary.Write(buffer, binary.LittleEndian, src)
+			if err != nil {
+				panic(err)
+			}
+			rawBytes := buffer.Bytes()
+
+			numPages := uint64(len(rawBytes)+pageSize-1) / uint64(pageSize)
+
+			for i := uint64(0); i < numPages; i++ {
+				pageAddr := uint64(dst) + i*uint64(pageSize)
+
+				if d.CheckCPUPointer(pageAddr) {
+					panic("already allocated in CPU memory")
+				}
+
+				leftSize := uint64(len(rawBytes)) - i*uint64(pageSize)
+				if leftSize < uint64(pageSize) {
+					leftSize = uint64(pageSize)
+
+					rawBytes = append(rawBytes, make([]byte, leftSize)...)
+				}
+
+				pageData := rawBytes[i*uint64(pageSize) : (i+1)*uint64(pageSize)]
+
+				d.CPUSideStorage.Write(pageAddr, pageData)
+			}
+
+			return
+		}
+
+		log.Printf("Warning: MemCopyH2D storage at %X in GPU memory.\n", uint64(dst))
+	}
 	queue := d.CreateCommandQueue(ctx)
 	d.EnqueueMemCopyH2D(queue, dst, src)
 	d.DrainCommandQueue(queue)

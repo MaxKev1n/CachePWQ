@@ -142,6 +142,19 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	return nil
 }
 
+func (c *Comp) DirectWrite(address uint64, data []byte) error {
+	if c.AddressConverter != nil {
+		address = c.AddressConverter.ConvertExternalToInternal(address)
+	}
+
+	err := c.Storage.Write(address, data)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return nil
+}
+
 func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	now := e.Time()
 	req := e.req
