@@ -6,26 +6,50 @@ import (
 
 // A deviceDemandPagingMemoryState implements DeviceMemoryState as a interleaved allocator
 type deviceDemandPagingMemoryState struct {
-	bankSize        uint64
-	log2PageSize    uint64
-	initialAddress  uint64
-	storageSize     uint64
-	availablePAddrs []uint64
+	bankSize                       uint64
+	numChiplets                    uint64
+	numBankPerChiplet              uint64
+	log2PageSize                   uint64
+	initialAddress                 uint64
+	storageSize                    uint64
+	availablePAddrs                []uint64
+	pAddrsForPageTable             [][]uint64
+	log2MemoryBankInterleavingSize uint64
 }
 
 func (dims *deviceDemandPagingMemoryState) setInitialAddress(addr uint64) {
+	dims.assertAddrIsPageAligned(addr)
 	dims.initialAddress = addr
+	dims.availablePAddrs = make([]uint64, 0)
+	dims.pAddrsForPageTable = make([][]uint64, dims.numChiplets)
 	pageSize := uint64(1 << dims.log2PageSize)
-	endAddr := dims.initialAddress + dims.storageSize
+	endAddr := dims.initialAddress + dims.storageSize - 1*mem.GB
 	for addr := dims.initialAddress; addr < endAddr; addr += pageSize {
 		dims.availablePAddrs = append(dims.availablePAddrs, addr)
+	}
+	for addr := endAddr; addr < endAddr+1*mem.GB; {
+		for i := 0; i < int(dims.numChiplets); i++ {
+			for j := 0; j < int(dims.numBankPerChiplet); j++ {
+				dims.pAddrsForPageTable[i] = append(dims.pAddrsForPageTable[i], addr)
+				addr += uint64(1 << dims.log2MemoryBankInterleavingSize)
+			}
+		}
+	}
+}
+
+func (dims *deviceDemandPagingMemoryState) assertAddrIsPageAligned(addr uint64) {
+	if ((addr >> dims.log2PageSize) << dims.log2PageSize) != addr {
+		panic("oh no!")
 	}
 }
 
 func newdeviceDemandPagingMemoryState(log2pagesize uint64) DeviceMemoryState {
 	return &deviceDemandPagingMemoryState{
-		log2PageSize: log2pagesize,
-		bankSize:     256 * mem.MB,
+		log2PageSize:                   log2pagesize,
+		numChiplets:                    4,
+		numBankPerChiplet:              16,
+		bankSize:                       256 * mem.MB,
+		log2MemoryBankInterleavingSize: 12,
 	}
 }
 
@@ -66,7 +90,16 @@ func (dims *deviceDemandPagingMemoryState) allocateMultiplePages(
 }
 
 func (dims *deviceDemandPagingMemoryState) allocatePageTablePage(vAddr, pAddr uint64) uint64 {
-	return dims.allocateMultiplePages(1)[0]
+	chipletNum := vAddr & 3
+	return dims.allocatePageTableOnChiplet(chipletNum)
+}
+
+func (dims *deviceDemandPagingMemoryState) allocatePageTableOnChiplet(
+	chiplet uint64,
+) (pAddr uint64) {
+	pAddr = dims.pAddrsForPageTable[chiplet][0]
+	dims.pAddrsForPageTable[chiplet] = dims.pAddrsForPageTable[chiplet][1:]
+	return pAddr
 }
 
 func (dims *deviceDemandPagingMemoryState) allocatePageOnChiplet(chiplet int) uint64 {
