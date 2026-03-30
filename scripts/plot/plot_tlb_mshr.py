@@ -129,7 +129,7 @@ def plot_mshr_size(
         r1,
         baseline["MSHR_Size"],
         width=bar_width,
-        color="#fcfdf7",
+        color="#C3D9F1",
         edgecolor="black",
         linewidth=1.5,
     )
@@ -147,36 +147,36 @@ def plot_mshr_size(
         height = bar.get_height()
         x = bar.get_x() + bar.get_width() / 2
 
-        if height >= 512:
-            plt.annotate(
-            f"{height:.1f}",
-            xy=(x, 500),
-            xytext=(0, 10),  # 相对偏移 (0,15) 表示向上15pt
-            textcoords="offset points",
-            ha="center",
-            va="bottom",
-            fontsize=20,
-            fontweight="bold",
-            bbox=dict(
-                facecolor="white",
-                edgecolor="black",
-                boxstyle="round,pad=0.1",
-            ),
-            # arrowprops=dict(arrowstyle="-", color="red", lw=2),
-        )
+        # if height >= 512:
+        #     plt.annotate(
+        #     f"{height:.1f}",
+        #     xy=(x, 500),
+        #     xytext=(0, 10),  # 相对偏移 (0,15) 表示向上15pt
+        #     textcoords="offset points",
+        #     ha="center",
+        #     va="bottom",
+        #     fontsize=20,
+        #     fontweight="bold",
+        #     bbox=dict(
+        #         facecolor="white",
+        #         edgecolor="black",
+        #         boxstyle="round,pad=0.1",
+        #     ),
+        #     # arrowprops=dict(arrowstyle="-", color="red", lw=2),
+        # )
 
     plt.xlim(min(r1) - bar_width, max(r1) + bar_width)
     plt.xticks(
         [r for r in r1],
         [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
-        fontsize=22,
+        fontsize=24,
         fontweight="bold",
         rotation=90,
     )
     plt.ylabel("Average MSHR Occupancy", fontsize=24, fontweight="bold")
     plt.yticks(
         np.arange(0, 512.1, 128),
-        fontsize=22,
+        fontsize=24,
         fontweight="bold",
     )
     plt.ylim(0, 512)
@@ -256,7 +256,7 @@ def plot_mshr_len(
         r1,
         baseline["MSHR_Len"],
         width=bar_width,
-        color="#cce5d8",
+        color="#5D73A1",
         edgecolor="black",
         linewidth=1.5,
     )
@@ -296,14 +296,14 @@ def plot_mshr_len(
     plt.xticks(
         [r for r in r1],
         [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
-        fontsize=22,
+        fontsize=24,
         fontweight="bold",
         rotation=90,
     )
     plt.ylabel("Average Slot Length", fontsize=24, fontweight="bold")
     plt.yticks(
         np.arange(0, 2.6, 0.5),
-        fontsize=22,
+        fontsize=24,
         fontweight="bold",
     )
     plt.ylim(0, 2.5)

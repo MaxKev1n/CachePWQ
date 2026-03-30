@@ -88,8 +88,8 @@ def plot_data(
     plt.figure(figsize=(8, 4), dpi=300)
     
     # 绘制两组数据
-    plt.plot(df.index, df['MSHR'], label='MSHR', marker='.', linestyle='-', color="#C04F15")
-    plt.plot(df.index, df['PWQ'], label='PWQ', marker='.', linestyle='--', color="#3B7D32")
+    plt.plot(df.index, df['MSHR'], label='MSHR', marker='.', linestyle='-', color="#C3D9F1")
+    plt.plot(df.index, df['PWQ'], label='PWQ', marker='.', linestyle='--', color="#313A5B")
     
     # 添加图表信息
     plt.xlabel(r'Sampling Interval Index', fontsize=24, fontweight='bold')
@@ -129,8 +129,8 @@ def plot_data(
     # 6. 单独生成一个图例文件
     plt.figure(figsize=(10, 1), dpi=300)
     legend_elements = [
-        Line2D([0], [0], label='MSHR Occupancy', marker='.', linestyle='-', color="#C04F15", lw=2),
-        Line2D([0], [0], label='Page Walke Queue Occupancy', marker='.', linestyle='--', color="#3B7D32", lw=2),
+        Line2D([0], [0], label='MSHR Occupancy', marker='.', linestyle='-', color="#C3D9F1", lw=2),
+        Line2D([0], [0], label='Page Walke Queue Occupancy', marker='.', linestyle='--', color="#313A5B", lw=2),
     ]
     plt.legend(
         handles=legend_elements,

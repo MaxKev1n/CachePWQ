@@ -123,7 +123,7 @@ def plot_normalized_time(
 
     benchmarks = get_benchmarks()
 
-    bar_width = 0.2
+    bar_width = 0.15
     r1 = np.arange(len(benchmarks) + 1) * (3 * bar_width + 0.1)
     r2 = [x + bar_width for x in r1]
     r3 = [x + bar_width for x in r2]
@@ -190,7 +190,7 @@ def plot_normalized_time(
         baseline["Data"],
         width=bar_width,
         label="Baseline",
-        color="#fcfdf7",
+        color="#C3D9F1",
         edgecolor="black",
         linewidth=1.5,
     )
@@ -199,7 +199,7 @@ def plot_normalized_time(
         Opt1["Data"],
         width=bar_width,
         label="Infinite Walker",
-        color="#cce5d8",
+        color="#5D73A1",
         edgecolor="black",
         linewidth=1.5,
     )
@@ -208,7 +208,7 @@ def plot_normalized_time(
         Opt2["Data"],
         width=bar_width,
         label="Ideal Translation",
-        color="#6ba78b",
+        color="#313A5B",
         edgecolor="black",
         linewidth=1.5,
     )
@@ -239,13 +239,13 @@ def plot_normalized_time(
     plt.xticks(
         [r + 1 * bar_width for r in r1],
         [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
-        fontsize=28,
+        fontsize=30,
         fontweight="bold",
     )
-    plt.ylabel("Speedup", fontsize=28, fontweight="bold")
+    plt.ylabel("Speedup", fontsize=30, fontweight="bold")
     plt.yticks(
         np.arange(0, 8.1, 2),
-        fontsize=28,
+        fontsize=30,
         fontweight="bold",
     )
     plt.ylim(0, 8)
@@ -259,7 +259,7 @@ def plot_normalized_time(
         framealpha=0.7,
         prop={"weight": "bold", "size": 26},
     )
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.tight_layout(rect=[0, 0, 1, 0.925])
     plt.grid(axis="y", alpha=0.3)
     plt.axhline(y=1, color="red", linewidth=0.8, linestyle="--")
 
