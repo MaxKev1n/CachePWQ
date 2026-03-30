@@ -208,6 +208,9 @@ func (b *Builder) buildStages(c *Cache) {
 		coalescer:    c.coalesceStage,
 	}
 	c.directoryStatus = make([]profile.CachePSVStatus, b.numReqPerCycle)
+
+	c.extendBits = 3
+	c.offsetMask = (1 << c.extendBits) - 1
 }
 
 func (b *Builder) assertAllRequiredInformationIsAvailable() {

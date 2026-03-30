@@ -56,6 +56,9 @@ type Cache struct {
 	mshrFull bool
 
 	monitorStats *monitor.CaPWQMonitorStats
+
+	extendBits uint64
+	offsetMask uint64
 }
 
 func (c *Cache) InitMonitorStats() {

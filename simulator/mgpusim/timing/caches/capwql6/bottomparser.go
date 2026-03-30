@@ -109,13 +109,13 @@ func (p *bottomParser) processPTEsDataReady(
 	pid := trans.readToBottom.PID
 
 	addr := trans.Address()
-	PTEBlockSize := uint64(1 << (p.cache.log2BlockSize + 3))
+	PTEBlockSize := uint64(1 << (p.cache.log2BlockSize + p.cache.extendBits))
 	PTEBlockID := addr / PTEBlockSize * PTEBlockSize
 	data := dr.Data
 
 	mshrEntry := p.cache.mshr.QueryForWalker(pid, PTEBlockID)
 
-	PTEOffset := (addr >> p.cache.log2BlockSize) & 0x7
+	PTEOffset := (addr >> p.cache.log2BlockSize) & p.cache.offsetMask
 	if !mshrEntry.OffsetBits[int(PTEOffset)] {
 		panic("the PTE is not in the MSHR")
 	}

@@ -105,7 +105,7 @@ func (c *walkerStage) processWalkerWrite(
 	write := trans.write
 	addr := write.Address
 	pid := write.PID
-	PTEBlockSize := uint64(1 << (c.cache.log2BlockSize + 3))
+	PTEBlockSize := uint64(1 << (c.cache.log2BlockSize + c.cache.extendBits))
 	PTEBlockID := addr / PTEBlockSize * PTEBlockSize
 
 	mshrEntry := c.cache.mshr.QueryForWalker(
@@ -113,7 +113,7 @@ func (c *walkerStage) processWalkerWrite(
 		PTEBlockID,
 	)
 	if mshrEntry != nil {
-		offset := (addr >> c.cache.log2BlockSize) & 0x7
+		offset := (addr >> c.cache.log2BlockSize) & c.cache.offsetMask
 
 		if mshrEntry.OffsetBits[int(offset)] {
 			return c.processWalkerWriteMSHRHit(
@@ -181,11 +181,11 @@ func (c *walkerStage) fetchPTEsFromBottom(
 	tracing.TraceReqInitiate(readToBottom, now, c.cache, trans.id)
 	trans.readToBottom = readToBottom
 
-	PTEBlockSize := uint64(1 << (c.cache.log2BlockSize + 3))
+	PTEBlockSize := uint64(1 << (c.cache.log2BlockSize + c.cache.extendBits))
 	PTEBlockID := addr / PTEBlockSize * PTEBlockSize
-	PTEOffset := (addr >> c.cache.log2BlockSize) & 0x7
+	PTEOffset := (addr >> c.cache.log2BlockSize) & c.cache.offsetMask
 
-	mshrEntry := c.cache.mshr.AddForWalker(pid, PTEBlockID, PTEOffset)
+	mshrEntry := c.cache.mshr.AddForWalker(pid, PTEBlockID, PTEOffset, 1<<int(c.cache.extendBits))
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
 	mshrEntry.ReadReq = readToBottom
 
@@ -250,7 +250,7 @@ func (c *walkerStage) processWalkerWritePartialMSHRHit(
 	tracing.TraceReqInitiate(readToBottom, now, c.cache, trans.id)
 	trans.readToBottom = readToBottom
 
-	PTEOffset := (addr >> c.cache.log2BlockSize) & 0x7
+	PTEOffset := (addr >> c.cache.log2BlockSize) & c.cache.offsetMask
 
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
 	mshrEntry.OffsetBits[int(PTEOffset)] = true

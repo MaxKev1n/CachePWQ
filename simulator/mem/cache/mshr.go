@@ -22,10 +22,10 @@ type MSHREntry struct {
 }
 
 // NewMSHREntry returns a new MSHR entry object
-func NewMSHREntry() *MSHREntry {
+func NewMSHREntry(numSubEntry int) *MSHREntry {
 	e := new(MSHREntry)
 	e.Requests = make([]interface{}, 0)
-	e.OffsetBits = make([]bool, 8)
+	e.OffsetBits = make([]bool, numSubEntry)
 	return e
 }
 
@@ -34,7 +34,7 @@ type MSHR interface {
 	Query(pid ca.PID, addr uint64) *MSHREntry
 	QueryForWalker(pid ca.PID, addr uint64) *MSHREntry
 	Add(pid ca.PID, addr uint64) *MSHREntry
-	AddForWalker(pid ca.PID, addr uint64, offset uint64) *MSHREntry
+	AddForWalker(pid ca.PID, addr uint64, offset uint64, numSubEntries int) *MSHREntry
 	Remove(pid ca.PID, addr uint64) *MSHREntry
 	RemoveForWalker(pid ca.PID, addr uint64) *MSHREntry
 	AllEntries() []*MSHREntry
@@ -68,14 +68,14 @@ func (m *mshrImpl) Add(pid ca.PID, addr uint64) *MSHREntry {
 		log.Panic("MSHR is full")
 	}
 
-	entry := NewMSHREntry()
+	entry := NewMSHREntry(0)
 	entry.PID = pid
 	entry.Address = addr
 	m.entries = append(m.entries, entry)
 	return entry
 }
 
-func (m *mshrImpl) AddForWalker(pid ca.PID, addr uint64, offset uint64) *MSHREntry {
+func (m *mshrImpl) AddForWalker(pid ca.PID, addr uint64, offset uint64, numSubEntries int) *MSHREntry {
 	panic("AddForWalker is not supported in this MSHR")
 }
 
