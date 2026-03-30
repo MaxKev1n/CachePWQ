@@ -67,7 +67,7 @@ def plot_latency_heatmap(
         pivot_table, 
         annot=True,      # 在格子内显示具体数值
         fmt=".0f",       # 保留一位小数
-        cmap="YlGnBu",   # 颜色渐变方案：黄-绿-蓝
+        cmap="Blues",   # 颜色渐变方案：黄-绿-蓝
         annot_kws={"size": 20, "weight": "bold"},
         cbar_kws={
             'label': 'Average Latency (Cycles)', 

@@ -115,7 +115,7 @@ def plot_latency_histogram(
         r1, 
         frequency, 
         width=bar_width, 
-        color='#4c72b0', 
+        color='#C3D9F1', 
         edgecolor='black', 
         linewidth=1,
     )
