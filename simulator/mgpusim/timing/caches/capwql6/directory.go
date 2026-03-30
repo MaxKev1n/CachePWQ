@@ -185,8 +185,8 @@ func (d *directory) processReadMiss(
 		return false
 	}
 
-	if d.cache.mshr.IsFull() {
-		d.cache.notifyWalkerMSHRFull(now)
+	if d.cache.mshr.IsPartialFull(2) {
+		// d.cache.notifyWalkerMSHRFull(now)
 		return false
 	}
 
@@ -280,8 +280,8 @@ func (d *directory) partialWriteMiss(
 	cacheLineID := addr / blockSize * blockSize
 	trans.fetchAndWrite = true
 
-	if d.cache.mshr.IsFull() {
-		d.cache.notifyWalkerMSHRFull(now)
+	if d.cache.mshr.IsPartialFull(2) {
+		// d.cache.notifyWalkerMSHRFull(now)
 		return false
 	}
 
