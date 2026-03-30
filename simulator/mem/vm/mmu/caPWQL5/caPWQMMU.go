@@ -327,7 +327,9 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1V(now akita.VTimeInSec) {
 	PPN := trans.PPN
 	PPNWithOffset := walker.mmu.pageTable.AddOffset(PPN, trans.vAddr)
 
-	dstPort := walker.mmu.VCacheLowModuleFinder.Find(PPNWithOffset)
+	// dstPort := walker.mmu.VCacheLowModuleFinder.Find(PPNWithOffset)
+	lowModules := walker.mmu.VCacheLowModuleFinder.(*cache.XORLowModuleFinder).LowModules
+	dstPort := lowModules[walker.mmu.vRR%uint64(len(lowModules))]
 
 	if _, full := walker.mmu.fullFlags[dstPort.Name()]; full {
 		walker.sendWriteReqToL1I(now)
@@ -362,6 +364,8 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1V(now akita.VTimeInSec) {
 
 	walker.secondaryTransaction = nil
 
+	walker.mmu.vRR = (walker.mmu.vRR + 1) % uint64(len(lowModules))
+
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(writeReq, walker.mmu),
 		now, walker.mmu, "page_walk_store_l1")
 	tracing.EndTask(walker.mmu.Name()+"stall", now, walker.mmu)
@@ -377,7 +381,10 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1I(now akita.VTimeInSec) {
 	PPN := trans.PPN
 	PPNWithOffset := walker.mmu.pageTable.AddOffset(PPN, trans.vAddr)
 
-	dstPort := walker.mmu.ICacheLowModuleFinder.Find(PPNWithOffset)
+	// dstPort := walker.mmu.ICacheLowModuleFinder.Find(PPNWithOffset)
+	lowModules := walker.mmu.ICacheLowModuleFinder.(*cache.XORLowModuleFinder).LowModules
+	dstPort := lowModules[walker.mmu.iRR%uint64(len(lowModules))]
+
 	if _, full := walker.mmu.fullFlags[dstPort.Name()]; full {
 		tracing.StartTask(walker.mmu.Name()+"stall", "", now, walker.mmu, "mmu_stall", "", nil)
 		trans.state = noMshr
@@ -411,6 +418,8 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1I(now akita.VTimeInSec) {
 	}
 
 	walker.secondaryTransaction = nil
+
+	walker.mmu.iRR = (walker.mmu.iRR + 1) % uint64(len(lowModules))
 
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(writeReq, walker.mmu),
 		now, walker.mmu, "page_walk_store_l1")
@@ -543,6 +552,9 @@ type CaPWQMMU struct {
 	fullFlags map[string]bool
 
 	monitorStats *monitor.CaPWQMonitorStats
+
+	vRR uint64
+	iRR uint64
 }
 
 func (mmu *CaPWQMMU) InitMonitorStats() {
