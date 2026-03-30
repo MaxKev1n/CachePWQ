@@ -9,9 +9,9 @@ import (
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mem/vm/addresstranslator"
 	"gitlab.com/akita/mem/vm/tlb"
-	"gitlab.com/akita/mgpusim/timing/caches/capwql1"
-	"gitlab.com/akita/mgpusim/timing/caches/capwql2"
-	"gitlab.com/akita/mgpusim/timing/caches/capwql3"
+	CaPWQCacheL1 "gitlab.com/akita/mgpusim/timing/caches/capwql1"
+	CaPWQCacheL2 "gitlab.com/akita/mgpusim/timing/caches/capwql2"
+	CaPWQCacheL3 "gitlab.com/akita/mgpusim/timing/caches/capwql3"
 	CaPWQCacheL4 "gitlab.com/akita/mgpusim/timing/caches/capwql4"
 	CaPWQCacheL6 "gitlab.com/akita/mgpusim/timing/caches/capwql6"
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
@@ -664,7 +664,8 @@ func (b *shaderArrayBuilder) buildCaPWQL6L1VCaches(sa *shaderArray) {
 		WithNumMSHREntry(32).
 		WithTotalByteSize(64 * mem.KB).
 		WithNumReqsPerCycle(2).
-		WithBankLatency(28)
+		WithBankLatency(28).
+		WithExtendBits(6)
 
 	if b.visTracer != nil {
 		builder = builder.WithVisTracer(b.visTracer)

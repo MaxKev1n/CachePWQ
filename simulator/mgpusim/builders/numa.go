@@ -1418,7 +1418,7 @@ func (b *NUMAGPUBuilder) establishMMUToCaPWQL6L1RoutingPath(chiplet *Chiplet) {
 			numVCachesPerGPC,
 			4,
 			int(math.Log2(float64(numVCachesPerGPC))),
-			int(b.log2CacheLineSize)+3)
+			int(b.log2CacheLineSize)+6)
 
 		switch mmu := chiplet.MMUs[i].(type) {
 		case *caPWQL5.CaPWQMMU:
@@ -1431,7 +1431,7 @@ func (b *NUMAGPUBuilder) establishMMUToCaPWQL6L1RoutingPath(chiplet *Chiplet) {
 			numICachesPerGPC,
 			4,
 			int(math.Log2(float64(numICachesPerGPC))),
-			int(b.log2CacheLineSize)+3)
+			int(b.log2CacheLineSize))
 
 		switch mmu := chiplet.MMUs[i].(type) {
 		case *caPWQL5.CaPWQMMU:

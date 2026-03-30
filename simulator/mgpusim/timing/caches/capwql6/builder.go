@@ -26,6 +26,7 @@ type Builder struct {
 	lowModuleFinder cache.LowModuleFinder
 	visTracer       tracing.Tracer
 	isInstCache     bool
+	extendBits      uint64
 }
 
 // NewBuilder creates a builder with default parameter setting
@@ -40,6 +41,7 @@ func NewBuilder() *Builder {
 		numReqPerCycle:  4,
 		bankLatency:     20,
 		isInstCache:     false,
+		extendBits:      0,
 	}
 }
 
@@ -117,6 +119,14 @@ func (b *Builder) WithLowModuleFinder(
 // WithInstCache sets whether the cache to build is an instruction cache
 func (b *Builder) WithInstCache() *Builder {
 	b.isInstCache = true
+	return b
+}
+
+// WithExtendBits sets the number of bits used to extend the address when indexing
+// the directory. This is used to support larger block size without increasing
+// the directory size.
+func (b *Builder) WithExtendBits(n uint64) *Builder {
+	b.extendBits = n
 	return b
 }
 
@@ -209,7 +219,7 @@ func (b *Builder) buildStages(c *Cache) {
 	}
 	c.directoryStatus = make([]profile.CachePSVStatus, b.numReqPerCycle)
 
-	c.extendBits = 3
+	c.extendBits = b.extendBits
 	c.offsetMask = (1 << c.extendBits) - 1
 }
 
