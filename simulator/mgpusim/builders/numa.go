@@ -1415,11 +1415,18 @@ func (b *NUMAGPUBuilder) establishMMUToCaPWQL6L1RoutingPath(chiplet *Chiplet) {
 			numVCachesPerGPC,
 			4,
 			int(math.Log2(float64(numVCachesPerGPC))),
-			int(b.log2CacheLineSize)+6)
+			int(b.log2CacheLineSize))
+
+		vControlFinder := cache.NewXORLowModuleFinder(
+			numVCachesPerGPC,
+			4,
+			int(math.Log2(float64(numVCachesPerGPC))),
+			int(b.log2CacheLineSize))
 
 		switch mmu := chiplet.MMUs[i].(type) {
 		case *caPWQL5.CaPWQMMU:
 			mmu.VCacheLowModuleFinder = vlowModuleFinder
+			mmu.VCacheControlFinder = vControlFinder
 		default:
 			panic("MMU is not CaPWQMMU")
 		}
@@ -1437,6 +1444,12 @@ func (b *NUMAGPUBuilder) establishMMUToCaPWQL6L1RoutingPath(chiplet *Chiplet) {
 				chiplet.L1VCaches[j].GetWalkerPort(),
 			)
 			conn.PlugIn(chiplet.L1VCaches[j].GetWalkerPort(), 16)
+
+			vControlFinder.LowModules = append(
+				vControlFinder.LowModules,
+				chiplet.L1VCaches[j].GetControlPort(),
+			)
+			conn.PlugIn(chiplet.L1VCaches[j].GetControlPort(), 16)
 
 			chiplet.L1VCaches[j].(*CaPWQCacheL6.Cache).PageWalker =
 				chiplet.MMUs[i].ToCachePort()
