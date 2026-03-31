@@ -76,6 +76,11 @@ type LastLevelTLB struct {
 	dispatcher internal.Dispatcher
 }
 
+func (tlb *LastLevelTLB) SentCommand(info interface{}) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (tlb *LastLevelTLB) InitMonitorStats() {
 	tlb.monitorStats = &monitor.MonitorStats{
 		Name:     tlb.Name(),

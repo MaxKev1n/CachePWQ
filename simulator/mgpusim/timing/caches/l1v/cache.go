@@ -52,6 +52,11 @@ type Cache struct {
 	monitorStats *monitor.CaPWQMonitorStats
 }
 
+func (c *Cache) SentCommand(info interface{}) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (c *Cache) InitMonitorStats() {
 	c.monitorStats = &monitor.CaPWQMonitorStats{}
 }

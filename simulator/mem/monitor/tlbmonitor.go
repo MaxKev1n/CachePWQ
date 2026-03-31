@@ -9,6 +9,7 @@ type MonitorComponent interface {
 	InitMonitorStats()
 	ClearMonitorStats()
 	GetMonitorStats() interface{}
+	SentCommand(info interface{})
 }
 
 type TLBMonitor struct {
