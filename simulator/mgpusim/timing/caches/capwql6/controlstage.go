@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/util"
 )
@@ -96,6 +97,8 @@ func (s *controlStage) processNewRequest(now akita.VTimeInSec) bool {
 	}
 
 	switch req := req.(type) {
+	case *mem.ControlMsg:
+		return s.doControlMsg(now, req)
 	case *cache.FlushReq:
 		return s.startCacheFlush(now, req)
 	case *cache.RestartReq:
@@ -144,6 +147,18 @@ func (s *controlStage) doCacheRestart(now akita.VTimeInSec, req *cache.RestartRe
 	if err != nil {
 		log.Panic("Unable to send restart rsp")
 	}
+
+	return true
+}
+
+func (s *controlStage) doControlMsg(now akita.VTimeInSec, req *mem.ControlMsg) bool {
+	s.cache.isPaused = false
+
+	s.ctrlPort.Retrieve(now)
+
+	numEntry := req.Info.(int)
+
+	s.cache.numReservedPTWEntry = numEntry
 
 	return true
 }

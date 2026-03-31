@@ -3,7 +3,6 @@ package caPWQL5
 import (
 	"encoding/binary"
 	"fmt"
-	"log"
 	"reflect"
 	"strconv"
 
@@ -55,20 +54,7 @@ type MSHRController struct {
 }
 
 func (m *MSHRController) Tick(now akita.VTimeInSec) bool {
-	numInfight := 0
-
-	for i := range m.mmu.pageWalkers {
-		if m.mmu.pageWalkers[i].transaction != nil {
-			numInfight++
-		}
-
-		if m.mmu.pageWalkers[i].secondaryTransaction != nil {
-			numInfight++
-		}
-	}
-
-	numInfight += len(m.mmu.pageWalkReqQueue)
-	numInfight += len(m.mmu.pageWalkRspQueue)
+	numInfight := int(m.mmu.numInflightPTWRequests)
 
 	numExpectedEntry := 0
 	if numInfight-len(m.mmu.pageWalkers) <= 0 {
@@ -106,9 +92,6 @@ func (m *MSHRController) Tick(now akita.VTimeInSec) bool {
 		}
 	}
 
-	log.Printf("%s@%.12f: Update MSHR reservation, numInfight: %d, numExpectedEntry: %d, counter: %d, numReservedEntry: %d\n",
-		m.mmu.Name(), now, numInfight, numExpectedEntry, m.counter, m.numReservedEntry)
-
 	m.issue(now, m.numReservedEntry)
 
 	return true
@@ -141,7 +124,7 @@ func (m *MSHRController) issue(
 	now akita.VTimeInSec,
 	numEntry int,
 ) {
-	lowModules := m.mmu.VCacheLowModuleFinder.(*cache.XORLowModuleFinder).LowModules
+	lowModules := m.mmu.VCacheControlFinder.(*cache.XORLowModuleFinder).LowModules
 
 	for i := range m.mmu.pageWalkers {
 		dstPort := lowModules[i]
@@ -563,6 +546,7 @@ type CaPWQMMU struct {
 
 	ToCache               akita.Port
 	VCacheLowModuleFinder cache.LowModuleFinder
+	VCacheControlFinder   cache.LowModuleFinder
 
 	pageTable *device.PageTableImpl
 
@@ -602,11 +586,9 @@ func (mmu *CaPWQMMU) GetMonitorStats() interface{} {
 func (mmu *CaPWQMMU) checkMSHRFull(now akita.VTimeInSec) {
 	if len(mmu.pageWalkRspQueue) > 0 ||
 		len(mmu.pageWalkReqQueue) > 0 {
-		if now-mmu.walkerController.lastIssueTime > 1e-7 {
+		if now-mmu.walkerController.lastIssueTime > 2*1e-7 {
 			mmu.walkerController.reset(now)
 			mmu.walkerController.issue(now, 4)
-
-			log.Printf("%s@%.12f: MSHR is full, reset reservation\n", mmu.Name(), now)
 		}
 	}
 }
