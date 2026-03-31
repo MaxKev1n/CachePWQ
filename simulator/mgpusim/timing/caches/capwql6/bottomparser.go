@@ -71,10 +71,6 @@ func (p *bottomParser) processDataReady(
 		return false
 	}
 
-	if !p.cache.notifyWalkerMSHRNotFull(now) {
-		return false
-	}
-
 	addr := trans.Address()
 	cachelineID := (addr >> p.cache.log2BlockSize) << p.cache.log2BlockSize
 	data := dr.Data
@@ -102,10 +98,6 @@ func (p *bottomParser) processPTEsDataReady(
 	dr *mem.DataReadyRsp,
 	trans *transaction,
 ) bool {
-	if !p.cache.notifyWalkerMSHRNotFull(now) {
-		return false
-	}
-
 	pid := trans.readToBottom.PID
 
 	addr := trans.Address()

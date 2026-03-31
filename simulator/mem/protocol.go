@@ -453,7 +453,7 @@ type ControlMsg struct {
 	DiscardTransations bool
 	Restart            bool
 	NotifyDone         bool
-	Full               bool
+	Info               interface{}
 }
 
 // Meta returns the meta data assocated with the ControlMsg.
@@ -468,7 +468,7 @@ type ControlMsgBuilder struct {
 	discardTransactions bool
 	restart             bool
 	notifyDone          bool
-	full                bool
+	info                interface{}
 }
 
 // WithSendTime sets the send time of the message to build.
@@ -510,8 +510,8 @@ func (b ControlMsgBuilder) ToNotifyDone() ControlMsgBuilder {
 	return b
 }
 
-func (b ControlMsgBuilder) ToFull() ControlMsgBuilder {
-	b.full = true
+func (b ControlMsgBuilder) WithInfo(info interface{}) ControlMsgBuilder {
+	b.info = info
 	return b
 }
 
@@ -526,7 +526,7 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.DiscardTransations = b.discardTransactions
 	m.Restart = b.restart
 	m.NotifyDone = b.notifyDone
-	m.Full = b.full
+	m.Info = b.info
 
 	return m
 }

@@ -190,12 +190,11 @@ func (d *directory) processReadMiss(
 	}
 
 	if d.cache.mshr.IsFull() {
-		d.cache.notifyWalkerMSHRFull(now)
 		return false
 	}
 
-	if !d.cache.isInstCache && d.cache.mshr.IsPartialFull(2) {
-		// d.cache.notifyWalkerMSHRFull(now)
+	if !d.cache.isInstCache &&
+		d.cache.mshr.IsPartialFull(d.cache.numReservedPTWEntry) {
 		return false
 	}
 
@@ -290,12 +289,11 @@ func (d *directory) partialWriteMiss(
 	trans.fetchAndWrite = true
 
 	if d.cache.mshr.IsFull() {
-		d.cache.notifyWalkerMSHRFull(now)
 		return false
 	}
 
-	if !d.cache.isInstCache && d.cache.mshr.IsPartialFull(2) {
-		// d.cache.notifyWalkerMSHRFull(now)
+	if !d.cache.isInstCache &&
+		d.cache.mshr.IsPartialFull(d.cache.numReservedPTWEntry) {
 		return false
 	}
 

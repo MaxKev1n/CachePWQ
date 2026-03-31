@@ -53,12 +53,12 @@ type Cache struct {
 
 	isInstCache bool
 
-	mshrFull bool
-
 	monitorStats *monitor.CaPWQMonitorStats
 
 	extendBits uint64
 	offsetMask uint64
+
+	numReservedPTWEntry int
 }
 
 func (c *Cache) InitMonitorStats() {
@@ -163,51 +163,6 @@ func (c *Cache) tickCoalesceState(now akita.VTimeInSec) bool {
 		madeProgress = c.coalesceStage.Tick(now) || madeProgress
 	}
 	return madeProgress
-}
-
-func (c *Cache) notifyWalkerMSHRFull(
-	now akita.VTimeInSec,
-) bool {
-	if c.mshrFull {
-		return true
-	}
-
-	msg := mem.ControlMsgBuilder{}.
-		WithSendTime(now).
-		WithSrc(c.WalkerPort).
-		WithDst(c.PageWalker).
-		ToFull().
-		Build()
-	err := c.WalkerPort.Send(msg)
-	if err != nil {
-		return false
-	}
-
-	c.mshrFull = true
-
-	return true
-}
-
-func (c *Cache) notifyWalkerMSHRNotFull(
-	now akita.VTimeInSec,
-) bool {
-	if !c.mshrFull {
-		return true
-	}
-
-	msg := mem.ControlMsgBuilder{}.
-		WithSendTime(now).
-		WithSrc(c.WalkerPort).
-		WithDst(c.PageWalker).
-		Build()
-	err := c.WalkerPort.Send(msg)
-	if err != nil {
-		return false
-	}
-
-	c.mshrFull = false
-
-	return true
 }
 
 func (c *Cache) GetTopPort() akita.Port {

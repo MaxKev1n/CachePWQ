@@ -1339,7 +1339,6 @@ func (b *NUMAGPUBuilder) establishMMUToLDSRoutingPath(chiplet *Chiplet) {
 
 func (b *NUMAGPUBuilder) establishMMUToL1RoutingPath(chiplet *Chiplet) {
 	numVCachesPerGPC := 16
-	numICachesPerGPC := 4
 	numGPCs := (len(chiplet.CUs)-1)/numVCachesPerGPC + 1
 
 	if len(chiplet.MMUs) != numGPCs {
@@ -1356,19 +1355,6 @@ func (b *NUMAGPUBuilder) establishMMUToL1RoutingPath(chiplet *Chiplet) {
 		switch mmu := chiplet.MMUs[i].(type) {
 		case *caPWQL5.CaPWQMMU:
 			mmu.VCacheLowModuleFinder = vlowModuleFinder
-		default:
-			panic("MMU is not CaPWQMMU")
-		}
-
-		ilowModuleFinder := cache.NewXORLowModuleFinder(
-			numICachesPerGPC,
-			4,
-			int(math.Log2(float64(numICachesPerGPC))),
-			int(b.log2CacheLineSize))
-
-		switch mmu := chiplet.MMUs[i].(type) {
-		case *caPWQL5.CaPWQMMU:
-			mmu.ICacheLowModuleFinder = ilowModuleFinder
 		default:
 			panic("MMU is not CaPWQMMU")
 		}
@@ -1390,23 +1376,11 @@ func (b *NUMAGPUBuilder) establishMMUToL1RoutingPath(chiplet *Chiplet) {
 			chiplet.L1VCaches[j].(*CaPWQCacheL4.Cache).PageWalker =
 				chiplet.MMUs[i].ToCachePort()
 		}
-
-		for j := i * numICachesPerGPC; j < (i+1)*numICachesPerGPC; j++ {
-			ilowModuleFinder.LowModules = append(
-				ilowModuleFinder.LowModules,
-				chiplet.L1ICaches[j].GetWalkerPort(),
-			)
-			conn.PlugIn(chiplet.L1ICaches[j].GetWalkerPort(), 16)
-
-			chiplet.L1ICaches[j].(*CaPWQCacheL4.Cache).PageWalker =
-				chiplet.MMUs[i].ToCachePort()
-		}
 	}
 }
 
 func (b *NUMAGPUBuilder) establishMMUToCaPWQL6L1RoutingPath(chiplet *Chiplet) {
 	numVCachesPerGPC := 16
-	numICachesPerGPC := 4
 	numGPCs := (len(chiplet.CUs)-1)/numVCachesPerGPC + 1
 
 	if len(chiplet.MMUs) != numGPCs {
@@ -1427,19 +1401,6 @@ func (b *NUMAGPUBuilder) establishMMUToCaPWQL6L1RoutingPath(chiplet *Chiplet) {
 			panic("MMU is not CaPWQMMU")
 		}
 
-		ilowModuleFinder := cache.NewXORLowModuleFinder(
-			numICachesPerGPC,
-			4,
-			int(math.Log2(float64(numICachesPerGPC))),
-			int(b.log2CacheLineSize))
-
-		switch mmu := chiplet.MMUs[i].(type) {
-		case *caPWQL5.CaPWQMMU:
-			mmu.ICacheLowModuleFinder = ilowModuleFinder
-		default:
-			panic("MMU is not CaPWQMMU")
-		}
-
 		conn := akita.NewDirectConnection(
 			fmt.Sprintf("%s.MMU_%02d_To_L1Conn", chiplet.name, i),
 			b.engine, 1*akita.GHz,
@@ -1455,17 +1416,6 @@ func (b *NUMAGPUBuilder) establishMMUToCaPWQL6L1RoutingPath(chiplet *Chiplet) {
 			conn.PlugIn(chiplet.L1VCaches[j].GetWalkerPort(), 16)
 
 			chiplet.L1VCaches[j].(*CaPWQCacheL6.Cache).PageWalker =
-				chiplet.MMUs[i].ToCachePort()
-		}
-
-		for j := i * numICachesPerGPC; j < (i+1)*numICachesPerGPC; j++ {
-			ilowModuleFinder.LowModules = append(
-				ilowModuleFinder.LowModules,
-				chiplet.L1ICaches[j].GetWalkerPort(),
-			)
-			conn.PlugIn(chiplet.L1ICaches[j].GetWalkerPort(), 16)
-
-			chiplet.L1ICaches[j].(*CaPWQCacheL6.Cache).PageWalker =
 				chiplet.MMUs[i].ToCachePort()
 		}
 	}

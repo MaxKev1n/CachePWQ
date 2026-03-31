@@ -115,7 +115,7 @@ func (b CaPWQMMUBuilder) Build(name string) mmu.MMU {
 
 	mmu.log2CacheLineSize = b.log2CacheLineSize
 
-	mmu.fullFlags = make(map[string]bool)
+	mmu.walkerController = newMSHRController(mmu)
 
 	return mmu
 }
