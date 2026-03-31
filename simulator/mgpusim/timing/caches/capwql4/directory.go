@@ -74,7 +74,6 @@ func (d *directory) processWalkerWrite(
 	}
 
 	if d.cache.mshr.IsFull() {
-		d.cache.notifyWalkerMSHRFull(now)
 		return false
 	}
 
@@ -291,7 +290,6 @@ func (d *directory) processReadMiss(
 	}
 
 	if d.cache.mshr.IsFull() {
-		d.cache.notifyWalkerMSHRFull(now)
 		return false
 	}
 
@@ -386,7 +384,6 @@ func (d *directory) partialWriteMiss(
 	trans.fetchAndWrite = true
 
 	if d.cache.mshr.IsFull() {
-		d.cache.notifyWalkerMSHRFull(now)
 		return false
 	}
 

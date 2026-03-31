@@ -47,6 +47,13 @@ func (c *walkerStage) processReqFromWalker(
 		return false
 	}
 
+	if msg, ok := item.(*mem.ControlMsg); ok {
+		c.cache.numReservedPTWEntry = msg.Info.(int)
+
+		c.cache.WalkerPort.Retrieve(now)
+		return true
+	}
+
 	if !c.cache.walkerDirBuf.CanPush() {
 		return false
 	}
@@ -130,7 +137,6 @@ func (c *walkerStage) processWalkerWrite(
 	}
 
 	if c.cache.mshr.IsFull() {
-		c.cache.notifyWalkerMSHRFull(now)
 		return false
 	}
 

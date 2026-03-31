@@ -283,7 +283,7 @@ func (b *shaderArrayBuilder) buildCaPWQL4Components(sa *shaderArray) {
 	b.buildL1ITLB(sa)
 	b.buildCaPWQL1IAddressTranslator(sa)
 	b.buildL1IReorderBuffer(sa)
-	b.buildCaPWQL4L1ICache(sa)
+	b.buildL1ICache(sa)
 }
 
 func (b *shaderArrayBuilder) buildCaPWQL6Components(sa *shaderArray) {
@@ -886,29 +886,6 @@ func (b *shaderArrayBuilder) buildL1ICache(sa *shaderArray) {
 		WithInstCache()
 
 	name := fmt.Sprintf("%s.L1ICache", b.name)
-	cache := builder.Build(name)
-	sa.l1iCache = cache
-
-	if b.visTracer != nil {
-		tracing.CollectTrace(cache, b.visTracer)
-	}
-}
-
-func (b *shaderArrayBuilder) buildCaPWQL4L1ICache(sa *shaderArray) {
-	builder := CaPWQCacheL4.NewBuilder().
-		WithEngine(b.engine).
-		WithFreq(b.freq).
-		WithBankLatency(20).
-		WithNumBanks(1).
-		WithLog2BlockSize(b.log2CacheLineSize).
-		WithWayAssocitivity(16).
-		WithNumMSHREntry(8).
-		WithTotalByteSize(64 * mem.KB).
-		WithNumReqsPerCycle(4).
-		WithBankLatency(28).
-		WithInstCache()
-
-	name := fmt.Sprintf("%s.CaPWQL1ICache", b.name)
 	cache := builder.Build(name)
 	sa.l1iCache = cache
 

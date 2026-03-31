@@ -3,6 +3,7 @@ package caPWQL5
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
 	"reflect"
 	"strconv"
 
@@ -25,7 +26,6 @@ const (
 	sentToMem
 	l1Done
 	memDone
-	noMshr
 	transactionFinished
 )
 
@@ -41,6 +41,120 @@ type transactionImpl struct {
 	vAddr   uint64
 	pid     ca.PID
 	data    []byte
+}
+
+type MSHRController struct {
+	*akita.TickingComponent
+
+	mmu *CaPWQMMU
+
+	numReservedEntry int
+	counter          int // 2 bit counter
+
+	lastIssueTime akita.VTimeInSec
+}
+
+func (m *MSHRController) Tick(now akita.VTimeInSec) bool {
+	numInfight := 0
+
+	for i := range m.mmu.pageWalkers {
+		if m.mmu.pageWalkers[i].transaction != nil {
+			numInfight++
+		}
+
+		if m.mmu.pageWalkers[i].secondaryTransaction != nil {
+			numInfight++
+		}
+	}
+
+	numInfight += len(m.mmu.pageWalkReqQueue)
+	numInfight += len(m.mmu.pageWalkRspQueue)
+
+	numExpectedEntry := 0
+	if numInfight-len(m.mmu.pageWalkers) <= 0 {
+		numExpectedEntry = 0
+	} else if numInfight-len(m.mmu.pageWalkers) <= 16 {
+		numExpectedEntry = 1
+	} else if numInfight-len(m.mmu.pageWalkers) <= 32 {
+		numExpectedEntry = 2
+	} else if numInfight-len(m.mmu.pageWalkers) <= 48 {
+		numExpectedEntry = 3
+	} else {
+		numExpectedEntry = 4
+	}
+
+	if numExpectedEntry > m.numReservedEntry {
+		m.counter = 3
+	} else if numExpectedEntry < m.numReservedEntry {
+		// decrease 2-bit counter
+		if m.counter > 0 {
+			m.counter--
+		}
+	} else {
+		if m.counter == 0 {
+			m.counter = 1
+		}
+	}
+
+	if m.counter == 0 {
+		if m.numReservedEntry > 0 {
+			m.numReservedEntry--
+		}
+	} else if m.counter == 3 {
+		if m.numReservedEntry < 4 {
+			m.numReservedEntry++
+		}
+	}
+
+	log.Printf("%s@%.12f: Update MSHR reservation, numInfight: %d, numExpectedEntry: %d, counter: %d, numReservedEntry: %d\n",
+		m.mmu.Name(), now, numInfight, numExpectedEntry, m.counter, m.numReservedEntry)
+
+	m.issue(now, m.numReservedEntry)
+
+	return true
+}
+
+func (m *MSHRController) reset(now akita.VTimeInSec) {
+	m.lastIssueTime = now
+	m.numReservedEntry = 4
+	m.counter = 3
+}
+
+func newMSHRController(mmu *CaPWQMMU) *MSHRController {
+	controller := &MSHRController{
+		mmu:              mmu,
+		numReservedEntry: 4,
+		counter:          3,
+	}
+
+	controller.TickingComponent = akita.NewTickingComponent(
+		fmt.Sprintf("%s.MSHRController", mmu.Name()),
+		mmu.Engine,
+		1*akita.KHz,
+		controller,
+	)
+
+	return controller
+}
+
+func (m *MSHRController) issue(
+	now akita.VTimeInSec,
+	numEntry int,
+) {
+	lowModules := m.mmu.VCacheLowModuleFinder.(*cache.XORLowModuleFinder).LowModules
+
+	for i := range m.mmu.pageWalkers {
+		dstPort := lowModules[i]
+
+		writeReq := mem.ControlMsgBuilder{}.
+			WithSendTime(now).
+			WithSrc(m.mmu.ToCache).
+			WithDst(dstPort).
+			WithInfo(numEntry).
+			Build()
+
+		m.mmu.ToCache.Send(writeReq)
+	}
 }
 
 type CaPWQPageWalker struct {
@@ -234,7 +348,6 @@ func (walker *CaPWQPageWalker) walkSecondaryPageTable(now akita.VTimeInSec) bool
 		walker.sendWriteReqToL1V(now)
 	case transactionFinished:
 		walker.finalizeTransaction(now, walker.secondaryTransaction)
-	case noMshr:
 	default:
 		panic("invalid transaction state")
 	}
@@ -357,92 +470,14 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1V(now akita.VTimeInSec) {
 		return
 	}
 
+	walker.mmu.walkerController.lastIssueTime = now
+
 	walker.secondaryTransaction = nil
 
 	walker.mmu.vRR = (walker.mmu.vRR + 1) % uint64(len(lowModules))
 
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(writeReq, walker.mmu),
 		now, walker.mmu, "page_walk_store_l1")
-	tracing.EndTask(walker.mmu.Name()+"stall", now, walker.mmu)
-}
-
-func (walker *CaPWQPageWalker) sendWriteReqToL1I(now akita.VTimeInSec) {
-	trans := walker.secondaryTransaction
-
-	if trans.state != pageWalkCacheDone && trans.state != l1Done {
-		panic("this state shouldn't be here!")
-	}
-
-	PPN := trans.PPN
-	PPNWithOffset := walker.mmu.pageTable.AddOffset(PPN, trans.vAddr)
-
-	// dstPort := walker.mmu.ICacheLowModuleFinder.Find(PPNWithOffset)
-	lowModules := walker.mmu.ICacheLowModuleFinder.(*cache.XORLowModuleFinder).LowModules
-	dstPort := lowModules[walker.mmu.iRR%uint64(len(lowModules))]
-
-	if _, full := walker.mmu.fullFlags[dstPort.Name()]; full {
-		tracing.StartTask(walker.mmu.Name()+"stall", "", now, walker.mmu, "mmu_stall", "", nil)
-		trans.state = noMshr
-		return
-	}
-
-	block := vm.CaPWQBlock{
-		PID:           trans.pid,
-		Address:       trans.Address,
-		PPNWithOffset: PPNWithOffset,
-		Level:         trans.level,
-		MsgID:         trans.msgID,
-	}
-
-	writeReq := mem.WriteReqBuilder{}.
-		WithSendTime(now).
-		WithSrc(walker.mmu.ToCache).
-		WithDst(dstPort).
-		WithPID(trans.pid).
-		WithAddress(PPNWithOffset).
-		WithInfo(block).
-		Build()
-
-	writeReq.TrafficBytes += 12
-	writeReq.PTW = true
-
-	err := walker.mmu.ToCache.Send(writeReq)
-	if err != nil {
-		tracing.StartTask(walker.mmu.Name()+"stall", "", now, walker.mmu, "mmu_stall", "", nil)
-		return
-	}
-
-	walker.secondaryTransaction = nil
-
-	walker.mmu.iRR = (walker.mmu.iRR + 1) % uint64(len(lowModules))
-
-	tracing.AddTaskStep(tracing.MsgIDAtReceiver(writeReq, walker.mmu),
-		now, walker.mmu, "page_walk_store_l1")
-	tracing.EndTask(walker.mmu.Name()+"stall", now, walker.mmu)
-}
-
-func (walker *CaPWQPageWalker) revokeSecondaryTransaction(
-	now akita.VTimeInSec,
-	portName string,
-) {
-	trans := walker.secondaryTransaction
-	if trans == nil || trans.state != noMshr {
-		return
-	}
-
-	PPN := trans.PPN
-	PPNWithOffset := walker.mmu.pageTable.AddOffset(PPN, trans.vAddr)
-
-	dstPort := walker.mmu.ICacheLowModuleFinder.Find(PPNWithOffset)
-
-	if dstPort.Name() != portName {
-		return
-	}
-
-	trans.state = pageWalkCacheDone
-
-	walker.TickLater(now)
-
 	tracing.EndTask(walker.mmu.Name()+"stall", now, walker.mmu)
 }
 
@@ -528,7 +563,6 @@ type CaPWQMMU struct {
 
 	ToCache               akita.Port
 	VCacheLowModuleFinder cache.LowModuleFinder
-	ICacheLowModuleFinder cache.LowModuleFinder
 
 	pageTable *device.PageTableImpl
 
@@ -544,12 +578,13 @@ type CaPWQMMU struct {
 	walkReqQueueCapacity int
 	walkRspQueueCapacity int
 
-	fullFlags map[string]bool
-
 	monitorStats *monitor.CaPWQMonitorStats
 
 	vRR uint64
-	iRR uint64
+
+	walkerController *MSHRController
+
+	init bool
 }
 
 func (mmu *CaPWQMMU) InitMonitorStats() {
@@ -564,6 +599,18 @@ func (mmu *CaPWQMMU) GetMonitorStats() interface{} {
 	return mmu.monitorStats
 }
 
+func (mmu *CaPWQMMU) checkMSHRFull(now akita.VTimeInSec) {
+	if len(mmu.pageWalkRspQueue) > 0 ||
+		len(mmu.pageWalkReqQueue) > 0 {
+		if now-mmu.walkerController.lastIssueTime > 1e-7 {
+			mmu.walkerController.reset(now)
+			mmu.walkerController.issue(now, 4)
+
+			log.Printf("%s@%.12f: MSHR is full, reset reservation\n", mmu.Name(), now)
+		}
+	}
+}
+
 // Tick defines how the MMU update state each cycle
 func (mmu *CaPWQMMU) Tick(now akita.VTimeInSec) bool {
 	mmu.topSender.Tick(now)
@@ -574,6 +621,8 @@ func (mmu *CaPWQMMU) Tick(now akita.VTimeInSec) bool {
 	mmu.parseFromPageWalkCache(now)
 	mmu.parseFromTop(now)
 	mmu.processPageWalkReqQueue(now)
+
+	mmu.checkMSHRFull(now)
 
 	if mmu.isActive() {
 		tracing.StartTask(
@@ -614,6 +663,12 @@ func (mmu *CaPWQMMU) Tick(now akita.VTimeInSec) bool {
 				mmu.monitorStats.ReqLength++
 			}
 		}
+	}
+
+	if !mmu.init {
+		mmu.walkerController.TickNow(now)
+
+		mmu.init = true
 	}
 
 	return true
@@ -690,28 +745,9 @@ func (mmu *CaPWQMMU) parseFromL1(now akita.VTimeInSec) bool {
 		mmu.ToCache.Retrieve(now)
 
 		return true
-	case *mem.ControlMsg:
-		return mmu.handleControlMsg(msg, now)
 	default:
 		panic("unknown message type")
 	}
-}
-
-func (mmu *CaPWQMMU) handleControlMsg(msg *mem.ControlMsg, now akita.VTimeInSec) bool {
-	isFull := msg.Full
-	if isFull {
-		mmu.fullFlags[msg.Src.Name()] = true
-	} else {
-		delete(mmu.fullFlags, msg.Src.Name())
-
-		for _, walker := range mmu.pageWalkers {
-			walker.revokeSecondaryTransaction(now, msg.Src.Name())
-		}
-	}
-
-	mmu.ToCache.Retrieve(now)
-
-	return true
 }
 
 func (mmu *CaPWQMMU) handleL1ReadResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) bool {
