@@ -86,6 +86,10 @@ func (d *directory) processMSHRHit(
 	trans *transaction,
 	mshrEntry *cache.MSHREntry,
 ) bool {
+	if len(mshrEntry.Requests) >= 8 {
+		return false
+	}
+
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
 
 	d.cache.dirBuf.Pop()

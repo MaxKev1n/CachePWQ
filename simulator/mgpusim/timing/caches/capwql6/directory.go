@@ -115,6 +115,10 @@ func (d *directory) processMSHRHit(
 	trans *transaction,
 	mshrEntry *cache.MSHREntry,
 ) bool {
+	if len(mshrEntry.Requests) >= 8 {
+		return false
+	}
+
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
 
 	d.cache.dirBuf.Pop()
@@ -185,7 +189,12 @@ func (d *directory) processReadMiss(
 		return false
 	}
 
-	if d.cache.mshr.IsPartialFull(2) {
+	if d.cache.mshr.IsFull() {
+		d.cache.notifyWalkerMSHRFull(now)
+		return false
+	}
+
+	if !d.cache.isInstCache && d.cache.mshr.IsPartialFull(2) {
 		// d.cache.notifyWalkerMSHRFull(now)
 		return false
 	}
@@ -280,7 +289,12 @@ func (d *directory) partialWriteMiss(
 	cacheLineID := addr / blockSize * blockSize
 	trans.fetchAndWrite = true
 
-	if d.cache.mshr.IsPartialFull(2) {
+	if d.cache.mshr.IsFull() {
+		d.cache.notifyWalkerMSHRFull(now)
+		return false
+	}
+
+	if !d.cache.isInstCache && d.cache.mshr.IsPartialFull(2) {
 		// d.cache.notifyWalkerMSHRFull(now)
 		return false
 	}

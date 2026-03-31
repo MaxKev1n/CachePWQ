@@ -331,11 +331,6 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1V(now akita.VTimeInSec) {
 	lowModules := walker.mmu.VCacheLowModuleFinder.(*cache.XORLowModuleFinder).LowModules
 	dstPort := lowModules[walker.mmu.vRR%uint64(len(lowModules))]
 
-	if _, full := walker.mmu.fullFlags[dstPort.Name()]; full {
-		walker.sendWriteReqToL1I(now)
-		return
-	}
-
 	block := vm.CaPWQBlock{
 		PID:           trans.pid,
 		Address:       trans.Address,
