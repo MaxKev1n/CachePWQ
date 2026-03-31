@@ -197,6 +197,10 @@ func (c *walkerStage) processWalkerWriteMSHRHit(
 	trans *transaction,
 	mshrEntry *cache.MSHREntry,
 ) bool {
+	if len(mshrEntry.Requests) >= 8 {
+		return false
+	}
+
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
 
 	c.cache.walkerDirBuf.Pop()
@@ -216,6 +220,10 @@ func (c *walkerStage) processWalkerWritePartialMSHRHit(
 	trans *transaction,
 	mshrEntry *cache.MSHREntry,
 ) bool {
+	if len(mshrEntry.Requests) >= 8 {
+		return false
+	}
+
 	addr := trans.Address()
 	pid := trans.PID()
 	blockSize := uint64(1 << c.cache.log2BlockSize)

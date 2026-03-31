@@ -4,3 +4,6 @@
 
 MMU:
   type: "InfiniteMMU"
+
+L3TLB:
+  dispatcher: "roundrobin"
