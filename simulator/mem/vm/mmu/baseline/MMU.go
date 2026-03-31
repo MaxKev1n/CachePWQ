@@ -97,6 +97,11 @@ type MMUImpl struct {
 	L2Caches            []*writeback.Cache
 }
 
+func (m *MMUImpl) SentCommand(info interface{}) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (impl *MMUImpl) InitMonitorStats() {
 	impl.monitorStats = &monitor.CaPWQMonitorStats{}
 }

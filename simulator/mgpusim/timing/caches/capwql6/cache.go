@@ -61,6 +61,10 @@ type Cache struct {
 	numReservedPTWEntry int
 }
 
+func (c *Cache) SentCommand(info interface{}) {
+	c.numReservedPTWEntry = info.(int)
+}
+
 func (c *Cache) InitMonitorStats() {
 	c.monitorStats = &monitor.CaPWQMonitorStats{}
 }

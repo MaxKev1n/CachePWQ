@@ -42,104 +42,6 @@ type transactionImpl struct {
 	data    []byte
 }
 
-type MSHRController struct {
-	*akita.TickingComponent
-
-	mmu *CaPWQMMU
-
-	numReservedEntry int
-	counter          int // 2 bit counter
-
-	lastIssueTime akita.VTimeInSec
-}
-
-func (m *MSHRController) Tick(now akita.VTimeInSec) bool {
-	numInfight := int(m.mmu.numInflightPTWRequests)
-
-	numExpectedEntry := 0
-	if numInfight-len(m.mmu.pageWalkers) <= 0 {
-		numExpectedEntry = 0
-	} else if numInfight-len(m.mmu.pageWalkers) <= 16 {
-		numExpectedEntry = 1
-	} else if numInfight-len(m.mmu.pageWalkers) <= 32 {
-		numExpectedEntry = 2
-	} else if numInfight-len(m.mmu.pageWalkers) <= 48 {
-		numExpectedEntry = 3
-	} else {
-		numExpectedEntry = 4
-	}
-
-	if numExpectedEntry > m.numReservedEntry {
-		m.counter = 3
-	} else if numExpectedEntry < m.numReservedEntry {
-		// decrease 2-bit counter
-		if m.counter > 0 {
-			m.counter--
-		}
-	} else {
-		if m.counter == 0 {
-			m.counter = 1
-		}
-	}
-
-	if m.counter == 0 {
-		if m.numReservedEntry > 0 {
-			m.numReservedEntry--
-		}
-	} else if m.counter == 3 {
-		if m.numReservedEntry < 4 {
-			m.numReservedEntry++
-		}
-	}
-
-	m.issue(now, m.numReservedEntry)
-
-	return true
-}
-
-func (m *MSHRController) reset(now akita.VTimeInSec) {
-	m.lastIssueTime = now
-	m.numReservedEntry = 4
-	m.counter = 3
-}
-
-func newMSHRController(mmu *CaPWQMMU) *MSHRController {
-	controller := &MSHRController{
-		mmu:              mmu,
-		numReservedEntry: 4,
-		counter:          3,
-	}
-
-	controller.TickingComponent = akita.NewTickingComponent(
-		fmt.Sprintf("%s.MSHRController", mmu.Name()),
-		mmu.Engine,
-		1*akita.KHz,
-		controller,
-	)
-
-	return controller
-}
-
-func (m *MSHRController) issue(
-	now akita.VTimeInSec,
-	numEntry int,
-) {
-	lowModules := m.mmu.VCacheControlFinder.(*cache.XORLowModuleFinder).LowModules
-
-	for i := range m.mmu.pageWalkers {
-		dstPort := lowModules[i]
-
-		writeReq := mem.ControlMsgBuilder{}.
-			WithSendTime(now).
-			WithSrc(m.mmu.ToCache).
-			WithDst(dstPort).
-			WithInfo(numEntry).
-			Build()
-
-		m.mmu.ToCache.Send(writeReq)
-	}
-}
-
 type CaPWQPageWalker struct {
 	*akita.TickingComponent
 
@@ -453,8 +355,6 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1V(now akita.VTimeInSec) {
 		return
 	}
 
-	walker.mmu.walkerController.lastIssueTime = now
-
 	walker.secondaryTransaction = nil
 
 	walker.mmu.vRR = (walker.mmu.vRR + 1) % uint64(len(lowModules))
@@ -565,10 +465,11 @@ type CaPWQMMU struct {
 	monitorStats *monitor.CaPWQMonitorStats
 
 	vRR uint64
+}
 
-	walkerController *MSHRController
-
-	init bool
+func (mmu *CaPWQMMU) SentCommand(info interface{}) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (mmu *CaPWQMMU) InitMonitorStats() {
@@ -583,16 +484,6 @@ func (mmu *CaPWQMMU) GetMonitorStats() interface{} {
 	return mmu.monitorStats
 }
 
-func (mmu *CaPWQMMU) checkMSHRFull(now akita.VTimeInSec) {
-	if len(mmu.pageWalkRspQueue) > 0 ||
-		len(mmu.pageWalkReqQueue) > 0 {
-		if now-mmu.walkerController.lastIssueTime > 2*1e-7 {
-			mmu.walkerController.reset(now)
-			mmu.walkerController.issue(now, 4)
-		}
-	}
-}
-
 // Tick defines how the MMU update state each cycle
 func (mmu *CaPWQMMU) Tick(now akita.VTimeInSec) bool {
 	mmu.topSender.Tick(now)
@@ -603,8 +494,6 @@ func (mmu *CaPWQMMU) Tick(now akita.VTimeInSec) bool {
 	mmu.parseFromPageWalkCache(now)
 	mmu.parseFromTop(now)
 	mmu.processPageWalkReqQueue(now)
-
-	mmu.checkMSHRFull(now)
 
 	if mmu.isActive() {
 		tracing.StartTask(
@@ -645,12 +534,8 @@ func (mmu *CaPWQMMU) Tick(now akita.VTimeInSec) bool {
 				mmu.monitorStats.ReqLength++
 			}
 		}
-	}
 
-	if !mmu.init {
-		mmu.walkerController.TickNow(now)
-
-		mmu.init = true
+		mmu.monitorStats.NumPTW = mmu.numInflightPTWRequests
 	}
 
 	return true

@@ -82,6 +82,11 @@ type MMUImpl struct {
 	monitorStats *monitor.CaPWQMonitorStats
 }
 
+func (m *MMUImpl) SentCommand(info interface{}) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (impl *MMUImpl) InitMonitorStats() {
 	impl.monitorStats = &monitor.CaPWQMonitorStats{}
 }
