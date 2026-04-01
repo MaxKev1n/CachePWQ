@@ -140,29 +140,11 @@ func (walker *CaPWQPageWalker) AcceptReqFromTop(
 
 func (walker *CaPWQPageWalker) AcceptL1CacheRsp(
 	now akita.VTimeInSec,
-	rsp *mem.DataReadyRsp,
+	newTrans *transactionImpl,
 ) {
 	if !walker.CanAccept() {
 		panic("walker can't accept")
 	}
-
-	block := rsp.Info.(vm.CaPWQBlock)
-
-	newTrans := &transactionImpl{
-		state:   l1Done,
-		Address: block.Address,
-		pid:     block.PID,
-		msgID:   block.MsgID,
-		PPN:     binary.LittleEndian.Uint64(rsp.Data),
-		level:   block.Level,
-	}
-
-	if newTrans.level+1 == 4 {
-		newTrans.state = transactionFinished
-	} else {
-		walker.fillPageWalkCache(now, newTrans)
-	}
-	newTrans.level++
 
 	if walker.transaction == nil {
 		walker.transaction = newTrans
@@ -195,9 +177,9 @@ func (walker *CaPWQPageWalker) AcceptMemRsp(
 	)
 
 	if trans.level+1 == 4 {
-		trans.state = transactionFinished
+		walker.mmu.finalizeTransaction(now, trans)
 	} else {
-		walker.fillPageWalkCache(now, trans)
+		walker.mmu.fillPageWalkCache(now, trans)
 	}
 	trans.level++
 
@@ -215,7 +197,7 @@ func (walker *CaPWQPageWalker) walkPageTable(now akita.VTimeInSec) bool {
 	case pageWalkCacheDone, memDone, l1Done:
 		walker.sendToMem(now)
 	case transactionFinished:
-		walker.finalizeTransaction(now, walker.transaction)
+		walker.transaction = nil
 	default:
 		panic("invalid transaction state")
 	}
@@ -232,7 +214,7 @@ func (walker *CaPWQPageWalker) walkSecondaryPageTable(now akita.VTimeInSec) bool
 	case pageWalkCacheDone, l1Done:
 		walker.sendWriteReqToL1V(now)
 	case transactionFinished:
-		walker.finalizeTransaction(now, walker.secondaryTransaction)
+		walker.secondaryTransaction = nil
 	default:
 		panic("invalid transaction state")
 	}
@@ -364,71 +346,6 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1V(now akita.VTimeInSec) {
 	tracing.EndTask(walker.mmu.Name()+"stall", now, walker.mmu)
 }
 
-func (walker *CaPWQPageWalker) fillPageWalkCache(
-	now akita.VTimeInSec,
-	trans *transactionImpl,
-) {
-	level := uint64(trans.level)
-	data := mmu.Uint64ToBytes(trans.PPN | level)
-
-	writeReq := mem.WriteReqBuilder{}.
-		WithSendTime(now).
-		WithSrc(walker.mmu.ToPageWalkCache).
-		WithDst(walker.mmu.PageWalkCache).
-		WithPID(trans.pid).
-		WithAddress(walker.mmu.pageTable.AlignToPage(trans.Address) | level).
-		WithData(data).
-		Build()
-
-	// No need to check whether the send is successful.
-	walker.mmu.ToPageWalkCache.Send(writeReq)
-}
-
-func (walker *CaPWQPageWalker) finalizeTransaction(
-	now akita.VTimeInSec,
-	trans *transactionImpl,
-) {
-	if !walker.mmu.topSender.CanSend(1) {
-		return
-	}
-
-	page, found := walker.mmu.pageTable.Find(trans.pid, trans.Address)
-	if !found {
-		panic("page not found")
-	}
-
-	pAddr := trans.PPN
-	if pAddr != page.PAddr {
-		panic("addresses don't match!")
-	}
-
-	newPage := device.Page{
-		PID:   trans.pid,
-		VAddr: trans.Address,
-		PAddr: pAddr,
-		Valid: true,
-	}
-
-	rsp := device.TranslationRspBuilder{}.
-		WithSendTime(now).
-		WithSrc(walker.mmu.ToTop).
-		WithDst(walker.mmu.L3TLB).
-		WithPage(newPage).
-		Build()
-
-	walker.mmu.topSender.Send(rsp)
-
-	walker.mmu.numInflightPTWRequests--
-
-	if walker.transaction == trans {
-		walker.transaction = nil
-	} else {
-		walker.secondaryTransaction = nil
-	}
-
-	tracing.EndTask(trans.msgID, now, walker.mmu)
-}
-
 // CaPWQMMU is the default mmu implementation. It is also an akita Component.
 type CaPWQMMU struct {
 	akita.TickingComponent
@@ -457,7 +374,7 @@ type CaPWQMMU struct {
 	numInflightPTWRequests uint64
 
 	pageWalkReqQueue []*device.TranslationReq
-	pageWalkRspQueue []*mem.DataReadyRsp
+	pageWalkRspQueue []*transactionImpl
 
 	walkReqQueueCapacity int
 	walkRspQueueCapacity int
@@ -467,114 +384,134 @@ type CaPWQMMU struct {
 	vRR uint64
 }
 
-func (mmu *CaPWQMMU) SentCommand(info interface{}) {
+func (impl *CaPWQMMU) fillPageWalkCache(
+	now akita.VTimeInSec,
+	trans *transactionImpl,
+) {
+	level := uint64(trans.level)
+	data := mmu.Uint64ToBytes(trans.PPN | level)
+
+	writeReq := mem.WriteReqBuilder{}.
+		WithSendTime(now).
+		WithSrc(impl.ToPageWalkCache).
+		WithDst(impl.PageWalkCache).
+		WithPID(trans.pid).
+		WithAddress(impl.pageTable.AlignToPage(trans.Address) | level).
+		WithData(data).
+		Build()
+
+	// No need to check whether the send is successful.
+	impl.ToPageWalkCache.Send(writeReq)
+}
+
+func (impl *CaPWQMMU) SentCommand(info interface{}) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (mmu *CaPWQMMU) InitMonitorStats() {
-	mmu.monitorStats = &monitor.CaPWQMonitorStats{}
+func (impl *CaPWQMMU) InitMonitorStats() {
+	impl.monitorStats = &monitor.CaPWQMonitorStats{}
 }
 
-func (mmu *CaPWQMMU) ClearMonitorStats() {
-	mmu.monitorStats.Clear()
+func (impl *CaPWQMMU) ClearMonitorStats() {
+	impl.monitorStats.Clear()
 }
 
-func (mmu *CaPWQMMU) GetMonitorStats() interface{} {
-	return mmu.monitorStats
+func (impl *CaPWQMMU) GetMonitorStats() interface{} {
+	return impl.monitorStats
 }
 
 // Tick defines how the MMU update state each cycle
-func (mmu *CaPWQMMU) Tick(now akita.VTimeInSec) bool {
-	mmu.topSender.Tick(now)
-	mmu.translationSender.Tick(now)
-	mmu.processPageWalkRspQueue(now)
-	mmu.parseFromMem(now)
-	mmu.parseFromL1(now)
-	mmu.parseFromPageWalkCache(now)
-	mmu.parseFromTop(now)
-	mmu.processPageWalkReqQueue(now)
+func (impl *CaPWQMMU) Tick(now akita.VTimeInSec) bool {
+	impl.topSender.Tick(now)
+	impl.translationSender.Tick(now)
+	impl.processPageWalkReqQueue(now)
+	impl.processPageWalkRspQueue(now)
+	impl.parseFromMem(now)
+	impl.parseFromL1(now)
+	impl.parseFromPageWalkCache(now)
+	impl.parseFromTop(now)
 
-	if mmu.isActive() {
+	if impl.isActive() {
 		tracing.StartTask(
 			"",
 			"",
 			now,
-			mmu,
+			impl,
 			"num_active_walkers",
-			strconv.Itoa(int(mmu.numInflightPTWRequests)),
+			strconv.Itoa(int(impl.numInflightPTWRequests)),
 			nil,
 		)
 		tracing.StartTask(
 			"",
 			"",
 			now,
-			mmu,
+			impl,
 			"page_walk_queue_len",
-			strconv.Itoa(len(mmu.pageWalkReqQueue)),
+			strconv.Itoa(len(impl.pageWalkReqQueue)),
 			nil,
 		)
 		tracing.StartTask(
 			"",
 			"",
 			now,
-			mmu,
+			impl,
 			"page_walk_rsp_queue_len",
-			strconv.Itoa(len(mmu.pageWalkRspQueue)),
+			strconv.Itoa(len(impl.pageWalkRspQueue)),
 			nil,
 		)
 	}
 
-	if mmu.monitorStats != nil {
-		mmu.monitorStats.ReqLength = uint64(len(mmu.pageWalkReqQueue))
-		mmu.monitorStats.RspLength = uint64(len(mmu.pageWalkRspQueue))
+	if impl.monitorStats != nil {
+		impl.monitorStats.ReqLength = uint64(len(impl.pageWalkReqQueue))
+		impl.monitorStats.RspLength = uint64(len(impl.pageWalkRspQueue))
 
-		for i := range mmu.pageWalkers {
-			if mmu.pageWalkers[i].transaction != nil {
-				mmu.monitorStats.ReqLength++
+		for i := range impl.pageWalkers {
+			if impl.pageWalkers[i].transaction != nil {
+				impl.monitorStats.ReqLength++
 			}
 		}
 
-		mmu.monitorStats.NumPTW = mmu.numInflightPTWRequests
+		impl.monitorStats.NumPTW = impl.numInflightPTWRequests
 	}
 
 	return true
 }
 
-func (mmu *CaPWQMMU) trace(now akita.VTimeInSec, what string) {
+func (impl *CaPWQMMU) trace(now akita.VTimeInSec, what string) {
 	ctx := akita.HookCtx{
-		Domain: mmu,
+		Domain: impl,
 		Now:    now,
 		Item:   what,
 	}
 
-	mmu.InvokeHook(ctx)
+	impl.InvokeHook(ctx)
 }
 
-func (mmu *CaPWQMMU) parseFromPageWalkCache(now akita.VTimeInSec) bool {
-	item := mmu.ToPageWalkCache.Peek()
+func (impl *CaPWQMMU) parseFromPageWalkCache(now akita.VTimeInSec) bool {
+	item := impl.ToPageWalkCache.Peek()
 	if item == nil {
 		return false
 	}
 
 	switch item.(type) {
 	case *mem.WriteDoneRsp:
-		mmu.ToPageWalkCache.Retrieve(now)
+		impl.ToPageWalkCache.Retrieve(now)
 		return true
 	default:
 		panic("unknown message type")
 	}
 }
 
-func (mmu *CaPWQMMU) parseFromMem(now akita.VTimeInSec) bool {
-	item := mmu.TranslationPort.Peek()
+func (impl *CaPWQMMU) parseFromMem(now akita.VTimeInSec) bool {
+	item := impl.TranslationPort.Peek()
 	if item == nil {
 		return false
 	}
 
 	switch msg := item.(type) {
 	case *mem.DataReadyRsp:
-		mmu.handleMemResponse(msg, now)
+		impl.handleMemResponse(msg, now)
 	default:
 		panic("unknown message type")
 	}
@@ -582,8 +519,8 @@ func (mmu *CaPWQMMU) parseFromMem(now akita.VTimeInSec) bool {
 	return false
 }
 
-func (mmu *CaPWQMMU) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) {
-	for _, walker := range mmu.pageWalkers {
+func (impl *CaPWQMMU) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) {
+	for _, walker := range impl.pageWalkers {
 		if walker.transaction == nil {
 			continue
 		}
@@ -591,7 +528,7 @@ func (mmu *CaPWQMMU) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInS
 		if walker.transaction.msgID == rsp.RespondTo {
 			walker.AcceptMemRsp(now, rsp)
 
-			mmu.TranslationPort.Retrieve(now)
+			impl.TranslationPort.Retrieve(now)
 
 			return
 		}
@@ -599,17 +536,17 @@ func (mmu *CaPWQMMU) handleMemResponse(rsp *mem.DataReadyRsp, now akita.VTimeInS
 	panic("response doesn't match any inflight transaction")
 }
 
-func (mmu *CaPWQMMU) parseFromL1(now akita.VTimeInSec) bool {
-	item := mmu.ToCache.Peek()
+func (impl *CaPWQMMU) parseFromL1(now akita.VTimeInSec) bool {
+	item := impl.ToCache.Peek()
 	if item == nil {
 		return false
 	}
 
 	switch msg := item.(type) {
 	case *mem.DataReadyRsp:
-		return mmu.handleL1ReadResponse(msg, now)
+		return impl.handleL1ReadResponse(msg, now)
 	case *mem.WriteDoneRsp:
-		mmu.ToCache.Retrieve(now)
+		impl.ToCache.Retrieve(now)
 
 		return true
 	default:
@@ -617,25 +554,84 @@ func (mmu *CaPWQMMU) parseFromL1(now akita.VTimeInSec) bool {
 	}
 }
 
-func (mmu *CaPWQMMU) handleL1ReadResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) bool {
-	if len(mmu.pageWalkRspQueue) >= mmu.walkRspQueueCapacity {
+func (impl *CaPWQMMU) handleL1ReadResponse(rsp *mem.DataReadyRsp, now akita.VTimeInSec) bool {
+	if len(impl.pageWalkRspQueue) >= impl.walkRspQueueCapacity {
 		return false
 	}
 
-	mmu.pageWalkRspQueue = append(mmu.pageWalkRspQueue, rsp)
+	block := rsp.Info.(vm.CaPWQBlock)
 
-	mmu.ToCache.Retrieve(now)
+	newTrans := &transactionImpl{
+		state:   l1Done,
+		Address: block.Address,
+		pid:     block.PID,
+		msgID:   block.MsgID,
+		PPN:     binary.LittleEndian.Uint64(rsp.Data),
+		level:   block.Level,
+	}
+
+	if newTrans.level+1 == 4 {
+		impl.finalizeTransaction(now, newTrans)
+	} else {
+		impl.fillPageWalkCache(now, newTrans)
+	}
+	newTrans.level++
+
+	impl.pageWalkRspQueue = append(impl.pageWalkRspQueue, newTrans)
+
+	impl.ToCache.Retrieve(now)
 
 	return true
 }
 
-func (mmu *CaPWQMMU) parseFromTop(now akita.VTimeInSec) bool {
-	item := mmu.ToTop.Peek()
+func (impl *CaPWQMMU) finalizeTransaction(
+	now akita.VTimeInSec,
+	trans *transactionImpl,
+) {
+	if !impl.topSender.CanSend(1) {
+		return
+	}
+
+	page, found := impl.pageTable.Find(trans.pid, trans.Address)
+	if !found {
+		panic("page not found")
+	}
+
+	pAddr := trans.PPN
+	if pAddr != page.PAddr {
+		panic("addresses don't match!")
+	}
+
+	newPage := device.Page{
+		PID:   trans.pid,
+		VAddr: trans.Address,
+		PAddr: pAddr,
+		Valid: true,
+	}
+
+	rsp := device.TranslationRspBuilder{}.
+		WithSendTime(now).
+		WithSrc(impl.ToTop).
+		WithDst(impl.L3TLB).
+		WithPage(newPage).
+		Build()
+
+	impl.topSender.Send(rsp)
+
+	impl.numInflightPTWRequests--
+
+	trans.state = transactionFinished
+
+	tracing.EndTask(trans.msgID, now, impl)
+}
+
+func (impl *CaPWQMMU) parseFromTop(now akita.VTimeInSec) bool {
+	item := impl.ToTop.Peek()
 	if item == nil {
 		return false
 	}
 
-	if len(mmu.pageWalkReqQueue) >= mmu.walkReqQueueCapacity {
+	if len(impl.pageWalkReqQueue) >= impl.walkReqQueueCapacity {
 		return false
 	}
 
@@ -644,21 +640,21 @@ func (mmu *CaPWQMMU) parseFromTop(now akita.VTimeInSec) bool {
 		panic(fmt.Sprintf("item isn't a translation request: %s", reflect.TypeOf(item)))
 	}
 
-	mmu.pageWalkReqQueue = append(mmu.pageWalkReqQueue, req)
+	impl.pageWalkReqQueue = append(impl.pageWalkReqQueue, req)
 
-	mmu.ToTop.Retrieve(now)
+	impl.ToTop.Retrieve(now)
 
 	return false
 }
 
-func (mmu *CaPWQMMU) processPageWalkReqQueue(now akita.VTimeInSec) bool {
-	if len(mmu.pageWalkReqQueue) == 0 {
+func (impl *CaPWQMMU) processPageWalkReqQueue(now akita.VTimeInSec) bool {
+	if len(impl.pageWalkReqQueue) == 0 {
 		return false
 	}
 
-	head := mmu.pageWalkReqQueue[0]
+	head := impl.pageWalkReqQueue[0]
 
-	for _, walker := range mmu.pageWalkers {
+	for _, walker := range impl.pageWalkers {
 		if !walker.CanAcceptPrimary() {
 			continue
 		}
@@ -668,14 +664,14 @@ func (mmu *CaPWQMMU) processPageWalkReqQueue(now akita.VTimeInSec) bool {
 			head,
 		)
 
-		mmu.numInflightPTWRequests++
+		impl.numInflightPTWRequests++
 
-		mmu.pageWalkReqQueue = mmu.pageWalkReqQueue[1:]
+		impl.pageWalkReqQueue = impl.pageWalkReqQueue[1:]
 
 		return true
 	}
 
-	for _, walker := range mmu.pageWalkers {
+	for _, walker := range impl.pageWalkers {
 		if !walker.CanAccept() {
 			continue
 		}
@@ -685,9 +681,9 @@ func (mmu *CaPWQMMU) processPageWalkReqQueue(now akita.VTimeInSec) bool {
 			head,
 		)
 
-		mmu.numInflightPTWRequests++
+		impl.numInflightPTWRequests++
 
-		mmu.pageWalkReqQueue = mmu.pageWalkReqQueue[1:]
+		impl.pageWalkReqQueue = impl.pageWalkReqQueue[1:]
 
 		return true
 	}
@@ -695,14 +691,14 @@ func (mmu *CaPWQMMU) processPageWalkReqQueue(now akita.VTimeInSec) bool {
 	return false
 }
 
-func (mmu *CaPWQMMU) processPageWalkRspQueue(now akita.VTimeInSec) bool {
-	if len(mmu.pageWalkRspQueue) == 0 {
+func (impl *CaPWQMMU) processPageWalkRspQueue(now akita.VTimeInSec) bool {
+	if len(impl.pageWalkRspQueue) == 0 {
 		return false
 	}
 
-	head := mmu.pageWalkRspQueue[0]
+	head := impl.pageWalkRspQueue[0]
 
-	for _, walker := range mmu.pageWalkers {
+	for _, walker := range impl.pageWalkers {
 		if !walker.CanAccept() {
 			continue
 		}
@@ -712,7 +708,7 @@ func (mmu *CaPWQMMU) processPageWalkRspQueue(now akita.VTimeInSec) bool {
 			head,
 		)
 
-		mmu.pageWalkRspQueue = mmu.pageWalkRspQueue[1:]
+		impl.pageWalkRspQueue = impl.pageWalkRspQueue[1:]
 
 		return true
 	}
@@ -721,23 +717,23 @@ func (mmu *CaPWQMMU) processPageWalkRspQueue(now akita.VTimeInSec) bool {
 }
 
 // SetLowModuleFinder sets the table recording where to find an address.
-func (mmu *CaPWQMMU) SetLowModuleFinder(lmf cache.LowModuleFinder) {
-	mmu.lowModuleFinder = lmf
+func (impl *CaPWQMMU) SetLowModuleFinder(lmf cache.LowModuleFinder) {
+	impl.lowModuleFinder = lmf
 }
 
-func (mmu *CaPWQMMU) GetNumActiveWalkers() int {
+func (impl *CaPWQMMU) GetNumActiveWalkers() int {
 	num := 0
-	for i := range mmu.pageWalkers {
-		if mmu.pageWalkers[i].secondaryTransaction != nil {
+	for i := range impl.pageWalkers {
+		if impl.pageWalkers[i].secondaryTransaction != nil {
 			num++
 		}
 	}
 	return num
 }
 
-func (mmu *CaPWQMMU) isActive() bool {
-	for i := range mmu.pageWalkers {
-		if mmu.pageWalkers[i].secondaryTransaction != nil {
+func (impl *CaPWQMMU) isActive() bool {
+	for i := range impl.pageWalkers {
+		if impl.pageWalkers[i].secondaryTransaction != nil {
 			return true
 		}
 	}
@@ -745,27 +741,27 @@ func (mmu *CaPWQMMU) isActive() bool {
 	return false
 }
 
-func (mmu *CaPWQMMU) ToTopPort() akita.Port {
-	return mmu.ToTop
+func (impl *CaPWQMMU) ToTopPort() akita.Port {
+	return impl.ToTop
 }
 
-func (mmu *CaPWQMMU) ToTranslationPort() akita.Port {
-	return mmu.TranslationPort
+func (impl *CaPWQMMU) ToTranslationPort() akita.Port {
+	return impl.TranslationPort
 }
 
-func (mmu *CaPWQMMU) ToCachePort() akita.Port {
-	return mmu.ToCache
+func (impl *CaPWQMMU) ToCachePort() akita.Port {
+	return impl.ToCache
 }
 
-func (mmu *CaPWQMMU) CanAccept() bool {
-	for i := range mmu.pageWalkers {
-		if mmu.pageWalkers[i].CanAccept() {
+func (impl *CaPWQMMU) CanAccept() bool {
+	for i := range impl.pageWalkers {
+		if impl.pageWalkers[i].CanAccept() {
 			return true
 		}
 	}
 	return false
 }
 
-func (mmu *CaPWQMMU) ToPageWalkCachePort() akita.Port {
-	return mmu.ToPageWalkCache
+func (impl *CaPWQMMU) ToPageWalkCachePort() akita.Port {
+	return impl.ToPageWalkCache
 }
