@@ -596,7 +596,9 @@ func (tlb *LastLevelTLB) parseBottom(now akita.VTimeInSec) bool {
 
 	mshrEntryPresent := tlb.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
 	if !mshrEntryPresent {
-		panic("oh no!")
+		tlb.BottomPort.Retrieve(now)
+		tracing.TraceReqFinalize(rsp, now, tlb)
+		return true
 	}
 
 	setID := tlb.vAddrToSetID(page.VAddr)
