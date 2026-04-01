@@ -2,7 +2,6 @@ package caPWQL5
 
 import (
 	"gitlab.com/akita/akita"
-	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/util"
@@ -104,7 +103,7 @@ func (b CaPWQMMUBuilder) Build(name string) mmu.MMU {
 	}
 
 	mmu.pageWalkReqQueue = make([]*device.TranslationReq, 0)
-	mmu.pageWalkRspQueue = make([]*mem.DataReadyRsp, 0)
+	mmu.pageWalkRspQueue = make([]*transactionImpl, 0)
 
 	totalEntry := b.maxNumReqInFlight * 8
 
