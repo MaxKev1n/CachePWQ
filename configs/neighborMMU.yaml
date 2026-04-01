@@ -1,0 +1,11 @@
+# =============================
+# MMU Configuration Template
+# =============================
+
+MMU:
+  type: "NeighborMMU"
+
+  numPageWalkers: 64
+
+L3TLB:
+  dispatcher: "roundrobin"

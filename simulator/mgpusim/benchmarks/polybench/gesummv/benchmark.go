@@ -49,6 +49,11 @@ type Benchmark struct {
 	useLASPMemoryAlloc bool
 }
 
+func (b *Benchmark) SetLASPHSLMemoryAlloc() {
+	//TODO implement me
+	panic("implement me")
+}
+
 // NewBenchmark makes a new benchmark
 func NewBenchmark(driver *driver.Driver) *Benchmark {
 	b := new(Benchmark)
