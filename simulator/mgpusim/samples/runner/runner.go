@@ -1852,6 +1852,16 @@ func (r *Runner) addTLBLatencyTracer() {
 				TLBLatencyTracer{tracer: tracer, tlb: tlb})
 			tracing.CollectTrace(tlb, tracer)
 		}
+
+		for _, l1v := range gpu.L1VCaches {
+			tracer := tracing.NewAverageTimeTracer(
+				func(task tracing.Task) bool {
+					return task.Kind == "req_out"
+				})
+			r.DownTLBLatencyTracers = append(r.DownTLBLatencyTracers,
+				TLBLatencyTracer{tracer: tracer, tlb: l1v})
+			tracing.CollectTrace(l1v, tracer)
+		}
 	}
 }
 

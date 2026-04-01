@@ -24,6 +24,7 @@ import (
 	"gitlab.com/akita/mem/vm/mmu/caPWQL5"
 	"gitlab.com/akita/mem/vm/mmu/infinite"
 	"gitlab.com/akita/mem/vm/mmu/mpw"
+	"gitlab.com/akita/mem/vm/mmu/neighboraware"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
 	CaPWQCacheL4 "gitlab.com/akita/mgpusim/timing/caches/capwql4"
@@ -198,11 +199,11 @@ func (b *NUMAGPUBuilder) BuildSAs(chiplet *Chiplet) {
 	}
 
 	maxCUsPerGPC := 16
-	if b.numShaderArrayPerChiplet%maxCUsPerGPC != 0 {
+	maxSAsPerGPC := maxCUsPerGPC / b.numCUPerShaderArray
+	if b.numShaderArrayPerChiplet%maxSAsPerGPC != 0 {
 		panic("numShaderArrayPerChiplet should be divisible by maxCUsPerGPC")
 	}
 
-	maxSAsPerGPC := maxCUsPerGPC / b.numCUPerShaderArray
 	for i := 0; i < b.numShaderArrayPerChiplet; i++ {
 		gpcID := i / maxSAsPerGPC
 		innerSAID := i % maxSAsPerGPC
@@ -323,9 +324,9 @@ func (b *NUMAGPUBuilder) establishTPC(chiplet *Chiplet) {
 		mux := multiplexer.MakeMultiplexerBuilder().
 			WithEngine(b.engine).
 			WithFreq(b.freq).
-			WithNumReqPerCycle(4).
+			WithNumReqPerCycle(8).
 			WithSwitchLatency(2).
-			WithBufferSizeInNumFlit(16).
+			WithBufferSizeInNumFlit(32).
 			WithRoutingTable(routingTable).
 			Build(fmt.Sprintf("%s.GPC[%d].TPCMux[%d]", chiplet.name, gpcID, localID))
 
@@ -343,9 +344,9 @@ func (b *NUMAGPUBuilder) establishTPC(chiplet *Chiplet) {
 			WithEngine(b.engine).
 			WithFreq(b.freq).
 			WithDevicePorts(devicePorts).
-			WithNumReqPerCycle(2).
-			WithNetworkPortBufferSize(2).
-			WithFlitByteSize(32).
+			WithNumReqPerCycle(4).
+			WithNetworkPortBufferSize(32).
+			WithFlitByteSize(64).
 			Build(fmt.Sprintf("%s.L1VCache[%d]", chiplet.name, i))
 
 		tpcID := i / 2
@@ -362,9 +363,9 @@ func (b *NUMAGPUBuilder) establishTPC(chiplet *Chiplet) {
 			WithEngine(b.engine).
 			WithFreq(b.freq).
 			WithDevicePorts([]akita.Port{l1vtlb.GetBottomPort()}).
-			WithNumReqPerCycle(2).
-			WithNetworkPortBufferSize(2).
-			WithFlitByteSize(32).
+			WithNumReqPerCycle(4).
+			WithNetworkPortBufferSize(32).
+			WithFlitByteSize(64).
 			Build(fmt.Sprintf("%s.L1VTLB[%d]", chiplet.name, i))
 
 		tpcID := i / 2
@@ -839,6 +840,8 @@ func (b *NUMAGPUBuilder) buildMMU(chiplet *Chiplet) {
 			b.buildInfiniteMMU(chiplet)
 		case "MPWMMU":
 			b.buildMPWMMU(chiplet)
+		case "NeighborMMU":
+			b.buildNeighborMMU(chiplet)
 		case "CaPWQMMUL1":
 			b.buildCaPWQMMUL1(chiplet)
 		case "CaPWQMMUL2":
@@ -935,6 +938,43 @@ func (b *NUMAGPUBuilder) buildInfiniteMMU(chiplet *Chiplet) {
 		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
 
 		component.(*infinite.MMUImpl).PageWalkCache = pageWalkCachePort
+
+		chiplet.MMUs = append(chiplet.MMUs, component)
+		b.gpu.MMUs = append(b.gpu.MMUs, component)
+	}
+}
+
+func (b *NUMAGPUBuilder) buildNeighborMMU(chiplet *Chiplet) {
+	maxNumReqInFlight := 16
+
+	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
+		numWalkersInt, err := strconv.Atoi(numWalkers)
+		if err != nil {
+			log.Panicf("Invalid number of walkers %v\n", numWalkersInt)
+		}
+
+		maxNumReqInFlight = numWalkersInt
+	}
+
+	maxCUsPerGPC := 16
+	numGPCs := (len(chiplet.CUs)-1)/maxCUsPerGPC + 1
+
+	if maxNumReqInFlight%numGPCs != 0 {
+		panic("numPageWalkers should be divisible by numGPCs")
+	}
+
+	for i := 0; i < numGPCs; i++ {
+		component := neighboraware.MakeNeighBorMMUBuilder().
+			WithEngine(b.engine).
+			WithFreq(1 * akita.GHz).
+			WithLog2PageSize(b.log2PageSize).
+			WithPageTable(b.pageTable).
+			WithMaxNumReqInFlight(maxNumReqInFlight / numGPCs).
+			Build(fmt.Sprintf("%s.GPC_%02d.neighborMMU", chiplet.name, i))
+
+		pageWalkCachePort := chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
+
+		component.(*neighboraware.NeighBorMMU).PageWalkCache = pageWalkCachePort
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
