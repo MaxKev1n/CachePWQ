@@ -309,7 +309,9 @@ func (d *Driver) MemCopyH2D(ctx *Context, dst GPUPtr, src interface{}) {
 				pageAddr := uint64(dst) + i*uint64(pageSize)
 
 				if d.CheckCPUPointer(pageAddr) {
-					panic("already allocated in CPU memory")
+					log.Printf("already allocated in CPU memory")
+
+					continue
 				}
 
 				leftSize := uint64(len(rawBytes)) - i*uint64(pageSize)
