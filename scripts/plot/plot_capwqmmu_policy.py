@@ -97,6 +97,7 @@ def plot_normalized_time(
     baseline: pd.DataFrame,
     Opt1: pd.DataFrame,
     Opt2: pd.DataFrame,
+    Opt3: pd.DataFrame,
     out_dir: str,
 ) -> None:
     """
@@ -123,10 +124,11 @@ def plot_normalized_time(
 
     benchmarks = get_benchmarks()
 
-    bar_width = 0.15
-    r1 = np.arange(len(benchmarks) + 1) * (3 * bar_width + 0.1)
+    bar_width = 0.2
+    r1 = np.arange(len(benchmarks) + 1) * (4 * bar_width + 0.1)
     r2 = [x + bar_width for x in r1]
     r3 = [x + bar_width for x in r2]
+    r4 = [x + bar_width for x in r3]
 
     # Normalize the time
     Opt1["Data"] = [
@@ -141,6 +143,14 @@ def plot_normalized_time(
         (
             baseline["Data"][i] / Opt2["Data"][i]
             if Opt2["Data"][i] != 0 and baseline["Data"][i] != 0
+            else 0
+        )
+        for i in range(len(benchmarks))
+    ]
+    Opt3["Data"] = [
+        (
+            baseline["Data"][i] / Opt3["Data"][i]
+            if Opt3["Data"][i] != 0 and baseline["Data"][i] != 0
             else 0
         )
         for i in range(len(benchmarks))
@@ -184,12 +194,24 @@ def plot_normalized_time(
         ],
         ignore_index=True,
     )
+    Opt3 = pd.concat(
+        [
+            Opt3,
+            pd.DataFrame(
+                {
+                    "Benchmark": ["Ave."],
+                    "Data": [harmonic_mean(Opt3["Data"])],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
 
     bar1 = plt.bar(
         r1,
         baseline["Data"],
         width=bar_width,
-        label="Baseline",
+        label="RoundRobin",
         color="#C3D9F1",
         edgecolor="black",
         linewidth=1.5,
@@ -198,7 +220,7 @@ def plot_normalized_time(
         r2,
         Opt1["Data"],
         width=bar_width,
-        label="Infinite Walker",
+        label="Interleaved",
         color="#5D73A1",
         edgecolor="black",
         linewidth=1.5,
@@ -207,25 +229,34 @@ def plot_normalized_time(
         r3,
         Opt2["Data"],
         width=bar_width,
-        label="Ideal Translation",
+        label="LeastFirst",
         color="#313A5B",
         edgecolor="black",
         linewidth=1.5,
     )
+    bar4 = plt.bar(
+        r4,
+        Opt3["Data"],
+        width=bar_width,
+        label="BackToSource",
+        color="#8D2E2C",
+        edgecolor="black",
+        linewidth=1.5,
+    )
 
-    for bar in bar1 + bar2 + bar3:
+    for bar in bar1 + bar2 + bar3 + bar4:
         height = bar.get_height()
         x = bar.get_x() + bar.get_width() / 2
 
-        if height >= 8:
+        if height >= 4:
             plt.annotate(
                 f"{height:.1f}",
-                xy=(x, 7.225),
+                xy=(x, 3.65),
                 xytext=(0, 0),  # 相对偏移 (0,15) 表示向上15pt
                 textcoords="offset points",
                 ha="center",
                 va="bottom",
-                fontsize=22,
+                fontsize=26,
                 fontweight="bold",
                 bbox=dict(
                     facecolor="white",
@@ -234,50 +265,32 @@ def plot_normalized_time(
                 ),
                 # arrowprops=dict(arrowstyle="-", color="red", lw=2),
             )
-        else:
-            plt.annotate(
-                f"{height:.1f}",
-                xy=(x, height),
-                xytext=(0, 5),  # 相对偏移 (0,15) 表示向上15pt
-                textcoords="offset points",
-                ha="center",
-                va="bottom",
-                fontsize=22,
-                rotation=90,
-                fontweight="bold",
-                # bbox=dict(
-                #     facecolor="white",
-                #     edgecolor="black",
-                #     boxstyle="round,pad=0.1",
-                # ),
-                # arrowprops=dict(arrowstyle="-", color="red", lw=2),
-            )
 
-    plt.xlim(min(r1) - bar_width, max(r3) + bar_width)
+    plt.xlim(min(r1) - bar_width, max(r4) + bar_width)
     plt.xticks(
-        [r + 1 * bar_width for r in r1],
+        [r + 1.5 * bar_width for r in r1],
         [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
-        fontsize=30,
+        fontsize=26,
         fontweight="bold",
     )
-    plt.ylabel("Speedup", fontsize=30, fontweight="bold")
+    plt.ylabel("Speedup", fontsize=24, fontweight="bold")
     plt.yticks(
-        np.arange(0, 8.1, 2),
-        fontsize=30,
+        np.arange(0, 1.3, 0.2),
+        fontsize=26,
         fontweight="bold",
     )
-    plt.ylim(0, 8)
+    plt.ylim(0, 1.2)
     plt.legend(
         loc="upper center",
-        ncol=3,
+        ncol=4,
         bbox_to_anchor=(0.5, 1),
         bbox_transform=plt.gcf().transFigure,  # 使用图形坐标系
         frameon=True,
         fancybox=True,
         framealpha=0.7,
-        prop={"weight": "bold", "size": 26},
+        prop={"weight": "bold", "size": 20},
     )
-    plt.tight_layout(rect=[0, 0, 1, 0.925])
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.grid(axis="y", alpha=0.3)
     plt.axhline(y=1, color="red", linewidth=0.8, linestyle="--")
 
@@ -288,7 +301,7 @@ def plot_normalized_time(
         spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
 
     output_file = os.path.join(
-        out_dir, "motivation_translation_bottleneck"
+        out_dir, "CaPWQMMU_Policy_Normalized_Time"
     )
     plt.savefig(output_file + ".png")
     plt.savefig(output_file + ".pdf")
@@ -317,11 +330,14 @@ if __name__ == "__main__":
     Opt2 = pd.DataFrame(
         columns=["Benchmark", "Data"],
     )
+    Opt3 = pd.DataFrame(
+        columns=["Benchmark", "Data"],
+    )
 
     for benchmark in get_benchmarks():
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/baselineMMU",
+            input_dir="../../data/caPWQMMUL6_roundrobin",
         )
 
         baseline = pd.concat(
@@ -339,7 +355,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/infiniteMMU",
+            input_dir="../../data/caPWQMMUL6_interleaved",
         )
 
         Opt1 = pd.concat(
@@ -357,7 +373,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/idealMMU",
+            input_dir="../../data/caPWQMMUL6_leastfirst",
         )
 
         Opt2 = pd.concat(
@@ -373,9 +389,28 @@ if __name__ == "__main__":
             ignore_index=True,
         )
 
+        perf_data = collect_performance_data(
+            benchmark_name=benchmark,
+            input_dir="../../data/caPWQMMUL6_backtosource",
+        )
+
+        Opt3 = pd.concat(
+            [
+                Opt3,
+                pd.DataFrame(
+                    {
+                        "Benchmark": [benchmark],
+                        "Data": [perf_data],
+                    }
+                ),
+            ],
+            ignore_index=True,
+        )
+
     plot_normalized_time(
         baseline=baseline.copy(),
         Opt1=Opt1.copy(),
         Opt2=Opt2.copy(),
+        Opt3=Opt3.copy(),
         out_dir=args.outDir,
     )

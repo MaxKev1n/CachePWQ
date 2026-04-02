@@ -1,40 +1,36 @@
 benchmarks = [
-    "convolution2d",
-    "fastwalshtransform",
-    "gups",
-    "jacobi1d",
-    "jacobi2d",
     "kmeans",
-    "matrixtranspose",
     "mis",
-    "pagerank",
-    "simpleconvolution",
-    "shoc-reduction",
-    "spmv",
     "stencil2d",
-    "syrk",
-    "syr2k",
+    "pagerank",
+    "matrixtranspose",
+    "spmv",
+    "gups",
+    "gesummv",
+    "simpleconvolution",
+    "jacobi2d",
+    "fastwalshtransform",
+    "jacobi1d",
+    "shoc-reduction",
 ]
 
 low_mpki_benchmarks = [
-    "convolution2d",
+    "simpleconvolution",
+    "jacobi2d",
     "fastwalshtransform",
     "jacobi1d",
-    "jacobi2d",
-    "mis",
-    "simpleconvolution",
     "shoc-reduction",
 ]
 
 high_mpki_benchmarks = [
-    "gups",
     "kmeans",
-    "matrixtranspose",
-    "pagerank",
-    "spmv",
+    "mis",
     "stencil2d",
-    "syrk",
-    "syr2k",
+    "pagerank",
+    "matrixtranspose",
+    "spmv",
+    "gups",
+    "gesummv",
 ]
 
 
@@ -126,6 +122,7 @@ def get_short_name(benchmark: str) -> str:
         "stencil2d": "ST",
         "syrk": "SYRK",
         "syr2k": "SYR2",
+        "gesummv": "GEV",
     }
 
     return dict_short_names[benchmark]
