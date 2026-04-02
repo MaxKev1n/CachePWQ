@@ -45,9 +45,6 @@ type TLBImpl struct {
 
 	numSets        int
 	numWays        int
-	log2PageSize   uint64
-	log2NumWays    uint64
-	log2NumSets    uint64
 	pageSize       uint64
 	numReqPerCycle int
 	latency        int
@@ -57,8 +54,8 @@ type TLBImpl struct {
 	pipeline     pipelining.Pipeline
 	lookupBuffer util.Buffer
 
-	mshr                  mshr
-	respondingMSHREntries []*mshrEntry
+	mshr                mshr
+	respondingMSHREntry *mshrEntry
 
 	isPaused bool
 
@@ -121,7 +118,7 @@ func (tlb *TLBImpl) SetGPCID(id int) {
 func (tlb *TLBImpl) reset() {
 	tlb.Sets = make([]internal.Set, tlb.numSets)
 	for i := 0; i < tlb.numSets; i++ {
-		set := internal.NewMultiLevelSet(tlb.numWays, tlb.log2PageSize)
+		set := internal.NewSet(tlb.numWays)
 		tlb.Sets[i] = set
 	}
 }
@@ -158,11 +155,11 @@ func (tlb *TLBImpl) Tick(now akita.VTimeInSec) bool {
 }
 
 func (tlb *TLBImpl) respondMSHREntry(now akita.VTimeInSec) bool {
-	if len(tlb.respondingMSHREntries) == 0 {
+	if tlb.respondingMSHREntry == nil {
 		return false
 	}
 
-	mshrEntry := tlb.respondingMSHREntries[0]
+	mshrEntry := tlb.respondingMSHREntry
 	page := mshrEntry.page
 	req := mshrEntry.Requests[0]
 
@@ -188,7 +185,7 @@ func (tlb *TLBImpl) respondMSHREntry(now akita.VTimeInSec) bool {
 	mshrEntry.IncNumRespondedByOne()
 	mshrEntry.Requests = mshrEntry.Requests[1:]
 	if len(mshrEntry.Requests) == 0 {
-		tlb.respondingMSHREntries = tlb.respondingMSHREntries[1:]
+		tlb.respondingMSHREntry = nil
 	}
 	tracing.StartTracingNetworkReq(rspToTop, now, tlb, req)
 	tracing.TraceReqComplete(req, now, tlb)
@@ -225,7 +222,7 @@ func (tlb *TLBImpl) lookup(now akita.VTimeInSec) bool {
 		return false
 	}
 
-	setID := tlb.vAddrToSetIDMultiLevel(req.VAddr)
+	setID := tlb.vAddrToSetID(req.VAddr)
 	set := tlb.Sets[setID]
 	wayID, page, found := set.Lookup(req.PID, req.VAddr)
 	if found && page.Valid {
@@ -261,11 +258,6 @@ func (tlb *TLBImpl) handleTranslationHit(
 		now,
 		tlb,
 		"l1tlb_hits",
-	)
-	tracing.AddTaskStep(
-		tracing.MsgIDAtReceiver(req, tlb),
-		now, tlb,
-		"tlb-hit-size-"+fmt.Sprint(page.SizeBits),
 	)
 	// tracing.AddTaskStep(
 	// 	tracing.MsgIDAtReceiver(req, tlb),
@@ -305,6 +297,10 @@ func (tlb *TLBImpl) handleTranslationMiss(
 		return true
 	}
 	return false
+}
+
+func (tlb *TLBImpl) vAddrToSetID(vAddr uint64) (setID int) {
+	return int(vAddr / tlb.pageSize % uint64(tlb.numSets))
 }
 
 func (tlb *TLBImpl) sendRspToTop(
@@ -426,7 +422,7 @@ func (tlb *TLBImpl) parseFromTop(now akita.VTimeInSec) bool {
 }
 
 func (tlb *TLBImpl) parseBottom(now akita.VTimeInSec) bool {
-	if len(tlb.respondingMSHREntries) != 0 {
+	if tlb.respondingMSHREntry != nil {
 		return false
 	}
 
@@ -439,14 +435,15 @@ func (tlb *TLBImpl) parseBottom(now akita.VTimeInSec) bool {
 	page := rsp.Page
 	//	fmt.Println(rsp.Meta().ID)//, req.Meta().ID)
 
-	mshrEntryPresent := tlb.mshr.IsEntriesPresent(page)
+	mshrEntryPresent := tlb.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
 	if !mshrEntryPresent {
+		panic("oh no!")
 		tlb.BottomPort.Retrieve(now)
 		tracing.TraceReqFinalize(rsp, now, tlb)
 		return true
 	}
 
-	setID := tlb.vAddrToSetIDMultiLevel(page.VAddr)
+	setID := tlb.vAddrToSetID(page.VAddr)
 	set := tlb.Sets[setID]
 	wayID, ok := tlb.Sets[setID].Evict()
 	if !ok {
@@ -455,36 +452,23 @@ func (tlb *TLBImpl) parseBottom(now akita.VTimeInSec) bool {
 	set.Update(wayID, page)
 	set.Visit(wayID)
 
-	mshrEntries := tlb.mshr.GetEntries(page)
-	tlb.respondingMSHREntries = mshrEntries
-	for _, e := range mshrEntries {
-		e.page = page
-		if e.reqToBottom != nil {
-			tracing.TraceReqFinalize(e.reqToBottom, now, tlb)
-		}
-	}
-	tlb.mshr.RemoveEntries(mshrEntries)
+	mshrEntry := tlb.mshr.GetEntry(rsp.Page.PID, rsp.Page.VAddr)
+	tlb.respondingMSHREntry = mshrEntry
+	mshrEntry.page = page
 
+	tlb.mshr.Remove(rsp.Page.PID, rsp.Page.VAddr)
 	tlb.BottomPort.Retrieve(now)
 
-	tracing.StopTracingNetworkReq(rsp, now, tlb)
+	tracing.StopTracingNetworkTLBReq(rsp, now, tlb, tlb.gpcID)
+	tracing.TraceReqFinalize(mshrEntry.reqToBottom, now, tlb)
+
+	tracing.EndTask(
+		mshrEntry.reqToBottom.Meta().ID+"_L2TLB_stats",
+		now,
+		tlb,
+	)
 
 	return true
-}
-
-func (tlb *TLBImpl) vAddrToSetID(vAddr uint64) (setID int) {
-	return int(vAddr / tlb.pageSize % uint64(tlb.numSets))
-}
-
-func (tlb *TLBImpl) vAddrToSetIDMultiLevel(vAddr uint64) int {
-	const log2MinPageGroupSize = uint64(16)
-
-	log2DiscardBits := (log2MinPageGroupSize + tlb.log2NumWays) - tlb.log2PageSize
-
-	vpn := vAddr >> tlb.log2PageSize
-	indexedVpn := vpn >> uint(log2DiscardBits)
-
-	return int(indexedVpn % uint64(tlb.numSets))
 }
 
 func (tlb *TLBImpl) performCtrlReq(now akita.VTimeInSec) bool {
@@ -528,7 +512,7 @@ func (tlb *TLBImpl) handleTLBFlush(now akita.VTimeInSec, req *TLBFlushReq) bool 
 	}
 
 	for _, vAddr := range req.VAddr {
-		setID := tlb.vAddrToSetIDMultiLevel(vAddr)
+		setID := tlb.vAddrToSetID(vAddr)
 		set := tlb.Sets[setID]
 		wayID, page, found := set.Lookup(req.PID, vAddr)
 		if !found {

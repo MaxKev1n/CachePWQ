@@ -36,17 +36,15 @@ const (
 type transactionImpl struct {
 	akita.MsgMeta
 
-	req               *device.TranslationReq
-	level             int
-	promotionLevel    int
-	msgID             string
-	state             transactionState
-	Address           uint64
-	PPN               uint64
-	lastPPNWithOffset uint64
-	vAddr             uint64
-	pid               ca.PID
-	data              []byte
+	req     *device.TranslationReq
+	level   int
+	msgID   string
+	state   transactionState
+	Address uint64
+	PPN     uint64
+	vAddr   uint64
+	pid     ca.PID
+	data    []byte
 }
 
 type CaPWQPageWalker struct {
@@ -183,7 +181,7 @@ func (walker *CaPWQPageWalker) AcceptMemRsp(
 		trans,
 	)
 
-	if trans.level+1 >= 4 {
+	if trans.level+1 == 4 {
 		walker.mmu.finalizeTransaction(now, trans)
 	} else {
 		walker.mmu.fillPageWalkCache(now, trans)
@@ -201,14 +199,8 @@ func (walker *CaPWQPageWalker) walkPageTable(now akita.VTimeInSec) bool {
 	}
 
 	switch walker.transaction.state {
-	case pageWalkCacheDone:
+	case pageWalkCacheDone, memDone, l1Done:
 		walker.sendToMem(now)
-	case memDone, l1Done:
-		if walker.transaction.level >= 4 {
-			walker.sendToMemForPromotion(now)
-		} else {
-			walker.sendToMem(now)
-		}
 	case transactionFinished:
 		walker.transaction = nil
 	default:
@@ -224,14 +216,8 @@ func (walker *CaPWQPageWalker) walkSecondaryPageTable(now akita.VTimeInSec) bool
 	}
 
 	switch walker.secondaryTransaction.state {
-	case pageWalkCacheDone:
+	case pageWalkCacheDone, l1Done:
 		walker.sendWriteReqToL1V(now)
-	case l1Done:
-		if walker.secondaryTransaction.level >= 4 {
-			walker.sendToL1VCacheForPromotion(now)
-		} else {
-			walker.sendWriteReqToL1V(now)
-		}
 	case transactionFinished:
 		walker.secondaryTransaction = nil
 	default:
@@ -260,10 +246,6 @@ func (walker *CaPWQPageWalker) sendToMem(now akita.VTimeInSec) {
 	PPN := trans.PPN
 	PPNWithOffset := walker.mmu.pageTable.AddOffset(PPN, trans.vAddr)
 
-	if trans.level == 3 {
-		trans.lastPPNWithOffset = PPNWithOffset
-	}
-
 	srcPort := walker.mmu.TranslationPort
 	readReqInfo := &mem.ReadReqInfo{ReturnAccessInfo: true}
 	dstPort := walker.mmu.lowModuleFinder.Find(PPNWithOffset)
@@ -311,135 +293,6 @@ func (walker *CaPWQPageWalker) sendToMem(now akita.VTimeInSec) {
 		reflect.TypeOf(readReq).String(),
 		readReq,
 	)
-}
-
-func (walker *CaPWQPageWalker) sendToMemForPromotion(now akita.VTimeInSec) {
-	trans := walker.transaction
-
-	transState := trans.state
-	if transState != memDone && transState != l1Done {
-		panic("this state shouldn't be here!")
-	}
-
-	if trans.state == l1Done {
-		trans.vAddr = walker.mmu.pageTable.MoveFromVAddrToLevel(
-			trans.Address,
-			trans.level,
-		)
-	}
-
-	groupStride := uint64(1) << (3 * trans.promotionLevel)
-	baseVPN := ((trans.Address / walker.mmu.pageTable.PageSize()) & ^(uint64(8)*groupStride - 1))
-
-	PPNWithOffset := trans.lastPPNWithOffset - ((trans.Address/walker.mmu.pageTable.PageSize())-baseVPN)*8
-
-	srcPort := walker.mmu.TranslationPort
-	readReqInfo := &mem.ReadReqInfo{ReturnAccessInfo: true}
-	dstPort := walker.mmu.lowModuleFinder.Find(PPNWithOffset)
-
-	readReq := mem.ReadReqBuilder{}.
-		WithSendTime(now).
-		WithSrc(srcPort).
-		WithDst(dstPort).
-		WithPID(trans.pid).
-		WithAddress(PPNWithOffset).
-		WithByteSize(8).
-		WithInfo(readReqInfo).
-		Build()
-
-	readReq.PTW = true
-
-	err := srcPort.Send(readReq)
-	if err != nil {
-		return
-	}
-
-	trans.promotionLevel++
-	trans.vAddr = walker.mmu.pageTable.NextLevel(trans.vAddr)
-	trans.msgID = readReq.ID
-	trans.state = sentToMem
-
-	partitionID := mmu.ExtractMPID(dstPort.Name())
-
-	if partitionID < 4 {
-		tracing.AddTaskStep("",
-			now, walker.mmu, "page_walk_req_left")
-	} else {
-		tracing.AddTaskStep("",
-			now, walker.mmu, "page_walk_req_right")
-	}
-
-	tracing.AddTaskStep("",
-		now, walker.mmu, "page_walk_req_local")
-
-	tracing.StartTask(
-		readReq.ID,
-		"",
-		now,
-		walker.mmu,
-		"walker_mem_latency",
-		reflect.TypeOf(readReq).String(),
-		readReq,
-	)
-}
-
-func (walker *CaPWQPageWalker) sendToL1VCacheForPromotion(now akita.VTimeInSec) {
-	trans := walker.secondaryTransaction
-
-	transState := trans.state
-	if transState != l1Done {
-		panic("this state shouldn't be here!")
-	}
-
-	if trans.state == l1Done {
-		trans.vAddr = walker.mmu.pageTable.MoveFromVAddrToLevel(
-			trans.Address,
-			trans.level,
-		)
-	}
-
-	groupStride := uint64(1) << (3 * trans.promotionLevel)
-	baseVPN := ((trans.Address / walker.mmu.pageTable.PageSize()) & ^(uint64(8)*groupStride - 1))
-
-	PPNWithOffset := trans.lastPPNWithOffset - ((trans.Address/walker.mmu.pageTable.PageSize())-baseVPN)*8
-
-	lowModules := walker.mmu.VCacheLowModuleFinder.(*cache.XORLowModuleFinder).LowModules
-	dstPort := lowModules[walker.mmu.vRR%uint64(len(lowModules))]
-
-	block := vm.CaPWQBlock{
-		PID:            trans.pid,
-		Address:        trans.Address,
-		PPNWithOffset:  PPNWithOffset,
-		Level:          trans.level,
-		PromotionLevel: trans.promotionLevel,
-		MsgID:          trans.msgID,
-	}
-
-	writeReq := mem.ReadReqBuilder{}.
-		WithSendTime(now).
-		WithSrc(walker.mmu.ToCache).
-		WithDst(dstPort).
-		WithPID(trans.pid).
-		WithAddress(PPNWithOffset).
-		WithInfo(block).
-		Build()
-
-	writeReq.TrafficBytes += 12
-	writeReq.PTW = true
-
-	err := walker.mmu.ToCache.Send(writeReq)
-	if err != nil {
-		tracing.StartTask(walker.mmu.Name()+"stall", "", now, walker.mmu, "mmu_stall", "", nil)
-		return
-	}
-
-	walker.secondaryTransaction = nil
-
-	walker.mmu.vRR = (walker.mmu.vRR + 1) % uint64(len(lowModules))
-
-	tracing.AddTaskStep(tracing.MsgIDAtReceiver(writeReq, walker.mmu),
-		now, walker.mmu, "page_walk_store_l1")
-	tracing.EndTask(walker.mmu.Name()+"stall", now, walker.mmu)
 }
 
 func (walker *CaPWQPageWalker) sendWriteReqToL1V(now akita.VTimeInSec) {
@@ -720,20 +573,15 @@ func (impl *CaPWQMMU) handleL1ReadResponse(rsp *mem.DataReadyRsp, now akita.VTim
 	block := rsp.Info.(vm.CaPWQBlock)
 
 	newTrans := &transactionImpl{
-		state:          l1Done,
-		Address:        block.Address,
-		pid:            block.PID,
-		msgID:          block.MsgID,
-		PPN:            binary.LittleEndian.Uint64(rsp.Data),
-		level:          block.Level,
-		promotionLevel: block.PromotionLevel,
+		state:   l1Done,
+		Address: block.Address,
+		pid:     block.PID,
+		msgID:   block.MsgID,
+		PPN:     binary.LittleEndian.Uint64(rsp.Data),
+		level:   block.Level,
 	}
 
-	if newTrans.level+1 >= 4 {
-		newTrans.promotionLevel++
-	}
-
-	if newTrans.level+1 >= 4 {
+	if newTrans.level+1 == 4 {
 		impl.finalizeTransaction(now, newTrans)
 	} else {
 		impl.fillPageWalkCache(now, newTrans)
@@ -751,17 +599,6 @@ func (impl *CaPWQMMU) finalizeTransaction(
 	now akita.VTimeInSec,
 	trans *transactionImpl,
 ) {
-	promotion := impl.checkValidBits(trans)
-	if promotion {
-		return
-	}
-
-	if trans.promotionLevel > 0 {
-		impl.finalizePromotedTransaction(now, trans)
-
-		return
-	}
-
 	if !impl.topSender.CanSend(1) {
 		return
 	}
@@ -781,98 +618,6 @@ func (impl *CaPWQMMU) finalizeTransaction(
 		VAddr: trans.Address,
 		PAddr: pAddr,
 		Valid: true,
-	}
-
-	rsp := device.TranslationRspBuilder{}.
-		WithSendTime(now).
-		WithSrc(impl.ToTop).
-		WithDst(impl.L3TLB).
-		WithPage(newPage).
-		Build()
-
-	impl.topSender.Send(rsp)
-
-	impl.numInflightPTWRequests--
-
-	trans.state = transactionFinished
-
-	tracing.EndTask(trans.msgID, now, impl)
-}
-
-func (impl *CaPWQMMU) checkValidBits(
-	trans *transactionImpl,
-) bool {
-	// check ValidBits
-	page, found := impl.pageTable.Find(trans.pid, trans.Address)
-	if !found {
-		panic("page not found")
-	}
-
-	if trans.promotionLevel == 0 {
-		trans.promotionLevel = int(page.SizeBits)
-	}
-
-	for {
-		if page.ValidBits != 0xFF {
-			break
-		}
-
-		groupStride := uint64(1) << (3 * trans.promotionLevel)
-		baseVAddr := ((trans.Address / impl.pageTable.PageSize()) & ^(uint64(8)*groupStride - 1)) * impl.pageTable.PageSize()
-		page, found = impl.pageTable.Find(trans.pid, baseVAddr)
-		if !found || !page.Valid {
-			break
-		}
-
-		trans.promotionLevel = int(page.SizeBits)
-	}
-
-	return false
-}
-
-func (impl *CaPWQMMU) finalizePromotedTransaction(
-	now akita.VTimeInSec,
-	trans *transactionImpl,
-) {
-	if !impl.topSender.CanSend(1) {
-		return
-	}
-
-	groupStride := uint64(1) << (3 * (trans.promotionLevel - 1))
-	baseVAddr := ((trans.Address / impl.pageTable.PageSize()) & ^(uint64(8)*groupStride - 1)) * impl.pageTable.PageSize()
-	page, found := impl.pageTable.Find(trans.pid, baseVAddr)
-	if !found {
-		panic("page not found")
-	}
-
-	newPage := device.Page{
-		PID:       trans.pid,
-		VAddr:     page.VAddr,
-		PAddr:     page.PAddr,
-		Valid:     true,
-		SizeBits:  page.SizeBits,
-		ValidBits: page.ValidBits,
-	}
-
-	// check
-	groupStride = uint64(1) << (3 * (page.SizeBits - 1))
-	baseVAddr = ((trans.Address / impl.pageTable.PageSize()) & ^(uint64(8)*groupStride - 1)) * impl.pageTable.PageSize()
-	page, found = impl.pageTable.Find(trans.pid, baseVAddr)
-	if !found {
-		panic("page not found")
-	}
-	basePAddr := page.PAddr
-
-	for i := uint64(0); i < groupStride; i++ {
-		vAddr := baseVAddr + impl.pageTable.PageSize()
-		pAddr := basePAddr + impl.pageTable.PageSize()
-		pg, found := impl.pageTable.Find(trans.pid, vAddr)
-		if !found {
-			panic("page not found")
-		}
-		if pg.PAddr != pAddr {
-			panic("addresses don't match!")
-		}
 	}
 
 	rsp := device.TranslationRspBuilder{}.
@@ -982,6 +727,56 @@ func (impl *CaPWQMMU) processPageWalkRspQueue(now akita.VTimeInSec) bool {
 	}
 
 	return false
+}
+
+// SetLowModuleFinder sets the table recording where to find an address.
+func (impl *CaPWQMMU) SetLowModuleFinder(lmf cache.LowModuleFinder) {
+	impl.lowModuleFinder = lmf
+}
+
+func (impl *CaPWQMMU) GetNumActiveWalkers() int {
+	num := 0
+	for i := range impl.pageWalkers {
+		if impl.pageWalkers[i].secondaryTransaction != nil {
+			num++
+		}
+	}
+	return num
+}
+
+func (impl *CaPWQMMU) isActive() bool {
+	for i := range impl.pageWalkers {
+		if impl.pageWalkers[i].secondaryTransaction != nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (impl *CaPWQMMU) ToTopPort() akita.Port {
+	return impl.ToTop
+}
+
+func (impl *CaPWQMMU) ToTranslationPort() akita.Port {
+	return impl.TranslationPort
+}
+
+func (impl *CaPWQMMU) ToCachePort() akita.Port {
+	return impl.ToCache
+}
+
+func (impl *CaPWQMMU) CanAccept() bool {
+	for i := range impl.pageWalkers {
+		if impl.pageWalkers[i].CanAccept() {
+			return true
+		}
+	}
+	return false
+}
+
+func (impl *CaPWQMMU) ToPageWalkCachePort() akita.Port {
+	return impl.ToPageWalkCache
 }
 
 func (impl *CaPWQMMU) checkDemandPaging(
@@ -1139,54 +934,4 @@ func (impl *CaPWQMMU) writeToDRAM(
 		lengthLeft -= length
 		offset += length
 	}
-}
-
-// SetLowModuleFinder sets the table recording where to find an address.
-func (impl *CaPWQMMU) SetLowModuleFinder(lmf cache.LowModuleFinder) {
-	impl.lowModuleFinder = lmf
-}
-
-func (impl *CaPWQMMU) GetNumActiveWalkers() int {
-	num := 0
-	for i := range impl.pageWalkers {
-		if impl.pageWalkers[i].secondaryTransaction != nil {
-			num++
-		}
-	}
-	return num
-}
-
-func (impl *CaPWQMMU) isActive() bool {
-	for i := range impl.pageWalkers {
-		if impl.pageWalkers[i].secondaryTransaction != nil {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (impl *CaPWQMMU) ToTopPort() akita.Port {
-	return impl.ToTop
-}
-
-func (impl *CaPWQMMU) ToTranslationPort() akita.Port {
-	return impl.TranslationPort
-}
-
-func (impl *CaPWQMMU) ToCachePort() akita.Port {
-	return impl.ToCache
-}
-
-func (impl *CaPWQMMU) CanAccept() bool {
-	for i := range impl.pageWalkers {
-		if impl.pageWalkers[i].CanAccept() {
-			return true
-		}
-	}
-	return false
-}
-
-func (impl *CaPWQMMU) ToPageWalkCachePort() akita.Port {
-	return impl.ToPageWalkCache
 }
