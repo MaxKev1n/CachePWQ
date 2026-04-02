@@ -139,8 +139,6 @@ func (m *CaPWQMonitor) Tick(now akita.VTimeInSec) bool {
 		for _, l1v := range l1VCaches {
 			l1v.SentCommand(numReserved)
 		}
-		log.Printf("Epoch %d: GPC %d, HP Occupancy %.2f, Normal Occupancy %.2f, Reserve %d\n",
-			m.numEpoches, i, avgWalkerMSHR, avgL1MSHR, numReserved)
 	}
 
 	// Reset the stats for the next epoch

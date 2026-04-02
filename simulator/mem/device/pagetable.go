@@ -411,9 +411,9 @@ func (t *processTableImpl) PageTablePagesAsBytes() []uint64 {
 }
 
 func (pt *PageTableImpl) ProcessNewAllocations(pid ca.PID, newlyAllocatedAddrs []uint64) {
-	for _, addr := range newlyAllocatedAddrs {
-		pt.recursiveCoalesce(pid, addr, 0)
-	}
+	// for _, addr := range newlyAllocatedAddrs {
+	// 	pt.recursiveCoalesce(pid, addr, 0)
+	// }
 }
 
 func (pt *PageTableImpl) recursiveCoalesce(pid ca.PID, vAddr uint64, level int) {
