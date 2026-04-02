@@ -3,93 +3,47 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from benchmark import get_benchmarks, get_short_name
+from benchmark import get_benchmarks, get_short_name, low_mpki_benchmarks, high_mpki_benchmarks
 
 
 def geometric_mean(df: pd.DataFrame) -> float:
-    """
-    Calculate the geometric mean of a list of numbers.
-
-    Args:
-        data (list): A list of numerical values.
-
-    Returns:
-        float: The geometric mean of the input data.
-    """
     data = df.tolist()
     if not data or any(x <= 0 for x in data):
         return 0.0
-
     product = np.prod(data)
     return product ** (1 / len(data))
 
+
 def harmonic_mean(df: pd.DataFrame) -> float:
-    """
-    Calculate the harmonic mean of a list of numbers.
-
-    Args:
-        data (list): A list of numerical values.
-
-    Returns:
-        float: The harmonic mean of the input data.
-    """
     data = df.tolist()
     if not data or any(x <= 0 for x in data):
         return 0.0
-
     reciprocal_sum = sum(1 / x for x in data)
     return len(data) / reciprocal_sum
 
 
-def collect_performance_data(
-    benchmark_name: str,
-    input_dir: str,
-) -> float:
-    """
-    Collects performance data from the specified input directory.
-
-    Args:
-        benchmark_name (str): The name of the benchmark.
-        input_dir (str): The directory containing performance data files.
-
-    Returns:
-        list: A list of dictionaries containing performance data.
-    """
+def collect_performance_data(benchmark_name: str, input_dir: str) -> float:
     performance_data = 0
-
     file_path = os.path.join(input_dir, f"{benchmark_name}.csv")
-
     if not os.path.exists(file_path):
         print(f"Performance data file {file_path} does not exist.")
-
         return performance_data
-
-    # read the CSV file and collect performance data
     df = pd.read_csv(file_path)
-
     for _, row in df.iterrows():
         if row.iloc[1] == " driver" and row.iloc[2] == " kernel_time":
             performance_data = row.iloc[3]
-
             if performance_data == 0:
                 print(f"Warning: kernel time for {benchmark_name} is zero.")
-
                 continue
-
             else:
                 break
-
         if (
             row.iloc[1] == " GPU1.CommandProcessor"
             and row.iloc[2] == " kernel_time (force stop) 0"
         ):
             performance_data = row.iloc[3]
-            print(
-                f"Warning: kernel time (force stop) for {benchmark_name} is {performance_data}."
-            )
-
+            print(f"Warning: kernel time (force stop) for {benchmark_name} is {performance_data}.")
             break
-
     return performance_data
 
 
@@ -97,22 +51,14 @@ def plot_normalized_time(
     baseline: pd.DataFrame,
     Opt1: pd.DataFrame,
     Opt2: pd.DataFrame,
+    Opt3: pd.DataFrame,
+    Opt4: pd.DataFrame,
     out_dir: str,
 ) -> None:
-    """
-    Plots the normalized time for private and shared data.
-
-    Args:
-        result (pd.DataFrame): DataFrame containing performance data.
-        baseline (pd.DataFrame): DataFrame containing baseline performance data.
-        out_dir (str): Directory to save the output plots.
-    """
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
-    # Set Arial font family
     plt.rcParams["font.family"] = "Arial"
-    # For macOS, you might need to explicitly set the font file
     plt.rcParams["font.sans-serif"] = ["Arial"]
     plt.rcParams["mathtext.fontset"] = "custom"
     plt.rcParams["mathtext.rm"] = "Arial"
@@ -123,241 +69,259 @@ def plot_normalized_time(
 
     benchmarks = get_benchmarks()
 
-    bar_width = 0.2
-    r1 = np.arange(len(benchmarks) + 1) * (3 * bar_width + 0.1)
-    r2 = [x + bar_width for x in r1]
-    r3 = [x + bar_width for x in r2]
-
     # Normalize the time
-    Opt1["Data"] = [
-        (
-            baseline["Data"][i] / Opt1["Data"][i]
-            if Opt1["Data"][i] != 0 and baseline["Data"][i] != 0
-            else 0
-        )
-        for i in range(len(benchmarks))
-    ]
-    Opt2["Data"] = [
-        (
-            baseline["Data"][i] / Opt2["Data"][i]
-            if Opt2["Data"][i] != 0 and baseline["Data"][i] != 0
-            else 0
-        )
-        for i in range(len(benchmarks))
-    ]
+    for col in [Opt1, Opt2, Opt3, Opt4]:
+        col["Data"] = [
+            (
+                baseline["Data"][i] / col["Data"][i]
+                if col["Data"][i] != 0 and baseline["Data"][i] != 0
+                else 0
+            )
+            for i in range(len(benchmarks))
+        ]
     baseline["Data"] = [1.0 for _ in range(len(benchmarks))]
 
-    # Ave.
-    baseline = pd.concat(
-        [
-            baseline,
-            pd.DataFrame(
-                {
-                    "Benchmark": ["Ave."],
-                    "Data": [harmonic_mean(baseline["Data"])],
-                }
-            ),
-        ],
-        ignore_index=True,
-    )
-    Opt1 = pd.concat(
-        [
-            Opt1,
-            pd.DataFrame(
-                {
-                    "Benchmark": ["Ave."],
-                    "Data": [harmonic_mean(Opt1["Data"])],
-                }
-            ),
-        ],
-        ignore_index=True,
-    )
-    Opt2 = pd.concat(
-        [
-            Opt2,
-            pd.DataFrame(
-                {
-                    "Benchmark": ["Ave."],
-                    "Data": [harmonic_mean(Opt2["Data"])],
-                }
-            ),
-        ],
-        ignore_index=True,
-    )
+    # Split into high/low MPKI groups and append Ave.
+    def split_and_append_ave(df):
+        hmpki = df[df["Benchmark"].isin(high_mpki_benchmarks)].copy()
+        lmpki = df[df["Benchmark"].isin(low_mpki_benchmarks)].copy()
+        hmpki = pd.concat(
+            [hmpki, pd.DataFrame({"Benchmark": ["Ave."], "Data": [harmonic_mean(hmpki["Data"])]})],
+            ignore_index=True,
+        )
+        lmpki = pd.concat(
+            [lmpki, pd.DataFrame({"Benchmark": ["Ave."], "Data": [harmonic_mean(lmpki["Data"])]})],
+            ignore_index=True,
+        )
+        return hmpki, lmpki
 
-    bar1 = plt.bar(
-        r1,
-        baseline["Data"],
-        width=bar_width,
-        label="Baseline",
-        color="#fcfdf7",
-        edgecolor="black",
-        linewidth=1.5,
-    )
-    bar2 = plt.bar(
-        r2,
-        Opt1["Data"],
-        width=bar_width,
-        label="MPW",
-        color="#cce5d8",
-        edgecolor="black",
-        linewidth=1.5,
-    )
-    bar3 = plt.bar(
-        r3,
-        Opt2["Data"],
-        width=bar_width,
-        label="CaPWQ",
-        color="#6ba78b",
-        edgecolor="black",
-        linewidth=1.5,
-    )
+    baseline_hmpki, baseline_lmpki = split_and_append_ave(baseline)
+    opt1_hmpki,     opt1_lmpki     = split_and_append_ave(Opt1)
+    opt2_hmpki,     opt2_lmpki     = split_and_append_ave(Opt2)
+    opt3_hmpki,     opt3_lmpki     = split_and_append_ave(Opt3)
+    opt4_hmpki,     opt4_lmpki     = split_and_append_ave(Opt4)
 
-    for bar in bar1 + bar2 + bar3:
+    baseline_full = pd.concat([baseline_hmpki, baseline_lmpki], ignore_index=True)
+    Opt1_full     = pd.concat([opt1_hmpki,     opt1_lmpki],     ignore_index=True)
+    Opt2_full     = pd.concat([opt2_hmpki,     opt2_lmpki],     ignore_index=True)
+    Opt3_full     = pd.concat([opt3_hmpki,     opt3_lmpki],     ignore_index=True)
+    Opt4_full     = pd.concat([opt4_hmpki,     opt4_lmpki],     ignore_index=True)
+
+    # ---------------------------------------------------------------
+    # Build x-positions with a gap between the two groups
+    # ---------------------------------------------------------------
+    bar_width   = 0.1
+    group_step  = 4 * bar_width + 0.15   # width of one benchmark cluster
+    gap         = 0.6                  # extra gap between high-MPKI and low-MPKI sections
+
+    n_hmpki = len(high_mpki_benchmarks) + 1   # benchmarks + Ave.
+    n_lmpki = len(low_mpki_benchmarks)  + 1
+
+    # Positions for the leftmost bar of each cluster
+    r1_hmpki = np.arange(n_hmpki) * group_step
+    r1_lmpki = np.arange(n_lmpki) * group_step + r1_hmpki[-1] + group_step + gap
+
+    r1 = np.concatenate([r1_hmpki, r1_lmpki])
+    r2 = r1 + bar_width
+    r3 = r2 + bar_width
+    r4 = r3 + bar_width
+
+    # ---------------------------------------------------------------
+    # Draw bars
+    # ---------------------------------------------------------------
+    bar1 = plt.bar(r1, baseline_full["Data"], width=bar_width, label="Baseline",
+                   color="#C3D9F1", edgecolor="black", linewidth=1.5)
+    bar2 = plt.bar(r2, Opt2_full["Data"],     width=bar_width, label="ngAT (0 Entries)",
+                   color="#5D73A1", edgecolor="black", linewidth=1.5)
+    bar3 = plt.bar(r3, Opt3_full["Data"],     width=bar_width, label="ngAT (4 Entries)",
+                   color="#313A5B", edgecolor="black", linewidth=1.5)
+    bar4 = plt.bar(r4, Opt4_full["Data"],     width=bar_width, label="ngAT + Adaptive Reserved",
+                   color="#8D2E2C", edgecolor="black", linewidth=1.5)
+
+    # Annotate bars that exceed the y-axis limit
+    for bar in bar1 + bar2 + bar3 + bar4:
         height = bar.get_height()
         x = bar.get_x() + bar.get_width() / 2
-
-        if height >= 8:
+        if height >= 4:
             plt.annotate(
-                f"{height:.1f}",
-                xy=(x, 7.5),
-                xytext=(0, 0),  # 相对偏移 (0,15) 表示向上15pt
+                f"{height:.2f}",
+                xy=(x, 3.65),
+                xytext=(0, 0),
                 textcoords="offset points",
                 ha="center",
                 va="bottom",
-                fontsize=20,
+                fontsize=22,
                 fontweight="bold",
-                bbox=dict(
-                    facecolor="white",
-                    edgecolor="black",
-                    boxstyle="round,pad=0.1",
-                ),
-                # arrowprops=dict(arrowstyle="-", color="red", lw=2),
+                bbox=dict(facecolor="white", edgecolor="black", boxstyle="round,pad=0.1"),
             )
 
-    plt.xlim(min(r1) - bar_width, max(r3) + bar_width)
-    plt.xticks(
-        [r + 1 * bar_width for r in r1],
-        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
-        fontsize=24,
-        fontweight="bold",
+    # ---------------------------------------------------------------
+    # X-tick labels
+    # ---------------------------------------------------------------
+    xtick_labels = (
+        [get_short_name(b) for b in high_mpki_benchmarks] + ["Ave."] +
+        [get_short_name(b) for b in low_mpki_benchmarks]  + ["Ave."]
     )
+    xtick_positions = [r + 1.5 * bar_width for r in r1]
+
+    plt.xlim(min(r1) - bar_width, max(r4) + bar_width)
+    plt.xticks(xtick_positions, xtick_labels, fontsize=26, fontweight="bold")
+
     plt.ylabel("Speedup", fontsize=24, fontweight="bold")
-    plt.yticks(
-        np.arange(0, 8.1, 2),
-        fontsize=26,
-        fontweight="bold",
-    )
-    plt.ylim(0, 8)
+    plt.yticks(np.arange(0, 4.1, 1), fontsize=26, fontweight="bold")
+    plt.ylim(0, 4)
+
+    # ---------------------------------------------------------------
+    # Vertical dashed separator between the two groups
+    # ---------------------------------------------------------------
+    sep_x = (r4[n_hmpki - 1] + r1[n_hmpki]) / 2   # midpoint in the gap
+    plt.axvline(x=sep_x, color="black", linewidth=1.5, linestyle="--")
+
+    # ---------------------------------------------------------------
+    # Group bracket labels below the x-axis (like the reference image)
+    # ---------------------------------------------------------------
+    ax = plt.gca()
+
+    # x-data range for each group (using bar outer edges)
+    hmpki_x_left  = r1[0]
+    hmpki_x_right = r4[n_hmpki - 1]
+    lmpki_x_left  = r1[n_hmpki]
+    lmpki_x_right = r4[-1]
+
+    # Convert data coords to axes coords for the bracket
+    x_total = max(r4) + bar_width - (min(r1) - bar_width)
+    x_start = min(r1) - bar_width
+
+    def to_axes_x(data_x):
+        return (data_x - x_start) / x_total
+
+    bracket_y      = -0.18   # in axes coordinates (below the plot)
+    label_y        = -0.25
+
+    for x_left, x_right, label in [
+        (hmpki_x_left, hmpki_x_right, "High L3 TLB MPKI Workloads"),
+        (lmpki_x_left, lmpki_x_right, "Low L3 TLB MPKI Workloads"),
+    ]:
+        ax_left  = to_axes_x(x_left  - bar_width * 0.5)
+        ax_right = to_axes_x(x_right + bar_width * 0.5)
+        ax_mid   = (ax_left + ax_right) / 2
+
+        # Bracket line
+        ax.annotate(
+            "",
+            xy=(ax_left,  bracket_y),
+            xytext=(ax_right, bracket_y),
+            xycoords="axes fraction",
+            textcoords="axes fraction",
+            arrowprops=dict(arrowstyle="-", color="black", lw=1.5),
+        )
+        # Left tick
+        ax.annotate(
+            "",
+            xy=(ax_left,  bracket_y),
+            xytext=(ax_left,  bracket_y + 0.02),
+            xycoords="axes fraction",
+            textcoords="axes fraction",
+            arrowprops=dict(arrowstyle="-", color="black", lw=1.5),
+        )
+        # Right tick
+        ax.annotate(
+            "",
+            xy=(ax_right, bracket_y),
+            xytext=(ax_right, bracket_y + 0.02),
+            xycoords="axes fraction",
+            textcoords="axes fraction",
+            arrowprops=dict(arrowstyle="-", color="black", lw=1.5),
+        )
+        # Label
+        ax.text(
+            ax_mid, label_y, label,
+            ha="center", va="top",
+            fontsize=22, fontweight="bold",
+            transform=ax.transAxes,
+        )
+
+    # ---------------------------------------------------------------
+    # Legend, grid, baseline line, borders
+    # ---------------------------------------------------------------
     plt.legend(
         loc="upper center",
-        ncol=3,
+        ncol=4,
         bbox_to_anchor=(0.5, 1),
-        bbox_transform=plt.gcf().transFigure,  # 使用图形坐标系
+        bbox_transform=plt.gcf().transFigure,
         frameon=True,
         fancybox=True,
         framealpha=0.7,
         prop={"weight": "bold", "size": 20},
     )
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.tight_layout(rect=[0, 0, 1, 0.975])
+    plt.subplots_adjust(bottom=0.22)   # make room for the group labels
     plt.grid(axis="y", alpha=0.3)
     plt.axhline(y=1, color="red", linewidth=0.8, linestyle="--")
 
-    ax = plt.gca()
-
-    # 设置图的边框加粗
     for spine in ax.spines.values():
-        spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
+        spine.set_linewidth(1.75)
 
-    output_file = os.path.join(
-        out_dir, "CaPWQMMU_Normalized_Time"
-    )
+    output_file = os.path.join(out_dir, "CaPWQMMU_Normalized_Time")
     plt.savefig(output_file + ".png")
     plt.savefig(output_file + ".pdf")
     print(f"Plot saved to {output_file}")
 
 
 if __name__ == "__main__":
-    # Example usage
     parser = argparse.ArgumentParser(description="Parse csv file.")
-
-    parser.add_argument(
-        "--outDir",
-        required=True,
-        type=str,
-        help="Directory path to save the output plots.",
-    )
-
+    parser.add_argument("--outDir", required=True, type=str,
+                        help="Directory path to save the output plots.")
     args = parser.parse_args()
 
-    baseline = pd.DataFrame(
-        columns=["Benchmark", "Data"],
-    )
-    Opt1 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
-    )
-    Opt2 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
-    )
+    baseline = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt1     = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt2     = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt3     = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt4     = pd.DataFrame(columns=["Benchmark", "Data"])
 
     for benchmark in get_benchmarks():
-        perf_data = collect_performance_data(
-            benchmark_name=benchmark,
-            input_dir="../../data/baselineMMU",
-        )
+        for df, input_dir in [
+            (baseline, "../../data/baselineMMU"),
+            (Opt1,     "../../data/MPW"),
+            (Opt2,     "../../data/caPWQMMUL6_roundrobin"),
+            (Opt3,     "../../data/caPWQMMUL6_roundrobin"),
+            (Opt4,     "../../data/caPWQMMUL6_roundrobin"),
+        ]:
+            perf_data = collect_performance_data(benchmark_name=benchmark, input_dir=input_dir)
+            new_row = pd.DataFrame({"Benchmark": [benchmark], "Data": [perf_data]})
+            df = pd.concat([df, new_row], ignore_index=True)
 
-        baseline = pd.concat(
-            [
-                baseline,
-                pd.DataFrame(
-                    {
-                        "Benchmark": [benchmark],
-                        "Data": [perf_data],
-                    }
-                ),
-            ],
-            ignore_index=True,
-        )
+        # Re-assign because pd.concat returns a new object
+        baseline_rows = [collect_performance_data(benchmark, "../../data/baselineMMU")]
+        baseline = pd.concat([baseline, pd.DataFrame({"Benchmark": [benchmark], "Data": baseline_rows})], ignore_index=True)
 
-        perf_data = collect_performance_data(
-            benchmark_name=benchmark,
-            input_dir="../../data/MPW",
-        )
+    # Cleaner loop — rebuild from scratch properly
+    baseline = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt1     = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt2     = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt3     = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt4     = pd.DataFrame(columns=["Benchmark", "Data"])
 
-        Opt1 = pd.concat(
-            [
-                Opt1,
-                pd.DataFrame(
-                    {
-                        "Benchmark": [benchmark],
-                        "Data": [perf_data],
-                    }
-                ),
-            ],
-            ignore_index=True,
-        )
+    for benchmark in get_benchmarks():
+        def append_row(df, benchmark, input_dir):
+            perf_data = collect_performance_data(benchmark_name=benchmark, input_dir=input_dir)
+            return pd.concat(
+                [df, pd.DataFrame({"Benchmark": [benchmark], "Data": [perf_data]})],
+                ignore_index=True,
+            )
 
-        perf_data = collect_performance_data(
-            benchmark_name=benchmark,
-            input_dir="../../data/caPWQL4",
-        )
-
-        Opt2 = pd.concat(
-            [
-                Opt2,
-                pd.DataFrame(
-                    {
-                        "Benchmark": [benchmark],
-                        "Data": [perf_data],
-                    }
-                ),
-            ],
-            ignore_index=True,
-        )
+        baseline = append_row(baseline, benchmark, "../../data/baselineMMU")
+        Opt1     = append_row(Opt1,     benchmark, "../../data/infiniteMMU")
+        Opt2     = append_row(Opt2,     benchmark, "../../data/caPWQMMUL6_roundrobin")
+        Opt3     = append_row(Opt3,     benchmark, "../../data/caPWQMMUL6_roundrobin")
+        Opt4     = append_row(Opt4,     benchmark, "../../data/caPWQMMUL6_roundrobin")
 
     plot_normalized_time(
         baseline=baseline.copy(),
         Opt1=Opt1.copy(),
         Opt2=Opt2.copy(),
+        Opt3=Opt3.copy(),
+        Opt4=Opt4.copy(),
         out_dir=args.outDir,
     )

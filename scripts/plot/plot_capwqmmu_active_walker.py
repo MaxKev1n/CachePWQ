@@ -56,6 +56,7 @@ def collect_performance_data(
         list: A list of dictionaries containing performance data.
     """
     performance_data = 0
+    count = 0
 
     file_path = os.path.join(input_dir, f"{benchmark_name}.csv")
 
@@ -68,29 +69,17 @@ def collect_performance_data(
     df = pd.read_csv(file_path)
 
     for _, row in df.iterrows():
-        if row.iloc[1] == " driver" and row.iloc[2] == " kernel_time":
-            performance_data = row.iloc[3]
+        if row.iloc[2] == " average active walkers":
+            performance_data += row.iloc[3]
+            count += 1
 
-            if performance_data == 0:
-                print(f"Warning: kernel time for {benchmark_name} is zero.")
+    if count == 0:
+        print(f"No valid performance data found in {file_path}.")
 
-                continue
+        return 0.0
 
-            else:
-                break
 
-        if (
-            row.iloc[1] == " GPU1.CommandProcessor"
-            and row.iloc[2] == " kernel_time (force stop) 0"
-        ):
-            performance_data = row.iloc[3]
-            print(
-                f"Warning: kernel time (force stop) for {benchmark_name} is {performance_data}."
-            )
-
-            break
-
-    return performance_data
+    return float(performance_data) / float(count)
 
 
 def plot_normalized_time(
@@ -123,29 +112,29 @@ def plot_normalized_time(
 
     benchmarks = get_benchmarks()
 
-    bar_width = 0.15
+    bar_width = 0.2
     r1 = np.arange(len(benchmarks) + 1) * (3 * bar_width + 0.1)
     r2 = [x + bar_width for x in r1]
     r3 = [x + bar_width for x in r2]
 
     # Normalize the time
-    Opt1["Data"] = [
-        (
-            baseline["Data"][i] / Opt1["Data"][i]
-            if Opt1["Data"][i] != 0 and baseline["Data"][i] != 0
-            else 0
-        )
-        for i in range(len(benchmarks))
-    ]
-    Opt2["Data"] = [
-        (
-            baseline["Data"][i] / Opt2["Data"][i]
-            if Opt2["Data"][i] != 0 and baseline["Data"][i] != 0
-            else 0
-        )
-        for i in range(len(benchmarks))
-    ]
-    baseline["Data"] = [1.0 for _ in range(len(benchmarks))]
+    # Opt1["Data"] = [
+    #     (
+    #         baseline["Data"][i] / Opt1["Data"][i]
+    #         if Opt1["Data"][i] != 0 and baseline["Data"][i] != 0
+    #         else 0
+    #     )
+    #     for i in range(len(benchmarks))
+    # ]
+    # Opt2["Data"] = [
+    #     (
+    #         baseline["Data"][i] / Opt2["Data"][i]
+    #         if Opt2["Data"][i] != 0 and baseline["Data"][i] != 0
+    #         else 0
+    #     )
+    #     for i in range(len(benchmarks))
+    # ]
+    # baseline["Data"] = [1.0 for _ in range(len(benchmarks))]
 
     # Ave.
     baseline = pd.concat(
@@ -198,7 +187,7 @@ def plot_normalized_time(
         r2,
         Opt1["Data"],
         width=bar_width,
-        label="Infinite Walker",
+        label="MPW",
         color="#5D73A1",
         edgecolor="black",
         linewidth=1.5,
@@ -207,7 +196,7 @@ def plot_normalized_time(
         r3,
         Opt2["Data"],
         width=bar_width,
-        label="Ideal Translation",
+        label="ngAT",
         color="#313A5B",
         edgecolor="black",
         linewidth=1.5,
@@ -217,56 +206,56 @@ def plot_normalized_time(
         height = bar.get_height()
         x = bar.get_x() + bar.get_width() / 2
 
-        if height >= 8:
-            plt.annotate(
-                f"{height:.1f}",
-                xy=(x, 7.225),
-                xytext=(0, 0),  # 相对偏移 (0,15) 表示向上15pt
-                textcoords="offset points",
-                ha="center",
-                va="bottom",
-                fontsize=22,
-                fontweight="bold",
-                bbox=dict(
-                    facecolor="white",
-                    edgecolor="black",
-                    boxstyle="round,pad=0.1",
-                ),
-                # arrowprops=dict(arrowstyle="-", color="red", lw=2),
-            )
-        else:
-            plt.annotate(
-                f"{height:.1f}",
-                xy=(x, height),
-                xytext=(0, 5),  # 相对偏移 (0,15) 表示向上15pt
-                textcoords="offset points",
-                ha="center",
-                va="bottom",
-                fontsize=22,
-                rotation=90,
-                fontweight="bold",
-                # bbox=dict(
-                #     facecolor="white",
-                #     edgecolor="black",
-                #     boxstyle="round,pad=0.1",
-                # ),
-                # arrowprops=dict(arrowstyle="-", color="red", lw=2),
-            )
+        # if height >= 4:
+        #     plt.annotate(
+        #         f"{height:.2f}",
+        #         xy=(x, 3.65),
+        #         xytext=(0, 0),  # 相对偏移 (0,15) 表示向上15pt
+        #         textcoords="offset points",
+        #         ha="center",
+        #         va="bottom",
+        #         fontsize=22,
+        #         fontweight="bold",
+        #         bbox=dict(
+        #             facecolor="white",
+        #             edgecolor="black",
+        #             boxstyle="round,pad=0.1",
+        #         ),
+        #         # arrowprops=dict(arrowstyle="-", color="red", lw=2),
+        #     )
+        # else:
+        #     plt.annotate(
+        #         f"{height:.2f}",
+        #         xy=(x, height),
+        #         xytext=(0, 0),  # 相对偏移 (0,15) 表示向上15pt
+        #         textcoords="offset points",
+        #         ha="center",
+        #         va="bottom",
+        #         fontsize=22,
+        #         fontweight="bold",
+        #         rotation=90,
+        #         # bbox=dict(
+        #         #     facecolor="white",
+        #         #     edgecolor="black",
+        #         #     boxstyle="round,pad=0.1",
+        #         # ),
+        #         # arrowprops=dict(arrowstyle="-", color="red", lw=2),
+        #     )
 
     plt.xlim(min(r1) - bar_width, max(r3) + bar_width)
     plt.xticks(
         [r + 1 * bar_width for r in r1],
         [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
-        fontsize=30,
+        fontsize=26,
         fontweight="bold",
     )
-    plt.ylabel("Speedup", fontsize=30, fontweight="bold")
+    plt.ylabel("Average Inflight PTW Req", fontsize=24, fontweight="bold")
     plt.yticks(
-        np.arange(0, 8.1, 2),
-        fontsize=30,
+        np.arange(0, 65, 16),
+        fontsize=26,
         fontweight="bold",
     )
-    plt.ylim(0, 8)
+    plt.ylim(0, 64)
     plt.legend(
         loc="upper center",
         ncol=3,
@@ -275,11 +264,11 @@ def plot_normalized_time(
         frameon=True,
         fancybox=True,
         framealpha=0.7,
-        prop={"weight": "bold", "size": 26},
+        prop={"weight": "bold", "size": 20},
     )
-    plt.tight_layout(rect=[0, 0, 1, 0.925])
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.grid(axis="y", alpha=0.3)
-    plt.axhline(y=1, color="red", linewidth=0.8, linestyle="--")
+    plt.axhline(y=8, color="red", linewidth=0.8, linestyle="--")
 
     ax = plt.gca()
 
@@ -288,7 +277,7 @@ def plot_normalized_time(
         spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
 
     output_file = os.path.join(
-        out_dir, "motivation_translation_bottleneck"
+        out_dir, "CaPWQMMU_Active_Walker"
     )
     plt.savefig(output_file + ".png")
     plt.savefig(output_file + ".pdf")
@@ -339,7 +328,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/infiniteMMU",
+            input_dir="../../data/MPW",
         )
 
         Opt1 = pd.concat(
@@ -357,7 +346,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/idealMMU",
+            input_dir="../../data/caPWQMMUL6_roundrobin",
         )
 
         Opt2 = pd.concat(
