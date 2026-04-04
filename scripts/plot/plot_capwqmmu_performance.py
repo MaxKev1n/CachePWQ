@@ -129,31 +129,71 @@ def plot_normalized_time(
     # ---------------------------------------------------------------
     # Draw bars
     # ---------------------------------------------------------------
-    bar1 = plt.bar(r1, baseline_full["Data"], width=bar_width, label="Baseline",
-                   color="#C3D9F1", edgecolor="black", linewidth=1.5)
-    bar2 = plt.bar(r2, Opt2_full["Data"],     width=bar_width, label="ngAT (0 Entries)",
-                   color="#5D73A1", edgecolor="black", linewidth=1.5)
-    bar3 = plt.bar(r3, Opt3_full["Data"],     width=bar_width, label="ngAT (4 Entries)",
-                   color="#313A5B", edgecolor="black", linewidth=1.5)
-    bar4 = plt.bar(r4, Opt4_full["Data"],     width=bar_width, label="ngAT + Adaptive Reserved",
+    bar1 = plt.bar(r1, baseline_full["Data"], width=bar_width, label="baseline",
                    color="#8D2E2C", edgecolor="black", linewidth=1.5)
+    bar2 = plt.bar(r2, Opt1_full["Data"],     width=bar_width, label="ngAT",
+                   color="#C3D9F1", edgecolor="black", linewidth=1.5)
+    bar3 = plt.bar(r3, Opt3_full["Data"],     width=bar_width, label="ngAT + ARM",
+                   color="#5D73A1", edgecolor="black", linewidth=1.5)
+    bar4 = plt.bar(r4, Opt4_full["Data"],     width=bar_width, label="infinite walkers",
+                   color="#313A5B", edgecolor="black", linewidth=1.5)
 
     # Annotate bars that exceed the y-axis limit
     for bar in bar1 + bar2 + bar3 + bar4:
         height = bar.get_height()
         x = bar.get_x() + bar.get_width() / 2
         if height >= 4:
-            plt.annotate(
-                f"{height:.2f}",
-                xy=(x, 3.65),
-                xytext=(0, 0),
-                textcoords="offset points",
-                ha="center",
-                va="bottom",
-                fontsize=22,
-                fontweight="bold",
-                bbox=dict(facecolor="white", edgecolor="black", boxstyle="round,pad=0.1"),
-            )
+            if bar in bar2:
+                plt.annotate(
+                    f"{height:.2f}",
+                    xy=(x, 2.5),  # 柱顶位置
+                    xytext=(-35, 0),  # 相对偏移 (0,15) 表示向上15pt
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                    fontsize=20,
+                    fontweight="bold",
+                    bbox=dict(
+                        facecolor="white",
+                        edgecolor="black",
+                        boxstyle="round,pad=0.1",
+                    ),
+                    arrowprops=dict(arrowstyle="-", color="red", lw=2),
+                )
+            elif bar in bar3:
+                plt.annotate(
+                    f"{height:.2f}",
+                    xy=(x, 3),  # 柱顶位置
+                    xytext=(-51, 0),  # 相对偏移 (0,15) 表示向上15pt
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                    fontsize=20,
+                    fontweight="bold",
+                    bbox=dict(
+                        facecolor="white",
+                        edgecolor="black",
+                        boxstyle="round,pad=0.1",
+                    ),
+                    arrowprops=dict(arrowstyle="-", color="red", lw=2),
+                )
+            elif bar in bar4:
+                plt.annotate(
+                    f"{height:.2f}",
+                    xy=(x, 3.5),  # 柱顶位置
+                    xytext=(-67, 0),  # 相对偏移 (0,15) 表示向上15pt
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                    fontsize=20,
+                    fontweight="bold",
+                    bbox=dict(
+                        facecolor="white",
+                        edgecolor="black",
+                        boxstyle="round,pad=0.1",
+                    ),
+                    arrowprops=dict(arrowstyle="-", color="red", lw=2),
+                )
 
     # ---------------------------------------------------------------
     # X-tick labels
@@ -165,10 +205,10 @@ def plot_normalized_time(
     xtick_positions = [r + 1.5 * bar_width for r in r1]
 
     plt.xlim(min(r1) - bar_width, max(r4) + bar_width)
-    plt.xticks(xtick_positions, xtick_labels, fontsize=26, fontweight="bold")
+    plt.xticks(xtick_positions, xtick_labels, fontsize=20, fontweight="bold")
 
-    plt.ylabel("Speedup", fontsize=24, fontweight="bold")
-    plt.yticks(np.arange(0, 4.1, 1), fontsize=26, fontweight="bold")
+    plt.ylabel("Speedup", fontsize=20, fontweight="bold")
+    plt.yticks(np.arange(0, 4.1, 1), fontsize=20, fontweight="bold")
     plt.ylim(0, 4)
 
     # ---------------------------------------------------------------
@@ -195,8 +235,8 @@ def plot_normalized_time(
     def to_axes_x(data_x):
         return (data_x - x_start) / x_total
 
-    bracket_y      = -0.18   # in axes coordinates (below the plot)
-    label_y        = -0.25
+    bracket_y      = -0.13   # in axes coordinates (below the plot)
+    label_y        = -0.2
 
     for x_left, x_right, label in [
         (hmpki_x_left, hmpki_x_right, "High L3 TLB MPKI Workloads"),
@@ -237,7 +277,7 @@ def plot_normalized_time(
         ax.text(
             ax_mid, label_y, label,
             ha="center", va="top",
-            fontsize=22, fontweight="bold",
+            fontsize=20, fontweight="bold",
             transform=ax.transAxes,
         )
 
@@ -281,29 +321,6 @@ if __name__ == "__main__":
     Opt4     = pd.DataFrame(columns=["Benchmark", "Data"])
 
     for benchmark in get_benchmarks():
-        for df, input_dir in [
-            (baseline, "../../data/baselineMMU"),
-            (Opt1,     "../../data/MPW"),
-            (Opt2,     "../../data/caPWQMMUL6_roundrobin"),
-            (Opt3,     "../../data/caPWQMMUL6_roundrobin"),
-            (Opt4,     "../../data/caPWQMMUL6_roundrobin"),
-        ]:
-            perf_data = collect_performance_data(benchmark_name=benchmark, input_dir=input_dir)
-            new_row = pd.DataFrame({"Benchmark": [benchmark], "Data": [perf_data]})
-            df = pd.concat([df, new_row], ignore_index=True)
-
-        # Re-assign because pd.concat returns a new object
-        baseline_rows = [collect_performance_data(benchmark, "../../data/baselineMMU")]
-        baseline = pd.concat([baseline, pd.DataFrame({"Benchmark": [benchmark], "Data": baseline_rows})], ignore_index=True)
-
-    # Cleaner loop — rebuild from scratch properly
-    baseline = pd.DataFrame(columns=["Benchmark", "Data"])
-    Opt1     = pd.DataFrame(columns=["Benchmark", "Data"])
-    Opt2     = pd.DataFrame(columns=["Benchmark", "Data"])
-    Opt3     = pd.DataFrame(columns=["Benchmark", "Data"])
-    Opt4     = pd.DataFrame(columns=["Benchmark", "Data"])
-
-    for benchmark in get_benchmarks():
         def append_row(df, benchmark, input_dir):
             perf_data = collect_performance_data(benchmark_name=benchmark, input_dir=input_dir)
             return pd.concat(
@@ -311,11 +328,11 @@ if __name__ == "__main__":
                 ignore_index=True,
             )
 
-        baseline = append_row(baseline, benchmark, "../../data/baselineMMU")
-        Opt1     = append_row(Opt1,     benchmark, "../../data/infiniteMMU")
-        Opt2     = append_row(Opt2,     benchmark, "../../data/caPWQMMUL6_roundrobin")
-        Opt3     = append_row(Opt3,     benchmark, "../../data/caPWQMMUL6_roundrobin")
-        Opt4     = append_row(Opt4,     benchmark, "../../data/caPWQMMUL6_roundrobin")
+        baseline = append_row(baseline, benchmark, "../../final_data/final_baseline")
+        Opt1     = append_row(Opt1,     benchmark, "../../final_data/final_ngat_0")
+        Opt2     = append_row(Opt2,     benchmark, "../../final_data/final_ngat_4_mshr")
+        Opt3     = append_row(Opt3,     benchmark, "../../final_data/final_ngat_adaptive")
+        Opt4     = append_row(Opt4,     benchmark, "../../final_data/final_infinitewalker")
 
     plot_normalized_time(
         baseline=baseline.copy(),

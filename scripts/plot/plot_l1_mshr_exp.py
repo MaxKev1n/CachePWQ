@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from benchmark import get_high_mpki_benchmarks, get_short_name
+from matplotlib.patches import Patch
 
 
 def geometric_mean(df: pd.DataFrame) -> float:
@@ -41,10 +42,7 @@ def harmonic_mean(df: pd.DataFrame) -> float:
     return len(data) / reciprocal_sum
 
 
-def collect_performance_data(
-    benchmark_name: str,
-    input_dir: str,
-) -> float:
+def collect_mshr(benchmark_name: str, input_dir: str) -> tuple[float, float]:
     """
     Collects performance data from the specified input directory.
 
@@ -55,31 +53,32 @@ def collect_performance_data(
     Returns:
         list: A list of dictionaries containing performance data.
     """
-    performance_data = 0
     count = 0
+    walker_unique_lens = 0
+    unique_lens = 0
 
     file_path = os.path.join(input_dir, f"{benchmark_name}.csv")
 
     if not os.path.exists(file_path):
         print(f"Performance data file {file_path} does not exist.")
 
-        return performance_data
+        return unique_lens, walker_unique_lens
 
     # read the CSV file and collect performance data
     df = pd.read_csv(file_path)
 
     for _, row in df.iterrows():
-        if row.iloc[2] == " average active walkers":
-            performance_data += row.iloc[3]
+        if "L1VCache" not in row.iloc[1]:
+            continue
+
+        if row.iloc[2] == " average_mshr_uniq_len":
+            unique_lens += row.iloc[3]
             count += 1
 
-    if count == 0:
-        print(f"No valid performance data found in {file_path}.")
+        elif row.iloc[2] == " average_walk_mshr_len":
+            walker_unique_lens += row.iloc[3]
 
-        return 0.0
-
-
-    return float(performance_data) / float(count)
+    return unique_lens / float(count), walker_unique_lens / float(count)
 
 
 def plot_normalized_time(
@@ -108,6 +107,7 @@ def plot_normalized_time(
     plt.rcParams["mathtext.rm"] = "Arial"
     plt.rcParams["mathtext.it"] = "Arial:italic"
     plt.rcParams["mathtext.bf"] = "Arial:bold"
+    plt.rcParams["hatch.linewidth"] = 2.0
 
     plt.figure(figsize=(20, 5), dpi=300)
 
@@ -120,23 +120,23 @@ def plot_normalized_time(
     r4 = [x + bar_width for x in r3]
 
     # Normalize the time
-    # Opt1["Data"] = [
+    # Opt1["MSHR"] = [
     #     (
-    #         baseline["Data"][i] / Opt1["Data"][i]
-    #         if Opt1["Data"][i] != 0 and baseline["Data"][i] != 0
+    #         baseline["MSHR"][i] / Opt1["MSHR"][i]
+    #         if Opt1["MSHR"][i] != 0 and baseline["MSHR"][i] != 0
     #         else 0
     #     )
     #     for i in range(len(benchmarks))
     # ]
-    # Opt2["Data"] = [
+    # Opt2["MSHR"] = [
     #     (
-    #         baseline["Data"][i] / Opt2["Data"][i]
-    #         if Opt2["Data"][i] != 0 and baseline["Data"][i] != 0
+    #         baseline["MSHR"][i] / Opt2["MSHR"][i]
+    #         if Opt2["MSHR"][i] != 0 and baseline["MSHR"][i] != 0
     #         else 0
     #     )
     #     for i in range(len(benchmarks))
     # ]
-    # baseline["Data"] = [1.0 for _ in range(len(benchmarks))]
+    # baseline["MSHR"] = [1.0 for _ in range(len(benchmarks))]
 
     # Ave.
     baseline = pd.concat(
@@ -145,7 +145,7 @@ def plot_normalized_time(
             pd.DataFrame(
                 {
                     "Benchmark": ["Ave."],
-                    "Data": [harmonic_mean(baseline["Data"])],
+                    "MSHR": [harmonic_mean(baseline["MSHR"])],
                 }
             ),
         ],
@@ -157,7 +157,7 @@ def plot_normalized_time(
             pd.DataFrame(
                 {
                     "Benchmark": ["Ave."],
-                    "Data": [harmonic_mean(Opt1["Data"])],
+                    "MSHR": [harmonic_mean(Opt1["MSHR"])],
                 }
             ),
         ],
@@ -169,7 +169,7 @@ def plot_normalized_time(
             pd.DataFrame(
                 {
                     "Benchmark": ["Ave."],
-                    "Data": [harmonic_mean(Opt2["Data"])],
+                    "MSHR": [harmonic_mean(Opt2["MSHR"])],
                 }
             ),
         ],
@@ -181,7 +181,7 @@ def plot_normalized_time(
             pd.DataFrame(
                 {
                     "Benchmark": ["Ave."],
-                    "Data": [harmonic_mean(Opt3["Data"])],
+                    "MSHR": [harmonic_mean(Opt3["MSHR"])],
                 }
             ),
         ],
@@ -190,39 +190,79 @@ def plot_normalized_time(
 
     bar1 = plt.bar(
         r1,
-        baseline["Data"],
+        baseline["MSHR"],
         width=bar_width,
         label="Baseline",
         color="#8D2E2C",
         edgecolor="black",
         linewidth=1.5,
     )
+    bar1_walker = plt.bar(
+        r1,
+        baseline["Walker_MSHR"],
+        width=bar_width,
+        color="#8D2E2C",
+        edgecolor="black",
+        linewidth=1.5,
+        bottom=baseline["MSHR"],
+        hatch="xx",
+    )
     bar2 = plt.bar(
         r2,
-        Opt1["Data"],
+        Opt1["MSHR"],
         width=bar_width,
         label="ngAT",
         color="#C3D9F1",
         edgecolor="black",
         linewidth=1.5,
     )
+    bar2_walker = plt.bar(
+        r2,
+        Opt1["Walker_MSHR"],
+        width=bar_width,
+        color="#C3D9F1",
+        edgecolor="black",
+        linewidth=1.5,
+        bottom=Opt1["MSHR"],
+        hatch="xx",
+    )
     bar3 = plt.bar(
         r3,
-        Opt2["Data"],
+        Opt2["MSHR"],
         width=bar_width,
         label="ngAT + ARM",
         color="#5D73A1",
         edgecolor="black",
         linewidth=1.5,
     )
+    bar3_walker = plt.bar(
+        r3,
+        Opt2["Walker_MSHR"],
+        width=bar_width,
+        color="#5D73A1",
+        edgecolor="black",
+        linewidth=1.5,
+        bottom=Opt2["MSHR"],
+        hatch="xx",
+    )
     bar4 = plt.bar(
         r4,
-        Opt3["Data"],
+        Opt3["MSHR"],
         width=bar_width,
         label="Infinite Walker",
         color="#313A5B",
         edgecolor="black",
         linewidth=1.5,
+    )
+    bar4_walker = plt.bar(
+        r4,
+        Opt3["Walker_MSHR"],
+        width=bar_width,
+        color="#313A5B",
+        edgecolor="black",
+        linewidth=1.5,
+        bottom=Opt3["MSHR"],
+        hatch="xx",
     )
 
     for bar in bar1 + bar2 + bar3 + bar4:
@@ -272,18 +312,27 @@ def plot_normalized_time(
         fontsize=28,
         fontweight="bold",
     )
-    plt.ylabel("Average Inflight\n PTW Req", fontsize=28, fontweight="bold")
+    plt.ylabel("Average L1\n MSHR Occupancy", fontsize=28, fontweight="bold")
     plt.yticks(
-        np.arange(0, 65, 16),
+        np.arange(0, 32, 8),
         fontsize=28,
         fontweight="bold",
     )
-    plt.ylim(0, 64)
+    plt.ylim(0, 32)
+
+    hatch_patch = Patch(
+        facecolor="white",
+        edgecolor="black",
+        hatch="xx",
+        label="ngAT MSHR",
+    )
+
     plt.legend(
+        handles=[bar1, bar2, bar3, bar4, hatch_patch],  # 加入 hatch_patch
         loc="upper center",
-        ncol=4,
+        ncol=5,  # 从 4 改为 5
         bbox_to_anchor=(0.5, 1),
-        bbox_transform=plt.gcf().transFigure,  # 使用图形坐标系
+        bbox_transform=plt.gcf().transFigure,
         frameon=True,
         fancybox=True,
         framealpha=0.7,
@@ -291,7 +340,7 @@ def plot_normalized_time(
     )
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.grid(axis="y", alpha=0.3)
-    plt.axhline(y=8, color="red", linewidth=0.8, linestyle="--")
+    # plt.axhline(y=8, color="red", linewidth=0.8, linestyle="--")
 
     ax = plt.gca()
 
@@ -300,7 +349,7 @@ def plot_normalized_time(
         spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
 
     output_file = os.path.join(
-        out_dir, "CaPWQMMU_Active_Walker"
+        out_dir, "CaPWQMMU_L1_MSHR_Occupancy"
     )
     plt.savefig(output_file + ".png")
     plt.savefig(output_file + ".pdf")
@@ -321,20 +370,20 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     baseline = pd.DataFrame(
-        columns=["Benchmark", "Data"],
+        columns=["Benchmark", "MSHR", "Walker_MSHR"],
     )
     Opt1 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
+        columns=["Benchmark", "MSHR", "Walker_MSHR"],
     )
     Opt2 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
+        columns=["Benchmark", "MSHR", "Walker_MSHR"],
     )
     Opt3 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
+        columns=["Benchmark", "MSHR", "Walker_MSHR"],
     )
 
     for benchmark in get_high_mpki_benchmarks():
-        perf_data = collect_performance_data(
+        mshr, walker_mshr = collect_mshr(
             benchmark_name=benchmark,
             input_dir="../../final_data/final_baseline",
         )
@@ -345,14 +394,15 @@ if __name__ == "__main__":
                 pd.DataFrame(
                     {
                         "Benchmark": [benchmark],
-                        "Data": [perf_data],
+                        "MSHR": [mshr],
+                        "Walker_MSHR": [walker_mshr],
                     }
                 ),
             ],
             ignore_index=True,
         )
 
-        perf_data = collect_performance_data(
+        mshr, walker_mshr = collect_mshr(
             benchmark_name=benchmark,
             input_dir="../../final_data/final_ngat_0",
         )
@@ -363,14 +413,15 @@ if __name__ == "__main__":
                 pd.DataFrame(
                     {
                         "Benchmark": [benchmark],
-                        "Data": [perf_data],
+                        "MSHR": [mshr],
+                        "Walker_MSHR": [walker_mshr],
                     }
                 ),
             ],
             ignore_index=True,
         )
 
-        perf_data = collect_performance_data(
+        mshr, walker_mshr = collect_mshr(
             benchmark_name=benchmark,
             input_dir="../../final_data/final_ngat_adaptive",
         )
@@ -381,14 +432,15 @@ if __name__ == "__main__":
                 pd.DataFrame(
                     {
                         "Benchmark": [benchmark],
-                        "Data": [perf_data],
+                        "MSHR": [mshr],
+                        "Walker_MSHR": [walker_mshr],
                     }
                 ),
             ],
             ignore_index=True,
         )
         
-        perf_data = collect_performance_data(
+        mshr, walker_mshr = collect_mshr(
             benchmark_name=benchmark,
             input_dir="../../final_data/final_infinitewalker",
         )
@@ -399,7 +451,8 @@ if __name__ == "__main__":
                 pd.DataFrame(
                     {
                         "Benchmark": [benchmark],
-                        "Data": [perf_data],
+                        "MSHR": [mshr],
+                        "Walker_MSHR": [walker_mshr],
                     }
                 ),
             ],

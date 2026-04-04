@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from benchmark import get_benchmarks, get_short_name
+from benchmark import get_high_mpki_benchmarks, get_short_name
 
 
 def geometric_mean(df: pd.DataFrame) -> float:
@@ -86,6 +86,7 @@ def plot_normalized_time(
     baseline: pd.DataFrame,
     Opt1: pd.DataFrame,
     Opt2: pd.DataFrame,
+    Opt3: pd.DataFrame,
     out_dir: str,
 ) -> None:
     """
@@ -110,12 +111,13 @@ def plot_normalized_time(
 
     plt.figure(figsize=(20, 5), dpi=300)
 
-    benchmarks = get_benchmarks()
+    benchmarks = get_high_mpki_benchmarks()
 
-    bar_width = 0.2
-    r1 = np.arange(len(benchmarks) + 1) * (3 * bar_width + 0.1)
+    bar_width = 0.15
+    r1 = np.arange(len(benchmarks) + 1) * (3 * bar_width + 0.2)
     r2 = [x + bar_width for x in r1]
     r3 = [x + bar_width for x in r2]
+    r4 = [x + bar_width for x in r3]
 
     # Normalize the time
     Opt1["Data"] = [
@@ -130,6 +132,14 @@ def plot_normalized_time(
         (
             Opt2["Data"][i] / baseline["Data"][i]
             if Opt2["Data"][i] != 0 and baseline["Data"][i] != 0
+            else 0
+        )
+        for i in range(len(benchmarks))
+    ]
+    Opt3["Data"] = [
+        (
+            Opt3["Data"][i] / baseline["Data"][i]
+            if Opt3["Data"][i] != 0 and baseline["Data"][i] != 0
             else 0
         )
         for i in range(len(benchmarks))
@@ -173,13 +183,25 @@ def plot_normalized_time(
         ],
         ignore_index=True,
     )
+    Opt3 = pd.concat(
+        [
+            Opt3,
+            pd.DataFrame(
+                {
+                    "Benchmark": ["Ave."],
+                    "Data": [harmonic_mean(Opt3["Data"])],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
 
     bar1 = plt.bar(
         r1,
         baseline["Data"],
         width=bar_width,
-        label="Baseline",
-        color="#C3D9F1",
+        label="baseline",
+        color="#8D2E2C",
         edgecolor="black",
         linewidth=1.5,
     )
@@ -187,8 +209,8 @@ def plot_normalized_time(
         r2,
         Opt1["Data"],
         width=bar_width,
-        label="MPW",
-        color="#5D73A1",
+        label="ngAT",
+        color="#C3D9F1",
         edgecolor="black",
         linewidth=1.5,
     )
@@ -196,7 +218,16 @@ def plot_normalized_time(
         r3,
         Opt2["Data"],
         width=bar_width,
-        label="ngAT",
+        label="ngAT + ARM",
+        color="#5D73A1",
+        edgecolor="black",
+        linewidth=1.5,
+    )
+    bar4 = plt.bar(
+        r4,
+        Opt3["Data"],
+        width=bar_width,
+        label="Infinite Walker",
         color="#313A5B",
         edgecolor="black",
         linewidth=1.5,
@@ -242,29 +273,29 @@ def plot_normalized_time(
         #         # arrowprops=dict(arrowstyle="-", color="red", lw=2),
         #     )
 
-    plt.xlim(min(r1) - bar_width, max(r3) + bar_width)
+    plt.xlim(min(r1) - bar_width, max(r4) + bar_width)
     plt.xticks(
-        [r + 1 * bar_width for r in r1],
+        [r + 1.5 * bar_width for r in r1],
         [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
-        fontsize=26,
+        fontsize=28,
         fontweight="bold",
     )
-    plt.ylabel("Normalized PTW Latency", fontsize=24, fontweight="bold")
+    plt.ylabel("Normalized\n PTW Latency", fontsize=28, fontweight="bold")
     plt.yticks(
         np.arange(0, 1.51, 0.25),
-        fontsize=26,
+        fontsize=28,
         fontweight="bold",
     )
     plt.ylim(0, 1.5)
     plt.legend(
         loc="upper center",
-        ncol=3,
+        ncol=4,
         bbox_to_anchor=(0.5, 1),
         bbox_transform=plt.gcf().transFigure,  # 使用图形坐标系
         frameon=True,
         fancybox=True,
         framealpha=0.7,
-        prop={"weight": "bold", "size": 20},
+        prop={"weight": "bold", "size": 26},
     )
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.grid(axis="y", alpha=0.3)
@@ -306,11 +337,14 @@ if __name__ == "__main__":
     Opt2 = pd.DataFrame(
         columns=["Benchmark", "Data"],
     )
+    Opt3 = pd.DataFrame(
+        columns=["Benchmark", "Data"],
+    )
 
-    for benchmark in get_benchmarks():
+    for benchmark in get_high_mpki_benchmarks():
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/baselineMMU",
+            input_dir="../../final_data/final_baseline",
         )
 
         baseline = pd.concat(
@@ -328,7 +362,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/MPW",
+            input_dir="../../final_data/final_ngat_0",
         )
 
         Opt1 = pd.concat(
@@ -346,7 +380,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/caPWQMMUL6_roundrobin",
+            input_dir="../../final_data/final_ngat_adaptive",
         )
 
         Opt2 = pd.concat(
@@ -361,10 +395,29 @@ if __name__ == "__main__":
             ],
             ignore_index=True,
         )
+        
+        perf_data = collect_performance_data(
+            benchmark_name=benchmark,
+            input_dir="../../final_data/final_infinitewalker",
+        )
+
+        Opt3 = pd.concat(
+            [
+                Opt3,
+                pd.DataFrame(
+                    {
+                        "Benchmark": [benchmark],
+                        "Data": [perf_data],
+                    }
+                ),
+            ],
+            ignore_index=True,
+        )
 
     plot_normalized_time(
         baseline=baseline.copy(),
         Opt1=Opt1.copy(),
         Opt2=Opt2.copy(),
+        Opt3=Opt3.copy(),
         out_dir=args.outDir,
     )

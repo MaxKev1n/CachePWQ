@@ -3,90 +3,55 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from benchmark import get_high_mpki_benchmarks, get_short_name
+from benchmark import get_high_mpki_benchmarks, get_short_name, low_mpki_benchmarks, high_mpki_benchmarks
 
 
 def geometric_mean(df: pd.DataFrame) -> float:
-    """
-    Calculate the geometric mean of a list of numbers.
-
-    Args:
-        data (list): A list of numerical values.
-
-    Returns:
-        float: The geometric mean of the input data.
-    """
     data = df.tolist()
     if not data or any(x <= 0 for x in data):
         return 0.0
-
     product = np.prod(data)
     return product ** (1 / len(data))
 
+
 def harmonic_mean(df: pd.DataFrame) -> float:
-    """
-    Calculate the harmonic mean of a list of numbers.
-
-    Args:
-        data (list): A list of numerical values.
-
-    Returns:
-        float: The harmonic mean of the input data.
-    """
     data = df.tolist()
     if not data or any(x <= 0 for x in data):
         return 0.0
-
     reciprocal_sum = sum(1 / x for x in data)
     return len(data) / reciprocal_sum
 
 
-def collect_performance_data(
-    benchmark_name: str,
-    input_dir: str,
-) -> float:
-    """
-    Collects performance data from the specified input directory.
-
-    Args:
-        benchmark_name (str): The name of the benchmark.
-        input_dir (str): The directory containing performance data files.
-
-    Returns:
-        list: A list of dictionaries containing performance data.
-    """
+def collect_performance_data(benchmark_name: str, input_dir: str) -> float:
     performance_data = 0
-    count = 0
-
     file_path = os.path.join(input_dir, f"{benchmark_name}.csv")
-
     if not os.path.exists(file_path):
         print(f"Performance data file {file_path} does not exist.")
-
         return performance_data
-
-    # read the CSV file and collect performance data
     df = pd.read_csv(file_path)
-
     for _, row in df.iterrows():
-        if row.iloc[2] == " average active walkers":
-            performance_data += row.iloc[3]
-            count += 1
-
-    if count == 0:
-        print(f"No valid performance data found in {file_path}.")
-
-        return 0.0
-
-
-    return float(performance_data) / float(count)
-
+        if row.iloc[1] == " driver" and row.iloc[2] == " kernel_time":
+            performance_data = row.iloc[3]
+            if performance_data == 0:
+                print(f"Warning: kernel time for {benchmark_name} is zero.")
+                continue
+            else:
+                break
+        if (
+            row.iloc[1] == " GPU1.CommandProcessor"
+            and row.iloc[2] == " kernel_time (force stop) 0"
+        ):
+            performance_data = row.iloc[3]
+            print(f"Warning: kernel time (force stop) for {benchmark_name} is {performance_data}.")
+            break
+    return performance_data
 
 def plot_normalized_time(
     baseline: pd.DataFrame,
     Opt1: pd.DataFrame,
     Opt2: pd.DataFrame,
     Opt3: pd.DataFrame,
+    Opt4: pd.DataFrame,
     out_dir: str,
 ) -> None:
     """
@@ -120,23 +85,39 @@ def plot_normalized_time(
     r4 = [x + bar_width for x in r3]
 
     # Normalize the time
-    # Opt1["Data"] = [
-    #     (
-    #         baseline["Data"][i] / Opt1["Data"][i]
-    #         if Opt1["Data"][i] != 0 and baseline["Data"][i] != 0
-    #         else 0
-    #     )
-    #     for i in range(len(benchmarks))
-    # ]
-    # Opt2["Data"] = [
-    #     (
-    #         baseline["Data"][i] / Opt2["Data"][i]
-    #         if Opt2["Data"][i] != 0 and baseline["Data"][i] != 0
-    #         else 0
-    #     )
-    #     for i in range(len(benchmarks))
-    # ]
-    # baseline["Data"] = [1.0 for _ in range(len(benchmarks))]
+    Opt1["Data"] = [
+        (
+            baseline["Data"][i] / Opt1["Data"][i]
+            if Opt1["Data"][i] != 0 and baseline["Data"][i] != 0
+            else 0
+        )
+        for i in range(len(benchmarks))
+    ]
+    Opt2["Data"] = [
+        (
+            baseline["Data"][i] / Opt2["Data"][i]
+            if Opt2["Data"][i] != 0 and baseline["Data"][i] != 0
+            else 0
+        )
+        for i in range(len(benchmarks))
+    ]
+    Opt3["Data"] = [
+        (
+            baseline["Data"][i] / Opt3["Data"][i]
+            if Opt3["Data"][i] != 0 and baseline["Data"][i] != 0
+            else 0
+        )
+        for i in range(len(benchmarks))
+    ]
+    Opt4["Data"] = [
+        (
+            baseline["Data"][i] / Opt4["Data"][i]
+            if Opt4["Data"][i] != 0 and baseline["Data"][i] != 0
+            else 0
+        )
+        for i in range(len(benchmarks))
+    ]
+    baseline["Data"] = [1.0 for _ in range(len(benchmarks))]
 
     # Ave.
     baseline = pd.concat(
@@ -187,28 +168,40 @@ def plot_normalized_time(
         ],
         ignore_index=True,
     )
+    Opt4 = pd.concat(
+        [
+            Opt4,
+            pd.DataFrame(
+                {
+                    "Benchmark": ["Ave."],
+                    "Data": [harmonic_mean(Opt4["Data"])],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
 
     bar1 = plt.bar(
         r1,
-        baseline["Data"],
+        Opt1["Data"],
         width=bar_width,
-        label="Baseline",
+        label="Neighbor-Aware",
         color="#8D2E2C",
         edgecolor="black",
         linewidth=1.5,
     )
     bar2 = plt.bar(
         r2,
-        Opt1["Data"],
+        Opt2["Data"],
         width=bar_width,
-        label="ngAT",
+        label="MPW",
         color="#C3D9F1",
         edgecolor="black",
         linewidth=1.5,
     )
     bar3 = plt.bar(
         r3,
-        Opt2["Data"],
+        Opt3["Data"],
         width=bar_width,
         label="ngAT + ARM",
         color="#5D73A1",
@@ -217,7 +210,7 @@ def plot_normalized_time(
     )
     bar4 = plt.bar(
         r4,
-        Opt3["Data"],
+        Opt4["Data"],
         width=bar_width,
         label="Infinite Walker",
         color="#313A5B",
@@ -272,13 +265,13 @@ def plot_normalized_time(
         fontsize=28,
         fontweight="bold",
     )
-    plt.ylabel("Average Inflight\n PTW Req", fontsize=28, fontweight="bold")
+    plt.ylabel("Speedup", fontsize=28, fontweight="bold")
     plt.yticks(
-        np.arange(0, 65, 16),
+        np.arange(0, 8.1, 2),
         fontsize=28,
         fontweight="bold",
     )
-    plt.ylim(0, 64)
+    plt.ylim(0, 8)
     plt.legend(
         loc="upper center",
         ncol=4,
@@ -291,7 +284,7 @@ def plot_normalized_time(
     )
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.grid(axis="y", alpha=0.3)
-    plt.axhline(y=8, color="red", linewidth=0.8, linestyle="--")
+    plt.axhline(y=1, color="red", linewidth=0.8, linestyle="--")
 
     ax = plt.gca()
 
@@ -300,116 +293,45 @@ def plot_normalized_time(
         spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
 
     output_file = os.path.join(
-        out_dir, "CaPWQMMU_Active_Walker"
+        out_dir, "PTW_Performance"
     )
     plt.savefig(output_file + ".png")
     plt.savefig(output_file + ".pdf")
     print(f"Plot saved to {output_file}")
 
 
+
 if __name__ == "__main__":
-    # Example usage
     parser = argparse.ArgumentParser(description="Parse csv file.")
-
-    parser.add_argument(
-        "--outDir",
-        required=True,
-        type=str,
-        help="Directory path to save the output plots.",
-    )
-
+    parser.add_argument("--outDir", required=True, type=str,
+                        help="Directory path to save the output plots.")
     args = parser.parse_args()
 
-    baseline = pd.DataFrame(
-        columns=["Benchmark", "Data"],
-    )
-    Opt1 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
-    )
-    Opt2 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
-    )
-    Opt3 = pd.DataFrame(
-        columns=["Benchmark", "Data"],
-    )
+    baseline = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt1     = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt2     = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt3     = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt4     = pd.DataFrame(columns=["Benchmark", "Data"])
 
     for benchmark in get_high_mpki_benchmarks():
-        perf_data = collect_performance_data(
-            benchmark_name=benchmark,
-            input_dir="../../final_data/final_baseline",
-        )
+        def append_row(df, benchmark, input_dir):
+            perf_data = collect_performance_data(benchmark_name=benchmark, input_dir=input_dir)
+            return pd.concat(
+                [df, pd.DataFrame({"Benchmark": [benchmark], "Data": [perf_data]})],
+                ignore_index=True,
+            )
 
-        baseline = pd.concat(
-            [
-                baseline,
-                pd.DataFrame(
-                    {
-                        "Benchmark": [benchmark],
-                        "Data": [perf_data],
-                    }
-                ),
-            ],
-            ignore_index=True,
-        )
-
-        perf_data = collect_performance_data(
-            benchmark_name=benchmark,
-            input_dir="../../final_data/final_ngat_0",
-        )
-
-        Opt1 = pd.concat(
-            [
-                Opt1,
-                pd.DataFrame(
-                    {
-                        "Benchmark": [benchmark],
-                        "Data": [perf_data],
-                    }
-                ),
-            ],
-            ignore_index=True,
-        )
-
-        perf_data = collect_performance_data(
-            benchmark_name=benchmark,
-            input_dir="../../final_data/final_ngat_adaptive",
-        )
-
-        Opt2 = pd.concat(
-            [
-                Opt2,
-                pd.DataFrame(
-                    {
-                        "Benchmark": [benchmark],
-                        "Data": [perf_data],
-                    }
-                ),
-            ],
-            ignore_index=True,
-        )
-        
-        perf_data = collect_performance_data(
-            benchmark_name=benchmark,
-            input_dir="../../final_data/final_infinitewalker",
-        )
-
-        Opt3 = pd.concat(
-            [
-                Opt3,
-                pd.DataFrame(
-                    {
-                        "Benchmark": [benchmark],
-                        "Data": [perf_data],
-                    }
-                ),
-            ],
-            ignore_index=True,
-        )
+        baseline = append_row(baseline, benchmark, "../../final_data/final_baseline")
+        Opt1     = append_row(Opt1,     benchmark, "../../final_data/final_neighboraware")
+        Opt2     = append_row(Opt2,     benchmark, "../../final_data/final_mpw")
+        Opt3     = append_row(Opt3,     benchmark, "../../final_data/final_ngat_adaptive")
+        Opt4     = append_row(Opt4,     benchmark, "../../final_data/final_infinitewalker")
 
     plot_normalized_time(
         baseline=baseline.copy(),
         Opt1=Opt1.copy(),
         Opt2=Opt2.copy(),
         Opt3=Opt3.copy(),
+        Opt4=Opt4.copy(),
         out_dir=args.outDir,
     )

@@ -101,6 +101,12 @@ def get_benchmarks() -> list:
     """
     return benchmarks
 
+def get_high_mpki_benchmarks() -> list:
+    """
+    Returns a list of high MPKI benchmarks.
+    """
+    return high_mpki_benchmarks
+
 
 def get_short_name(benchmark: str) -> str:
     """
