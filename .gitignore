@@ -21,6 +21,7 @@ runs/
 zips/
 data/
 figures/
+final_*/
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
