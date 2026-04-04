@@ -67,7 +67,7 @@ func (b *NUMAPlatformBuilder) createGPUBuilder(
 	engine akita.Engine,
 	gpuDriver *driver.Driver,
 ) builders.Builder {
-	gpuBuilder := builders.MakeNUMAGPUBuilder()
+	gpuBuilder := builders.MakeMGPUSimNUMAGPUBuilder()
 	gpuBuilder.WithEngine(engine)
 	gpuBuilder.WithNumCUPerShaderArray(int(b.numCUPerShaderArray))
 	gpuBuilder.WithNumShaderArrayPerChiplet(int(b.numShaderArrayPerChiplet))
