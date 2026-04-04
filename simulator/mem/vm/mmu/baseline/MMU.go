@@ -120,7 +120,29 @@ func (impl *MMUImpl) Tick(now akita.VTimeInSec) bool {
 		impl.monitorStats.ReqLength = uint64(pageWalkQueueLength)
 	}
 
+	if impl.isActive() {
+		tracing.StartTask(
+			"",
+			"",
+			now,
+			impl,
+			"num_active_walkers",
+			strconv.Itoa(impl.GetNumActiveWalkers()),
+			nil,
+		)
+	}
+
 	return true
+}
+
+func (impl *MMUImpl) isActive() bool {
+	for i := range impl.pageWalkers {
+		if impl.pageWalkers[i].inflightTrans != nil {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (impl *MMUImpl) trace(now akita.VTimeInSec, what string) {
