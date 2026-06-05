@@ -102,7 +102,7 @@ def plot_latency_histogram(
     plt.rcParams["mathtext.it"] = "Arial:italic"
     plt.rcParams["mathtext.bf"] = "Arial:bold"
 
-    plt.figure(figsize=(8, 5), dpi=300)
+    plt.figure(figsize=(8, 4), dpi=300)
 
     bar_width = 0.05
 
@@ -169,7 +169,7 @@ if __name__ == "__main__":
     for benchmark in get_benchmarks():
         data = collect_data(
             benchmark_name=benchmark,
-            input_dir="../../data/baseline-numa-latency",
+            input_dir="../../final_final_data/baseline",
         )
 
         try :

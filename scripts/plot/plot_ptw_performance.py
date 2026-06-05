@@ -118,6 +118,9 @@ def plot_normalized_time(
         for i in range(len(benchmarks))
     ]
     baseline["Data"] = [1.0 for _ in range(len(benchmarks))]
+    
+    print("Opt2 Data:", Opt2["Data"].tolist())
+    print("Opt3 Data:", Opt3["Data"].tolist())
 
     # Ave.
     baseline = pd.concat(
@@ -183,9 +186,9 @@ def plot_normalized_time(
 
     bar1 = plt.bar(
         r1,
-        Opt1["Data"],
+        baseline["Data"],
         width=bar_width,
-        label="Neighbor-Aware",
+        label="baseline",
         color="#8D2E2C",
         edgecolor="black",
         linewidth=1.5,
@@ -203,7 +206,7 @@ def plot_normalized_time(
         r3,
         Opt3["Data"],
         width=bar_width,
-        label="ngAT + ARM",
+        label="NB-Walker + AMR",
         color="#5D73A1",
         edgecolor="black",
         linewidth=1.5,
@@ -212,7 +215,7 @@ def plot_normalized_time(
         r4,
         Opt4["Data"],
         width=bar_width,
-        label="Infinite Walker",
+        label="infinite walker",
         color="#313A5B",
         edgecolor="black",
         linewidth=1.5,
@@ -261,17 +264,17 @@ def plot_normalized_time(
     plt.xlim(min(r1) - bar_width, max(r4) + bar_width)
     plt.xticks(
         [r + 1.5 * bar_width for r in r1],
-        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
-        fontsize=28,
+        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["HMean"],
+        fontsize=36,
         fontweight="bold",
     )
-    plt.ylabel("Speedup", fontsize=28, fontweight="bold")
+    plt.ylabel("Speedup", fontsize=36, fontweight="bold")
     plt.yticks(
-        np.arange(0, 8.1, 2),
-        fontsize=28,
+        np.arange(0, 6.1, 2),
+        fontsize=36,
         fontweight="bold",
     )
-    plt.ylim(0, 8)
+    plt.ylim(0, 6)
     plt.legend(
         loc="upper center",
         ncol=4,
@@ -280,9 +283,9 @@ def plot_normalized_time(
         frameon=True,
         fancybox=True,
         framealpha=0.7,
-        prop={"weight": "bold", "size": 26},
+        prop={"weight": "bold", "size": 28},
     )
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.tight_layout(rect=[0, 0, 1, 0.925])
     plt.grid(axis="y", alpha=0.3)
     plt.axhline(y=1, color="red", linewidth=0.8, linestyle="--")
 
@@ -321,11 +324,11 @@ if __name__ == "__main__":
                 ignore_index=True,
             )
 
-        baseline = append_row(baseline, benchmark, "../../final_data/final_baseline")
-        Opt1     = append_row(Opt1,     benchmark, "../../final_data/final_neighboraware")
-        Opt2     = append_row(Opt2,     benchmark, "../../final_data/final_mpw")
-        Opt3     = append_row(Opt3,     benchmark, "../../final_data/final_ngat_adaptive")
-        Opt4     = append_row(Opt4,     benchmark, "../../final_data/final_infinitewalker")
+        baseline = append_row(baseline, benchmark, "../../final_final_data/baseline")
+        Opt1     = append_row(Opt1,     benchmark, "../../final_final_data/neighbor-aware")
+        Opt2     = append_row(Opt2,     benchmark, "../../final_final_data/mpw")
+        Opt3     = append_row(Opt3,     benchmark, "../../final_final_data/nbwalker-full")
+        Opt4     = append_row(Opt4,     benchmark, "../../final_final_data/infinitewalker")
 
     plot_normalized_time(
         baseline=baseline.copy(),

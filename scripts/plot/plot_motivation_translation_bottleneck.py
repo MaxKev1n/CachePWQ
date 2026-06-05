@@ -234,29 +234,29 @@ def plot_normalized_time(
                 ),
                 # arrowprops=dict(arrowstyle="-", color="red", lw=2),
             )
-        else:
-            plt.annotate(
-                f"{height:.1f}",
-                xy=(x, height),
-                xytext=(0, 5),  # 相对偏移 (0,15) 表示向上15pt
-                textcoords="offset points",
-                ha="center",
-                va="bottom",
-                fontsize=22,
-                rotation=90,
-                fontweight="bold",
-                # bbox=dict(
-                #     facecolor="white",
-                #     edgecolor="black",
-                #     boxstyle="round,pad=0.1",
-                # ),
-                # arrowprops=dict(arrowstyle="-", color="red", lw=2),
-            )
+        #else:
+            # plt.annotate(
+            #     f"{height:.1f}",
+            #     xy=(x, height),
+            #     xytext=(0, 5),  # 相对偏移 (0,15) 表示向上15pt
+            #     textcoords="offset points",
+            #     ha="center",
+            #     va="bottom",
+            #     fontsize=22,
+            #     rotation=90,
+            #     fontweight="bold",
+            #     # bbox=dict(
+            #     #     facecolor="white",
+            #     #     edgecolor="black",
+            #     #     boxstyle="round,pad=0.1",
+            #     # ),
+            #     # arrowprops=dict(arrowstyle="-", color="red", lw=2),
+            # )
 
     plt.xlim(min(r1) - bar_width, max(r3) + bar_width)
     plt.xticks(
         [r + 1 * bar_width for r in r1],
-        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
+        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["HMean"],
         fontsize=30,
         fontweight="bold",
     )
@@ -321,7 +321,7 @@ if __name__ == "__main__":
     for benchmark in get_benchmarks():
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/baselineMMU",
+            input_dir="../../final_final_data/baseline",
         )
 
         baseline = pd.concat(
@@ -339,7 +339,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/infiniteMMU",
+            input_dir="../../final_final_data/infinitewalker",
         )
 
         Opt1 = pd.concat(
@@ -357,7 +357,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../data/idealMMU",
+            input_dir="../../final_final_data/ideal_translation",
         )
 
         Opt2 = pd.concat(

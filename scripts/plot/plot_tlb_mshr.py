@@ -79,6 +79,53 @@ def collect_mshr(benchmark_name: str, input_dir: str) -> tuple[float, float]:
 
     return lens / float(count), unique_lens / float(count)
 
+def collect_mpki(
+    benchmark: str,
+    dirPath: str,
+) -> float:
+    """
+    Parse the csv file.
+    """
+
+    print(f"Parsing csv for benchmark: {benchmark}")
+
+    csv_file = os.path.join(dirPath, f"{benchmark}.csv")
+
+    inst_count = 0
+    l3tlb_miss = 0
+
+    try:
+        with open(csv_file, "r") as file:
+            lines = file.readlines()
+
+            for line in lines:
+                if (
+                    "L3TLB" in line
+                ):
+                    parts = line.strip().split(", ")
+
+                    where = str(parts[1])
+                    what = str(parts[2])
+                    value = float(parts[3])
+
+                    if "L3TLB" in where:
+                        if what == "tlb-miss":
+                            l3tlb_miss += value
+
+                elif "inst_count" in line:
+                    parts = line.strip().split(", ")
+                    value = float(parts[3])
+                    inst_count += value
+
+        return l3tlb_miss / inst_count * 1000
+
+    except FileNotFoundError:
+        print(f"File not found: {csv_file}")
+        return None
+    except Exception as e:
+        print(f"Error processing {csv_file}: {e}")
+        return None
+
 def plot_mshr_size(
     baseline: pd.DataFrame,
     out_dir: str,
@@ -103,7 +150,7 @@ def plot_mshr_size(
     plt.rcParams["mathtext.it"] = "Arial:italic"
     plt.rcParams["mathtext.bf"] = "Arial:bold"
 
-    plt.figure(figsize=(8, 5), dpi=300)
+    plt.figure(figsize=(8, 4), dpi=300)
 
     benchmarks = get_benchmarks()
 
@@ -118,7 +165,6 @@ def plot_mshr_size(
                 {
                     "Benchmark": ["Ave."],
                     "MSHR_Size": [harmonic_mean(baseline["MSHR_Size"])],
-                    "MSHR_Len": [harmonic_mean(baseline["MSHR_Len"])],
                 }
             ),
         ],
@@ -169,14 +215,14 @@ def plot_mshr_size(
     plt.xticks(
         [r for r in r1],
         [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
-        fontsize=24,
+        fontsize=26,
         fontweight="bold",
         rotation=90,
     )
-    plt.ylabel("Average MSHR Occupancy", fontsize=24, fontweight="bold")
+    plt.ylabel("Avg. MSHR\n Occupancy", fontsize=24, fontweight="bold")
     plt.yticks(
         np.arange(0, 512.1, 128),
-        fontsize=24,
+        fontsize=26,
         fontweight="bold",
     )
     plt.ylim(0, 512)
@@ -230,31 +276,16 @@ def plot_mshr_len(
     plt.rcParams["mathtext.it"] = "Arial:italic"
     plt.rcParams["mathtext.bf"] = "Arial:bold"
 
-    plt.figure(figsize=(8, 5), dpi=300)
+    plt.figure(figsize=(8, 4), dpi=300)
 
     benchmarks = get_benchmarks()
 
     bar_width = 0.15
-    r1 = np.arange(len(benchmarks) + 1) * (1 * bar_width + 0.1)
-
-    # Ave.
-    baseline = pd.concat(
-        [
-            baseline,
-            pd.DataFrame(
-                {
-                    "Benchmark": ["Ave."],
-                    "MSHR_Size": [harmonic_mean(baseline["MSHR_Size"])],
-                    "MSHR_Len": [harmonic_mean(baseline["MSHR_Len"])],
-                }
-            ),
-        ],
-        ignore_index=True,
-    )
+    r1 = np.arange(len(benchmarks)) * (1 * bar_width + 0.1)
 
     bar1 = plt.bar(
         r1,
-        baseline["MSHR_Len"],
+        baseline["MPKI"],
         width=bar_width,
         color="#5D73A1",
         edgecolor="black",
@@ -270,43 +301,45 @@ def plot_mshr_len(
     #     linewidth=1.5,
     # )
 
+    new_height = 80
     for bar in bar1:
         height = bar.get_height()
         x = bar.get_x() + bar.get_width() / 2
 
-        if height >= 2.5:
+        if height >= 200:
             plt.annotate(
-            f"{height:.1f}",
-            xy=(x, 2.2),
-            xytext=(0, 5),  # 相对偏移 (0,15) 表示向上15pt
-            textcoords="offset points",
-            ha="center",
-            va="bottom",
-            fontsize=20,
-            fontweight="bold",
-            bbox=dict(
-                facecolor="white",
-                edgecolor="black",
-                boxstyle="round,pad=0.1",
-            ),
-            # arrowprops=dict(arrowstyle="-", color="red", lw=2),
-        )
+                f"{height:.1f}",
+                xy=(x, new_height),
+                xytext=(0, 15),  # 相对偏移 (0,15) 表示向上15pt
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=24,
+                fontweight="bold",
+                bbox=dict(
+                    facecolor="white",
+                    edgecolor="black",
+                    boxstyle="round,pad=0.1",
+                ),
+                arrowprops=dict(arrowstyle="-", color="red", lw=2),
+            )
+            new_height += 40
 
     plt.xlim(min(r1) - bar_width, max(r1) + bar_width)
     plt.xticks(
         [r for r in r1],
-        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
-        fontsize=24,
+        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))],
+        fontsize=26,
         fontweight="bold",
         rotation=90,
     )
-    plt.ylabel("Average Slot Length", fontsize=24, fontweight="bold")
+    plt.ylabel("L3 TLB MPKI", fontsize=24, fontweight="bold")
     plt.yticks(
-        np.arange(0, 2.6, 0.5),
-        fontsize=24,
+        np.arange(0, 201, 40),
+        fontsize=26,
         fontweight="bold",
     )
-    plt.ylim(0, 2.5)
+    plt.ylim(0, 200)
     # plt.legend(
     #     loc="upper center",
     #     ncol=1,
@@ -347,13 +380,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     baseline = pd.DataFrame(
-        columns=["Benchmark", "MSHR_Size", "MSHR_Len"],
+        columns=["Benchmark", "MSHR_Size", "MPKI"],
     )
 
     for benchmark in get_benchmarks():
         lens, unique_lens = collect_mshr(
             benchmark_name=benchmark,
-            input_dir="../../data/baseline-numa-latency",
+            input_dir="../../final_final_data/baseline",
+        )
+        
+        mpki = collect_mpki(
+            benchmark=benchmark,
+            dirPath="../../final_final_data/baseline",
         )
 
         if lens == 0 and unique_lens == 0:
@@ -364,7 +402,7 @@ if __name__ == "__main__":
                         {
                             "Benchmark": [benchmark],
                             "MSHR_Size": [0],
-                            "MSHR_Len": [0]
+                            "MPKI": [0]
                         }
                     ),
                 ],
@@ -378,12 +416,13 @@ if __name__ == "__main__":
                         {
                             "Benchmark": [benchmark],
                             "MSHR_Size": [lens],
-                            "MSHR_Len": [lens/unique_lens]
+                            "MPKI": [mpki]
                         }
                     ),
                 ],
                 ignore_index=True,
             )
+            print(f"{benchmark}: MSHR Size = {lens}, MPKI = {mpki}")
 
     plot_mshr_size(
         baseline=baseline.copy(),

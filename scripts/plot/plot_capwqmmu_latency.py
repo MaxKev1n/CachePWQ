@@ -114,7 +114,7 @@ def plot_normalized_time(
     benchmarks = get_high_mpki_benchmarks()
 
     bar_width = 0.15
-    r1 = np.arange(len(benchmarks) + 1) * (3 * bar_width + 0.2)
+    r1 = np.arange(len(benchmarks) + 1) * (4 * bar_width + 0.2)
     r2 = [x + bar_width for x in r1]
     r3 = [x + bar_width for x in r2]
     r4 = [x + bar_width for x in r3]
@@ -195,6 +195,11 @@ def plot_normalized_time(
         ],
         ignore_index=True,
     )
+    
+    print("Baseline Ave.:", baseline["Data"].iloc[-1])
+    print("Opt1 Ave.:", Opt1["Data"].iloc[-1])
+    print("Opt2 Ave.:", Opt2["Data"].iloc[-1])
+    print("Opt3 Ave.:", Opt3["Data"].iloc[-1])
 
     bar1 = plt.bar(
         r1,
@@ -209,7 +214,7 @@ def plot_normalized_time(
         r2,
         Opt1["Data"],
         width=bar_width,
-        label="ngAT",
+        label="NB-Walker",
         color="#C3D9F1",
         edgecolor="black",
         linewidth=1.5,
@@ -218,7 +223,7 @@ def plot_normalized_time(
         r3,
         Opt2["Data"],
         width=bar_width,
-        label="ngAT + ARM",
+        label="NB-Walker + AMR",
         color="#5D73A1",
         edgecolor="black",
         linewidth=1.5,
@@ -227,7 +232,7 @@ def plot_normalized_time(
         r4,
         Opt3["Data"],
         width=bar_width,
-        label="Infinite Walker",
+        label="infinite walker",
         color="#313A5B",
         edgecolor="black",
         linewidth=1.5,
@@ -276,14 +281,14 @@ def plot_normalized_time(
     plt.xlim(min(r1) - bar_width, max(r4) + bar_width)
     plt.xticks(
         [r + 1.5 * bar_width for r in r1],
-        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
-        fontsize=28,
+        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["HMean"],
+        fontsize=36,
         fontweight="bold",
     )
-    plt.ylabel("Normalized\n PTW Latency", fontsize=28, fontweight="bold")
+    plt.ylabel("Avg. Walk\n Latency (Norm.)", fontsize=36, fontweight="bold")
     plt.yticks(
-        np.arange(0, 1.51, 0.25),
-        fontsize=28,
+        np.arange(0, 1.51, 0.5),
+        fontsize=36,
         fontweight="bold",
     )
     plt.ylim(0, 1.5)
@@ -295,11 +300,11 @@ def plot_normalized_time(
         frameon=True,
         fancybox=True,
         framealpha=0.7,
-        prop={"weight": "bold", "size": 26},
+        prop={"weight": "bold", "size": 28},
     )
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.tight_layout(rect=[0, 0, 1, 0.925])
     plt.grid(axis="y", alpha=0.3)
-    plt.axhline(y=8, color="red", linewidth=0.8, linestyle="--")
+    plt.axhline(y=1, color="red", linewidth=0.8, linestyle="--")
 
     ax = plt.gca()
 
@@ -344,7 +349,7 @@ if __name__ == "__main__":
     for benchmark in get_high_mpki_benchmarks():
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../final_data/final_baseline",
+            input_dir="../../final_final_data/baseline",
         )
 
         baseline = pd.concat(
@@ -362,7 +367,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../final_data/final_ngat_0",
+            input_dir="../../final_final_data/nbwalker",
         )
 
         Opt1 = pd.concat(
@@ -380,7 +385,7 @@ if __name__ == "__main__":
 
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../final_data/final_ngat_adaptive",
+            input_dir="../../final_final_data/nbwalker-full",
         )
 
         Opt2 = pd.concat(
@@ -398,7 +403,7 @@ if __name__ == "__main__":
         
         perf_data = collect_performance_data(
             benchmark_name=benchmark,
-            input_dir="../../final_data/final_infinitewalker",
+            input_dir="../../final_final_data/infinitewalker",
         )
 
         Opt3 = pd.concat(

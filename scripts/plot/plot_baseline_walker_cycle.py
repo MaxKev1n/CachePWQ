@@ -124,7 +124,7 @@ def plot_lowmpki_normalized_time(
     plt.rcParams["mathtext.it"] = "Arial:italic"
     plt.rcParams["mathtext.bf"] = "Arial:bold"
 
-    plt.figure(figsize=(10, 8), dpi=300)
+    plt.figure(figsize=(8, 5), dpi=300)
 
     benchmarks = get_benchmarks()
     filter_benchmarks = [b for b in benchmarks if b in low_mpki_benchmarks]
@@ -194,11 +194,11 @@ def plot_lowmpki_normalized_time(
             fontweight="bold",
         )
     plt.yticks(
-        np.arange(0.4, 1.11, 0.1),
+        np.arange(0, 6.1, 1),
         fontsize=34,
         fontweight="bold",
     )
-    plt.ylim(0.5, 1.1)
+    plt.ylim(0, 6)
     # plt.yticks(
     #     np.arange(0, 3.6, 0.5),
     #     fontsize=34,
@@ -267,7 +267,7 @@ def plot_highmpki_normalized_time(
     plt.rcParams["mathtext.it"] = "Arial:italic"
     plt.rcParams["mathtext.bf"] = "Arial:bold"
 
-    plt.figure(figsize=(10, 8), dpi=300)
+    plt.figure(figsize=(8, 5), dpi=300)
 
     benchmarks = get_benchmarks()
     filter_benchmarks = [b for b in benchmarks if b in high_mpki_benchmarks]
@@ -337,11 +337,11 @@ def plot_highmpki_normalized_time(
             fontweight="bold",
         )
     plt.yticks(
-        np.arange(0, 5.1, 1),
+        np.arange(0, 6.1, 1),
         fontsize=34,
         fontweight="bold",
     )
-    plt.ylim(0, 5)
+    plt.ylim(0, 6)
     
     plt.grid(True, linestyle=':', alpha=0.75)
     # plt.legend(

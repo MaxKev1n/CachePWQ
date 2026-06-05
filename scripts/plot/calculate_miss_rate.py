@@ -203,4 +203,4 @@ if __name__ == "__main__":
 
         df = pd.concat([df, parsed_df], ignore_index=True)
 
-    df.to_csv(os.path.join(args.outDir, "mpw_miss_rate_report.csv"), index=False)
+    df.to_csv(os.path.join(args.outDir, "snakebyte_miss_rate_report.csv"), index=False)

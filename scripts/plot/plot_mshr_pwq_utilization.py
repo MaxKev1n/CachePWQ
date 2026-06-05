@@ -85,20 +85,20 @@ def plot_data(
     plt.rcParams["mathtext.it"] = "Arial:italic"
     plt.rcParams["mathtext.bf"] = "Arial:bold"
 
-    plt.figure(figsize=(8, 4), dpi=300)
+    plt.figure(figsize=(8, 3.5), dpi=300)
     
     # 绘制两组数据
     plt.plot(df.index, df['MSHR'], label='MSHR', marker='.', linestyle='-', color="#C3D9F1")
     plt.plot(df.index, df['PWQ'], label='PWQ', marker='.', linestyle='--', color="#313A5B")
     
     # 添加图表信息
-    plt.xlabel(r'Sampling Interval Index', fontsize=24, fontweight='bold')
-    plt.ylabel('Occupancy (%)', fontsize=24, fontweight='bold')
+    plt.xlabel(r'Sampling Interval Index', fontsize=28, fontweight='bold')
+    plt.ylabel('Occupancy (%)', fontsize=28, fontweight='bold')
     plt.xlim(-100, 2100)
     plt.xticks(
         [i for i in range(0, 2100, 400)],
         [str(i) for i in range(0, 2100, 400)],
-        fontsize=24,
+        fontsize=28,
         fontweight="bold",
         # rotation=90,
     )
@@ -106,7 +106,7 @@ def plot_data(
     plt.yticks(
         [i for i in range(0, 101, 20)],
         [str(i) for i in range(0, 101, 20)],
-        fontsize=24,
+        fontsize=28,
         fontweight="bold",
     )
     # plt.legend()
@@ -130,7 +130,7 @@ def plot_data(
     plt.figure(figsize=(10, 1), dpi=300)
     legend_elements = [
         Line2D([0], [0], label='MSHR Occupancy', marker='.', linestyle='-', color="#C3D9F1", lw=2),
-        Line2D([0], [0], label='Page Walke Queue Occupancy', marker='.', linestyle='--', color="#313A5B", lw=2),
+        Line2D([0], [0], label='Page Walk Queue Occupancy', marker='.', linestyle='--', color="#313A5B", lw=2),
     ]
     plt.legend(
         handles=legend_elements,
@@ -139,7 +139,7 @@ def plot_data(
         frameon=True,
         fancybox=True,
         framealpha=0.7,
-        prop={"weight": "bold", "size": 20},
+        prop={"weight": "bold", "size": 18},
     )
     plt.axis('off')
     legend_output_file = os.path.join(out_dir, "baseline_mshr_pwq_utilization_legend")

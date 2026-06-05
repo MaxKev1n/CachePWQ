@@ -62,13 +62,13 @@ def plot_latency_heatmap(
     )
 
     # 2. 绘图设置
-    plt.figure(figsize=(12, 8), dpi=300)
+    plt.figure(figsize=(24, 8), dpi=300)
     heatmap = sns.heatmap(
         pivot_table, 
         annot=True,      # 在格子内显示具体数值
         fmt=".0f",       # 保留一位小数
         cmap="Blues",   # 颜色渐变方案：黄-绿-蓝
-        annot_kws={"size": 20, "weight": "bold"},
+        annot_kws={"size": 30, "weight": "bold"},
         cbar_kws={
             'label': 'Average Latency (Cycles)', 
             'location': 'left',
@@ -76,16 +76,16 @@ def plot_latency_heatmap(
         }
     )
 
-    plt.xticks(fontsize=22, fontweight='bold')
-    plt.yticks(fontsize=22, fontweight='bold')
+    plt.xticks(fontsize=28, fontweight='bold')
+    plt.yticks(fontsize=28, fontweight='bold')
 
     font_prop = fm.FontProperties(family='Arial', size=24, weight='bold')
     cbar = heatmap.collections[0].colorbar
-    cbar.ax.tick_params(labelsize=24)  # 刻度字体大小
+    cbar.ax.tick_params(labelsize=28)  # 刻度字体大小
     cbar.ax.yaxis.label.set_fontproperties(font_prop)  # 标签字体
 
-    plt.ylabel('Memory Partition ID', fontsize=24, fontweight='bold')
-    plt.xlabel('GPC ID', fontsize=24, fontweight='bold')
+    plt.ylabel('Memory Partition ID', fontsize=28, fontweight='bold')
+    plt.xlabel('GPC ID', fontsize=28, fontweight='bold')
 
     ax = plt.gca()
 
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # 使用脚本
-    file_path = '/Users/chenzihang/Develop/CachePWQ/data/GPC_MP_latency/log'  # 你的日志文件名
+    file_path = '/Users/chenzihang/Develop/CachePWQ/simulator/mgpusim/samples/matrixtranspose/log'  # 你的日志文件名
     df_result = process_gpu_logs(file_path)
 
     # 查看结果

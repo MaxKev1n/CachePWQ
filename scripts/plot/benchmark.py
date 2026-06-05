@@ -1,17 +1,16 @@
 benchmarks = [
+    "simpleconvolution",
+    "jacobi2d",
+    "fastwalshtransform",
+    "jacobi1d",
+    "shoc-reduction",
     "kmeans",
-    "mis",
     "stencil2d",
     "pagerank",
     "matrixtranspose",
     "spmv",
     "gups",
     "gesummv",
-    "simpleconvolution",
-    "jacobi2d",
-    "fastwalshtransform",
-    "jacobi1d",
-    "shoc-reduction",
 ]
 
 low_mpki_benchmarks = [
@@ -24,7 +23,6 @@ low_mpki_benchmarks = [
 
 high_mpki_benchmarks = [
     "kmeans",
-    "mis",
     "stencil2d",
     "pagerank",
     "matrixtranspose",

@@ -52,7 +52,6 @@ def plot_normalized_time(
     Opt1: pd.DataFrame,
     Opt2: pd.DataFrame,
     Opt3: pd.DataFrame,
-    Opt4: pd.DataFrame,
     out_dir: str,
 ) -> None:
     if not os.path.exists(out_dir):
@@ -65,12 +64,12 @@ def plot_normalized_time(
     plt.rcParams["mathtext.it"] = "Arial:italic"
     plt.rcParams["mathtext.bf"] = "Arial:bold"
 
-    plt.figure(figsize=(20, 5), dpi=300)
+    plt.figure(figsize=(20, 3.5), dpi=300)
 
     benchmarks = get_benchmarks()
 
     # Normalize the time
-    for col in [Opt1, Opt2, Opt3, Opt4]:
+    for col in [Opt1, Opt2, Opt3]:
         col["Data"] = [
             (
                 baseline["Data"][i] / col["Data"][i]
@@ -99,13 +98,16 @@ def plot_normalized_time(
     opt1_hmpki,     opt1_lmpki     = split_and_append_ave(Opt1)
     opt2_hmpki,     opt2_lmpki     = split_and_append_ave(Opt2)
     opt3_hmpki,     opt3_lmpki     = split_and_append_ave(Opt3)
-    opt4_hmpki,     opt4_lmpki     = split_and_append_ave(Opt4)
 
     baseline_full = pd.concat([baseline_hmpki, baseline_lmpki], ignore_index=True)
     Opt1_full     = pd.concat([opt1_hmpki,     opt1_lmpki],     ignore_index=True)
     Opt2_full     = pd.concat([opt2_hmpki,     opt2_lmpki],     ignore_index=True)
     Opt3_full     = pd.concat([opt3_hmpki,     opt3_lmpki],     ignore_index=True)
-    Opt4_full     = pd.concat([opt4_hmpki,     opt4_lmpki],     ignore_index=True)
+    
+    print("Baseline:\n", baseline_full)
+    print("Opt1:\n", Opt1_full)
+    print("Opt2:\n", Opt2_full)
+    print("Opt3:\n", Opt3_full)
 
     # ---------------------------------------------------------------
     # Build x-positions with a gap between the two groups
@@ -131,11 +133,11 @@ def plot_normalized_time(
     # ---------------------------------------------------------------
     bar1 = plt.bar(r1, baseline_full["Data"], width=bar_width, label="baseline",
                    color="#8D2E2C", edgecolor="black", linewidth=1.5)
-    bar2 = plt.bar(r2, Opt1_full["Data"],     width=bar_width, label="ngAT",
+    bar2 = plt.bar(r2, Opt1_full["Data"],     width=bar_width, label="NB-Walker",
                    color="#C3D9F1", edgecolor="black", linewidth=1.5)
-    bar3 = plt.bar(r3, Opt3_full["Data"],     width=bar_width, label="ngAT + ARM",
+    bar3 = plt.bar(r3, Opt2_full["Data"],     width=bar_width, label="NB-Walker + AMR",
                    color="#5D73A1", edgecolor="black", linewidth=1.5)
-    bar4 = plt.bar(r4, Opt4_full["Data"],     width=bar_width, label="infinite walkers",
+    bar4 = plt.bar(r4, Opt3_full["Data"],     width=bar_width, label="infinite walkers",
                    color="#313A5B", edgecolor="black", linewidth=1.5)
 
     # Annotate bars that exceed the y-axis limit
@@ -146,7 +148,7 @@ def plot_normalized_time(
             if bar in bar2:
                 plt.annotate(
                     f"{height:.2f}",
-                    xy=(x, 2.5),  # 柱顶位置
+                    xy=(x, 2.3),  # 柱顶位置
                     xytext=(-35, 0),  # 相对偏移 (0,15) 表示向上15pt
                     textcoords="offset points",
                     ha="center",
@@ -163,7 +165,7 @@ def plot_normalized_time(
             elif bar in bar3:
                 plt.annotate(
                     f"{height:.2f}",
-                    xy=(x, 3),  # 柱顶位置
+                    xy=(x, 2.9),  # 柱顶位置
                     xytext=(-51, 0),  # 相对偏移 (0,15) 表示向上15pt
                     textcoords="offset points",
                     ha="center",
@@ -199,8 +201,8 @@ def plot_normalized_time(
     # X-tick labels
     # ---------------------------------------------------------------
     xtick_labels = (
-        [get_short_name(b) for b in high_mpki_benchmarks] + ["Ave."] +
-        [get_short_name(b) for b in low_mpki_benchmarks]  + ["Ave."]
+        [get_short_name(b) for b in high_mpki_benchmarks] + ["HMean"] +
+        [get_short_name(b) for b in low_mpki_benchmarks]  + ["HMean"]
     )
     xtick_positions = [r + 1.5 * bar_width for r in r1]
 
@@ -235,8 +237,8 @@ def plot_normalized_time(
     def to_axes_x(data_x):
         return (data_x - x_start) / x_total
 
-    bracket_y      = -0.13   # in axes coordinates (below the plot)
-    label_y        = -0.2
+    bracket_y      = -0.15   # in axes coordinates (below the plot)
+    label_y        = -0.22
 
     for x_left, x_right, label in [
         (hmpki_x_left, hmpki_x_right, "High L3 TLB MPKI Workloads"),
@@ -292,9 +294,9 @@ def plot_normalized_time(
         frameon=True,
         fancybox=True,
         framealpha=0.7,
-        prop={"weight": "bold", "size": 20},
+        prop={"weight": "bold", "size": 18},
     )
-    plt.tight_layout(rect=[0, 0, 1, 0.975])
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.subplots_adjust(bottom=0.22)   # make room for the group labels
     plt.grid(axis="y", alpha=0.3)
     plt.axhline(y=1, color="red", linewidth=0.8, linestyle="--")
@@ -318,7 +320,6 @@ if __name__ == "__main__":
     Opt1     = pd.DataFrame(columns=["Benchmark", "Data"])
     Opt2     = pd.DataFrame(columns=["Benchmark", "Data"])
     Opt3     = pd.DataFrame(columns=["Benchmark", "Data"])
-    Opt4     = pd.DataFrame(columns=["Benchmark", "Data"])
 
     for benchmark in get_benchmarks():
         def append_row(df, benchmark, input_dir):
@@ -328,17 +329,15 @@ if __name__ == "__main__":
                 ignore_index=True,
             )
 
-        baseline = append_row(baseline, benchmark, "../../final_data/final_baseline")
-        Opt1     = append_row(Opt1,     benchmark, "../../final_data/final_ngat_0")
-        Opt2     = append_row(Opt2,     benchmark, "../../final_data/final_ngat_4_mshr")
-        Opt3     = append_row(Opt3,     benchmark, "../../final_data/final_ngat_adaptive")
-        Opt4     = append_row(Opt4,     benchmark, "../../final_data/final_infinitewalker")
+        baseline = append_row(baseline, benchmark, "../../final_final_data/baseline")
+        Opt1     = append_row(Opt1,     benchmark, "../../final_final_data/nbwalker")
+        Opt2     = append_row(Opt2,     benchmark, "../../final_final_data/nbwalker-full")
+        Opt3     = append_row(Opt3,     benchmark, "../../final_final_data/infinitewalker")
 
     plot_normalized_time(
         baseline=baseline.copy(),
         Opt1=Opt1.copy(),
         Opt2=Opt2.copy(),
         Opt3=Opt3.copy(),
-        Opt4=Opt4.copy(),
         out_dir=args.outDir,
     )

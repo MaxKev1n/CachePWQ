@@ -146,6 +146,7 @@ def plot_normalized_time(
                 {
                     "Benchmark": ["Ave."],
                     "MSHR": [harmonic_mean(baseline["MSHR"])],
+                    "Walker_MSHR": [harmonic_mean(baseline["Walker_MSHR"])],
                 }
             ),
         ],
@@ -158,6 +159,7 @@ def plot_normalized_time(
                 {
                     "Benchmark": ["Ave."],
                     "MSHR": [harmonic_mean(Opt1["MSHR"])],
+                    "Walker_MSHR": [harmonic_mean(Opt1["Walker_MSHR"])],
                 }
             ),
         ],
@@ -170,6 +172,7 @@ def plot_normalized_time(
                 {
                     "Benchmark": ["Ave."],
                     "MSHR": [harmonic_mean(Opt2["MSHR"])],
+                    "Walker_MSHR": [harmonic_mean(Opt2["Walker_MSHR"])],
                 }
             ),
         ],
@@ -182,11 +185,20 @@ def plot_normalized_time(
                 {
                     "Benchmark": ["Ave."],
                     "MSHR": [harmonic_mean(Opt3["MSHR"])],
+                    "Walker_MSHR": [harmonic_mean(Opt3["Walker_MSHR"])],
                 }
             ),
         ],
         ignore_index=True,
     )
+    print("Baseline MSHR Ave.:", baseline["MSHR"].iloc[-1])
+    print("Opt1 MSHR Ave.:", Opt1["MSHR"].iloc[-1])
+    print("Opt2 MSHR Ave.:", Opt2["MSHR"].iloc[-1])
+    print("Opt3 MSHR Ave.:", Opt3["MSHR"].iloc[-1])
+    print("Baseline Walker MSHR Ave.:", baseline["Walker_MSHR"].iloc[-1])
+    print("Opt1 Walker MSHR Ave.:", Opt1["Walker_MSHR"].iloc[-1])
+    print("Opt2 Walker MSHR Ave.:", Opt2["Walker_MSHR"].iloc[-1])
+    print("Opt3 Walker MSHR Ave.:", Opt3["Walker_MSHR"].iloc[-1])
 
     bar1 = plt.bar(
         r1,
@@ -308,37 +320,47 @@ def plot_normalized_time(
     plt.xlim(min(r1) - bar_width, max(r4) + bar_width)
     plt.xticks(
         [r + 1.5 * bar_width for r in r1],
-        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
-        fontsize=28,
+        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["HMean"],
+        fontsize=32,
         fontweight="bold",
     )
-    plt.ylabel("Average L1\n MSHR Occupancy", fontsize=28, fontweight="bold")
+    plt.ylabel("Avg. L1 MSHR\n Occupancy", fontsize=32, fontweight="bold")
     plt.yticks(
-        np.arange(0, 32, 8),
-        fontsize=28,
+        np.arange(0, 33, 8),
+        fontsize=32,
         fontweight="bold",
     )
     plt.ylim(0, 32)
 
-    hatch_patch = Patch(
-        facecolor="white",
-        edgecolor="black",
-        hatch="xx",
-        label="ngAT MSHR",
-    )
+    legend_gpc = [
+        Patch(facecolor="#8D2E2C", edgecolor="black", linewidth=1.5, label="baseline"),
+        Patch(facecolor="#C3D9F1", edgecolor="black", linewidth=1.5, label="NB-Walker"),
+        Patch(facecolor="#5D73A1", edgecolor="black", linewidth=1.5, label="NB-Walker + AMR"),
+        Patch(facecolor="#313A5B", edgecolor="black", linewidth=1.5, label="infinite walker"),
+    ]
+    legend_type = [
+        Patch(facecolor="white", edgecolor="black", linewidth=1.5, label="data MSHR"),
+        Patch(facecolor="white", edgecolor="black", linewidth=1.5, hatch="xx", label="walk MSHR"),
+    ]
 
-    plt.legend(
-        handles=[bar1, bar2, bar3, bar4, hatch_patch],  # 加入 hatch_patch
-        loc="upper center",
-        ncol=5,  # 从 4 改为 5
-        bbox_to_anchor=(0.5, 1),
+    leg1 = plt.legend(
+        handles=legend_gpc,
+        loc="upper left", bbox_to_anchor=(0.2, 1.0),
         bbox_transform=plt.gcf().transFigure,
-        frameon=True,
-        fancybox=True,
-        framealpha=0.7,
-        prop={"weight": "bold", "size": 26},
+        frameon=True, fancybox=True, framealpha=0.7,
+        ncol=2, prop={"weight": "bold", "size": 26},
+        title_fontproperties={"weight": "bold", "size": 22},
     )
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    leg2 = plt.legend(
+        handles=legend_type,
+        loc="upper right", bbox_to_anchor=(0.8, 1.0),
+        bbox_transform=plt.gcf().transFigure,
+        frameon=True, fancybox=True, framealpha=0.7,
+        ncol=1, prop={"weight": "bold", "size": 26},
+        title_fontproperties={"weight": "bold", "size": 22},
+    )
+    plt.gca().add_artist(leg1)
+    plt.tight_layout(rect=[0, 0, 1, 0.85])
     plt.grid(axis="y", alpha=0.3)
     # plt.axhline(y=8, color="red", linewidth=0.8, linestyle="--")
 
@@ -385,7 +407,7 @@ if __name__ == "__main__":
     for benchmark in get_high_mpki_benchmarks():
         mshr, walker_mshr = collect_mshr(
             benchmark_name=benchmark,
-            input_dir="../../final_data/final_baseline",
+            input_dir="../../final_final_data/baseline",
         )
 
         baseline = pd.concat(
@@ -404,7 +426,7 @@ if __name__ == "__main__":
 
         mshr, walker_mshr = collect_mshr(
             benchmark_name=benchmark,
-            input_dir="../../final_data/final_ngat_0",
+            input_dir="../../final_final_data/nbwalker",
         )
 
         Opt1 = pd.concat(
@@ -423,7 +445,7 @@ if __name__ == "__main__":
 
         mshr, walker_mshr = collect_mshr(
             benchmark_name=benchmark,
-            input_dir="../../final_data/final_ngat_adaptive",
+            input_dir="../../final_final_data/nbwalker-full",
         )
 
         Opt2 = pd.concat(
@@ -442,7 +464,7 @@ if __name__ == "__main__":
         
         mshr, walker_mshr = collect_mshr(
             benchmark_name=benchmark,
-            input_dir="../../final_data/final_infinitewalker",
+            input_dir="../../final_final_data/infinitewalker",
         )
 
         Opt3 = pd.concat(

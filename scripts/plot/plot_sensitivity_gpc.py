@@ -40,21 +40,30 @@ def collect_performance_data(benchmark_name: str, input_dir: str) -> float:
 
 
 def plot_normalized_time(
-    baseline_2gpc: pd.DataFrame,
-    mpw_2gpc: pd.DataFrame,
-    ngat_2gpc: pd.DataFrame,
-    baseline_4gpc: pd.DataFrame,
-    mpw_4gpc: pd.DataFrame,
-    ngat_4gpc: pd.DataFrame,
-    baseline_8gpc: pd.DataFrame,
-    mpw_8gpc: pd.DataFrame,
-    ngat_8gpc: pd.DataFrame,
+    baseline_1GPC: pd.DataFrame,
+    ngat_1GPC: pd.DataFrame,
+    baseline_2GPC: pd.DataFrame,
+    ngat_2GPC: pd.DataFrame,
+    baseline_4GPC: pd.DataFrame,
+    ngat_4GPC: pd.DataFrame,
+    baseline_8GPC: pd.DataFrame,
+    ngat_8GPC: pd.DataFrame,
     out_dir: str,
 ) -> None:
+    """
+    Plots the normalized time for private and shared data.
+
+    Args:
+        result (pd.DataFrame): DataFrame containing performance data.
+        baseline (pd.DataFrame): DataFrame containing baseline performance data.
+        out_dir (str): Directory to save the output plots.
+    """
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
+    # Set Arial font family
     plt.rcParams["font.family"] = "Arial"
+    # For macOS, you might need to explicitly set the font file
     plt.rcParams["font.sans-serif"] = ["Arial"]
     plt.rcParams["mathtext.fontset"] = "custom"
     plt.rcParams["mathtext.rm"] = "Arial"
@@ -67,165 +76,212 @@ def plot_normalized_time(
     benchmarks = get_high_mpki_benchmarks()
 
     bar_width = 0.1
-    r1 = np.arange(len(benchmarks) + 1) * (6 * bar_width + 0.2)
+    r1 = np.arange(len(benchmarks) + 1) * (4 * bar_width + 0.2)
     r2 = [x + bar_width for x in r1]
     r3 = [x + bar_width for x in r2]
     r4 = [x + bar_width for x in r3]
-    r5 = [x + bar_width for x in r4]
-    r6 = [x + bar_width for x in r5]
 
-    # Normalize: baseline_8gpc as reference (=1.0)
-    # mpw_2gpc["Data"] = [
-    #     (baseline_8gpc["Data"][i] / mpw_2gpc["Data"][i]
-    #      if mpw_2gpc["Data"][i] != 0 and baseline_8gpc["Data"][i] != 0 else 0)
-    #     for i in range(len(benchmarks))
-    # ]
-    # ngat_2gpc["Data"] = [
-    #     (baseline_8gpc["Data"][i] / ngat_2gpc["Data"][i]
-    #      if ngat_2gpc["Data"][i] != 0 and baseline_8gpc["Data"][i] != 0 else 0)
-    #     for i in range(len(benchmarks))
-    # ]
-    # baseline_2gpc["Data"] = [
-    #     (baseline_8gpc["Data"][i] / baseline_2gpc["Data"][i]
-    #      if baseline_2gpc["Data"][i] != 0 and baseline_8gpc["Data"][i] != 0 else 0)
-    #     for i in range(len(benchmarks))
-    # ]
-    # mpw_4gpc["Data"] = [
-    #     (baseline_8gpc["Data"][i] / mpw_4gpc["Data"][i]
-    #      if mpw_4gpc["Data"][i] != 0 and baseline_8gpc["Data"][i] != 0 else 0)
-    #     for i in range(len(benchmarks))
-    # ]
-    # ngat_4gpc["Data"] = [
-    #     (baseline_8gpc["Data"][i] / ngat_4gpc["Data"][i]
-    #      if ngat_4gpc["Data"][i] != 0 and baseline_8gpc["Data"][i] != 0 else 0)
-    #     for i in range(len(benchmarks))
-    # ]
-    # baseline_4gpc["Data"] = [
-    #     (baseline_8gpc["Data"][i] / baseline_4gpc["Data"][i]
-    #      if baseline_4gpc["Data"][i] != 0 and baseline_8gpc["Data"][i] != 0 else 0)
-    #     for i in range(len(benchmarks))
-    # ]
-    # mpw_8gpc["Data"] = [
-    #     (baseline_8gpc["Data"][i] / mpw_8gpc["Data"][i]
-    #      if mpw_8gpc["Data"][i] != 0 and baseline_8gpc["Data"][i] != 0 else 0)
-    #     for i in range(len(benchmarks))
-    # ]
-    # ngat_8gpc["Data"] = [
-    #     (baseline_8gpc["Data"][i] / ngat_8gpc["Data"][i]
-    #      if ngat_8gpc["Data"][i] != 0 and baseline_8gpc["Data"][i] != 0 else 0)
-    #     for i in range(len(benchmarks))
-    # ]
-    # baseline_8gpc["Data"] = [1.0 for _ in range(len(benchmarks))]
-    ngat_2gpc["Data"] = [
-        (baseline_2gpc["Data"][i] / ngat_2gpc["Data"][i]
-         if ngat_2gpc["Data"][i] != 0 and baseline_2gpc["Data"][i] != 0 else 0)
-        for i in range(len(benchmarks))
-    ]
-    baseline_2gpc["Data"] = [
-        (baseline_2gpc["Data"][i] / baseline_2gpc["Data"][i]
-         if baseline_2gpc["Data"][i] != 0 and baseline_2gpc["Data"][i] != 0 else 0)
-        for i in range(len(benchmarks))
-    ]
-    ngat_4gpc["Data"] = [
-        (baseline_4gpc["Data"][i] / ngat_4gpc["Data"][i]
-         if ngat_4gpc["Data"][i] != 0 and baseline_4gpc["Data"][i] != 0 else 0)
-        for i in range(len(benchmarks))
-    ]
-    baseline_4gpc["Data"] = [
-        (baseline_4gpc["Data"][i] / baseline_4gpc["Data"][i]
-         if baseline_4gpc["Data"][i] != 0 and baseline_4gpc["Data"][i] != 0 else 0)
-        for i in range(len(benchmarks))
-    ]
-    ngat_8gpc["Data"] = [
-        (baseline_8gpc["Data"][i] / ngat_8gpc["Data"][i]
-         if ngat_8gpc["Data"][i] != 0 and baseline_8gpc["Data"][i] != 0 else 0)
-        for i in range(len(benchmarks))
-    ]
-    baseline_8gpc["Data"] = [1.0 for _ in range(len(benchmarks))]
-
-    # Append harmonic mean as "Ave."
-    def append_ave(df):
-        return pd.concat(
-            [df, pd.DataFrame({"Benchmark": ["Ave."], "Data": [harmonic_mean(df["Data"])]})],
-            ignore_index=True,
+    # Normalize the time
+    ngat_1GPC["Data"] = [
+        (
+            baseline_1GPC["Data"][i] / ngat_1GPC["Data"][i]
+            if ngat_1GPC["Data"][i] != 0 and baseline_1GPC["Data"][i] != 0
+            else 0
         )
+        for i in range(len(benchmarks))
+    ]
+    ngat_2GPC["Data"] = [
+        (
+            baseline_2GPC["Data"][i] / ngat_2GPC["Data"][i]
+            if ngat_2GPC["Data"][i] != 0 and baseline_2GPC["Data"][i] != 0
+            else 0
+        )
+        for i in range(len(benchmarks))
+    ]
+    ngat_4GPC["Data"] = [
+        (
+            baseline_2GPC["Data"][i] / ngat_4GPC["Data"][i]
+            if ngat_4GPC["Data"][i] != 0 and baseline_2GPC["Data"][i] != 0
+            else 0
+        )
+        for i in range(len(benchmarks))
+    ]
+    ngat_8GPC["Data"] = [
+        (
+            baseline_2GPC["Data"][i] / ngat_8GPC["Data"][i]
+            if ngat_8GPC["Data"][i] != 0 and baseline_2GPC["Data"][i] != 0
+            else 0
+        )
+        for i in range(len(benchmarks))
+    ]
 
-    baseline_2gpc = append_ave(baseline_2gpc)
-    mpw_2gpc      = append_ave(mpw_2gpc)
-    ngat_2gpc     = append_ave(ngat_2gpc)
-    baseline_4gpc = append_ave(baseline_4gpc)
-    mpw_4gpc      = append_ave(mpw_4gpc)
-    ngat_4gpc     = append_ave(ngat_4gpc)
-    baseline_8gpc = append_ave(baseline_8gpc)
-    mpw_8gpc      = append_ave(mpw_8gpc)
-    ngat_8gpc     = append_ave(ngat_8gpc)
+    # Ave.
+    ngat_1GPC = pd.concat(
+        [
+            ngat_1GPC,
+            pd.DataFrame(
+                {
+                    "Benchmark": ["Ave."],
+                    "Data": [harmonic_mean(ngat_1GPC["Data"])],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+    ngat_2GPC = pd.concat(
+        [
+            ngat_2GPC,
+            pd.DataFrame(
+                {
+                    "Benchmark": ["Ave."],
+                    "Data": [harmonic_mean(ngat_2GPC["Data"])],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+    ngat_4GPC = pd.concat(
+        [
+            ngat_4GPC,
+            pd.DataFrame(
+                {
+                    "Benchmark": ["Ave."],
+                    "Data": [harmonic_mean(ngat_4GPC["Data"])],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+    ngat_8GPC = pd.concat(
+        [
+            ngat_8GPC,
+            pd.DataFrame(
+                {
+                    "Benchmark": ["Ave."],
+                    "Data": [harmonic_mean(ngat_8GPC["Data"])],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+    
+    bar1 = plt.bar(
+        r1,
+        ngat_1GPC["Data"],
+        width=bar_width,
+        label="1 GPC",
+        color="#8D2E2C",
+        edgecolor="black",
+        linewidth=1.5,
+    )
+    bar2 = plt.bar(
+        r2,
+        ngat_2GPC["Data"],
+        width=bar_width,
+        label="2 GPC",
+        color="#C3D9F1",
+        edgecolor="black",
+        linewidth=1.5,
+    )
+    bar3 = plt.bar(
+        r3,
+        ngat_4GPC["Data"],
+        width=bar_width,
+        label="4 GPC",
+        color="#5D73A1",
+        edgecolor="black",
+        linewidth=1.5,
+    )
+    bar4 = plt.bar(
+        r4,
+        ngat_8GPC["Data"],
+        width=bar_width,
+        label="8 GPC",
+        color="#313A5B",
+        edgecolor="black",
+        linewidth=1.5,
+    )
 
-    # Colors per GPC tier
-    color_2gpc = "#C3D9F1"
-    color_4gpc = "#5D73A1"
-    color_8gpc = "#313A5B"
 
-    bar_baseline_2gpc = plt.bar(r1, baseline_2gpc["Data"], width=bar_width,
-                                color=color_2gpc, edgecolor="black", linewidth=1.5)
-    bar_baseline_4gpc = plt.bar(r3, baseline_4gpc["Data"], width=bar_width,
-                                color=color_4gpc, edgecolor="black", linewidth=1.5)
-    bar_baseline_8gpc = plt.bar(r5, baseline_8gpc["Data"], width=bar_width,
-                                color=color_8gpc, edgecolor="black", linewidth=1.5)
+    for bar in bar1 + bar2 + bar3 + bar4:
+        height = bar.get_height()
+        x = bar.get_x() + bar.get_width() / 2
 
-    bar_ngat_2gpc = plt.bar(r2, ngat_2gpc["Data"], width=bar_width,
-                            color=color_2gpc, edgecolor="black", linewidth=1.5, hatch="xx")
-    bar_ngat_4gpc = plt.bar(r4, ngat_4gpc["Data"], width=bar_width,
-                            color=color_4gpc, edgecolor="black", linewidth=1.5, hatch="xx")
-    bar_ngat_8gpc = plt.bar(r6, ngat_8gpc["Data"], width=bar_width,
-                            color=color_8gpc, edgecolor="black", linewidth=1.5, hatch="xx")
+        # if height >= 4:
+        #     plt.annotate(
+        #         f"{height:.2f}",
+        #         xy=(x, 3.65),
+        #         xytext=(0, 0),  # 相对偏移 (0,15) 表示向上15pt
+        #         textcoords="offset points",
+        #         ha="center",
+        #         va="bottom",
+        #         fontsize=22,
+        #         fontweight="bold",
+        #         bbox=dict(
+        #             facecolor="white",
+        #             edgecolor="black",
+        #             boxstyle="round,pad=0.1",
+        #         ),
+        #         # arrowprops=dict(arrowstyle="-", color="red", lw=2),
+        #     )
+        # else:
+        #     plt.annotate(
+        #         f"{height:.2f}",
+        #         xy=(x, height),
+        #         xytext=(0, 0),  # 相对偏移 (0,15) 表示向上15pt
+        #         textcoords="offset points",
+        #         ha="center",
+        #         va="bottom",
+        #         fontsize=22,
+        #         fontweight="bold",
+        #         rotation=90,
+        #         # bbox=dict(
+        #         #     facecolor="white",
+        #         #     edgecolor="black",
+        #         #     boxstyle="round,pad=0.1",
+        #         # ),
+        #         # arrowprops=dict(arrowstyle="-", color="red", lw=2),
+        #     )
 
-    plt.xlim(min(r1) - bar_width, max(r6) + bar_width)
+    plt.xlim(min(r1) - bar_width, max(r4) + bar_width)
     plt.xticks(
-        [r + 2.5 * bar_width for r in r1],
-        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["Ave."],
-        fontsize=28, fontweight="bold",
+        [r + 1.5 * bar_width for r in r1],
+        [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["HMean"],
+        fontsize=36,
+        fontweight="bold",
     )
-    plt.ylabel("Speedup", fontsize=28, fontweight="bold")
-    plt.yticks(np.arange(0, 8.1, 2), fontsize=28, fontweight="bold")
-    plt.ylim(0, 8)
-
-    legend_gpc = [
-        Patch(facecolor=color_2gpc, edgecolor="black", linewidth=1.5, label="2 GPC"),
-        Patch(facecolor=color_4gpc, edgecolor="black", linewidth=1.5, label="4 GPC"),
-        Patch(facecolor=color_8gpc, edgecolor="black", linewidth=1.5, label="8 GPC"),
-    ]
-    legend_type = [
-        Patch(facecolor="white", edgecolor="black", linewidth=1.5, label="Baseline"),
-        Patch(facecolor="white", edgecolor="black", linewidth=1.5, hatch="xx", label="ngAT"),
-    ]
-
-    leg1 = plt.legend(
-        handles=legend_gpc,
-        loc="upper left", bbox_to_anchor=(0.1, 1.0),
+    plt.ylabel("Speedup", fontsize=36, fontweight="bold")
+    plt.yticks(
+        np.arange(0, 6.1, 2),
+        fontsize=36,
+        fontweight="bold",
+    )
+    plt.ylim(0, 6)
+    
+    plt.legend(
+        loc="upper center",
+        ncol=4,
+        bbox_to_anchor=(0.5, 1),
         bbox_transform=plt.gcf().transFigure,
-        frameon=True, fancybox=True, framealpha=0.7,
-        ncol=3, prop={"weight": "bold", "size": 24},
-        title_fontproperties={"weight": "bold", "size": 22},
+        frameon=True,
+        fancybox=True,
+        framealpha=0.7,
+        prop={"weight": "bold", "size": 28},
     )
-    leg2 = plt.legend(
-        handles=legend_type,
-        loc="upper right", bbox_to_anchor=(0.9, 1.0),
-        bbox_transform=plt.gcf().transFigure,
-        frameon=True, fancybox=True, framealpha=0.7,
-        ncol=2, prop={"weight": "bold", "size": 24},
-        title_fontproperties={"weight": "bold", "size": 22},
-    )
-    plt.gca().add_artist(leg1)
-
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    
+    plt.tight_layout(rect=[0, 0, 1, 0.925])
     plt.grid(axis="y", alpha=0.3)
     plt.axhline(y=1, color="red", linewidth=0.8, linestyle="--")
 
     ax = plt.gca()
-    for spine in ax.spines.values():
-        spine.set_linewidth(1.75)
 
-    output_file = os.path.join(out_dir, "sensitivity_gpc")
+    # 设置图的边框加粗
+    for spine in ax.spines.values():
+        spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
+
+    output_file = os.path.join(
+        out_dir, "sensitivity_gpc"
+    )
     plt.savefig(output_file + ".png")
     plt.savefig(output_file + ".pdf")
     print(f"Plot saved to {output_file}")
@@ -238,15 +294,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Cleaner loop — rebuild from scratch properly
-    baseline_2gpc = pd.DataFrame(columns=["Benchmark", "Data"])
-    mpw_2gpc     = pd.DataFrame(columns=["Benchmark", "Data"])
-    ngat_2gpc = pd.DataFrame(columns=["Benchmark", "Data"])
-    baseline_4gpc     = pd.DataFrame(columns=["Benchmark", "Data"])
-    mpw_4gpc = pd.DataFrame(columns=["Benchmark", "Data"])
-    ngat_4gpc     = pd.DataFrame(columns=["Benchmark", "Data"])
-    baseline_8gpc = pd.DataFrame(columns=["Benchmark", "Data"])
-    mpw_8gpc     = pd.DataFrame(columns=["Benchmark", "Data"])
-    ngat_8gpc     = pd.DataFrame(columns=["Benchmark", "Data"])
+    baseline_1GPC = pd.DataFrame(columns=["Benchmark", "Data"])
+    ngat_1GPC     = pd.DataFrame(columns=["Benchmark", "Data"])
+    baseline_2GPC = pd.DataFrame(columns=["Benchmark", "Data"])
+    ngat_2GPC     = pd.DataFrame(columns=["Benchmark", "Data"])
+    baseline_4GPC = pd.DataFrame(columns=["Benchmark", "Data"])
+    ngat_4GPC     = pd.DataFrame(columns=["Benchmark", "Data"])
+    baseline_8GPC = pd.DataFrame(columns=["Benchmark", "Data"])
+    ngat_8GPC     = pd.DataFrame(columns=["Benchmark", "Data"])
 
     for benchmark in get_high_mpki_benchmarks():
         def append_row(df, benchmark, input_dir):
@@ -256,25 +311,23 @@ if __name__ == "__main__":
                 ignore_index=True,
             )
 
-        baseline_2gpc = append_row(baseline_2gpc, benchmark, "../../final_data/final_baseline_2GPC")
-        mpw_2gpc    = append_row(mpw_2gpc,     benchmark, "../../final_data/final_mpw_2GPC")
-        ngat_2gpc     = append_row(ngat_2gpc,     benchmark, "../../final_data/final_ngat_2GPC")
-        baseline_4gpc    = append_row(baseline_4gpc,     benchmark, "../../final_data/final_baseline_4GPC")
-        mpw_4gpc     = append_row(mpw_4gpc,     benchmark, "../../final_data/final_mpw_4GPC")
-        ngat_4gpc     = append_row(ngat_4gpc,     benchmark, "../../final_data/final_ngat_4GPC")
-        baseline_8gpc    = append_row(baseline_8gpc,     benchmark, "../../final_data/final_baseline")
-        mpw_8gpc     = append_row(mpw_8gpc,     benchmark, "../../final_data/final_mpw")
-        ngat_8gpc     = append_row(ngat_8gpc,     benchmark, "../../final_data/final_ngat_adaptive")
+        baseline_1GPC = append_row(baseline_1GPC, benchmark, "../../final_final_data/1GPC_baseline")
+        ngat_1GPC     = append_row(ngat_1GPC,     benchmark, "../../final_final_data/1GPC_nbwalker")
+        baseline_2GPC = append_row(baseline_2GPC, benchmark, "../../final_final_data/2GPC_baseline")
+        ngat_2GPC     = append_row(ngat_2GPC,     benchmark, "../../final_final_data/2GPC_nbwalker")
+        baseline_4GPC = append_row(baseline_4GPC,     benchmark, "../../final_final_data/4GPC_baseline")
+        ngat_4GPC     = append_row(ngat_4GPC,     benchmark, "../../final_final_data/4GPC_nbwalker")
+        baseline_8GPC = append_row(baseline_8GPC,     benchmark, "../../final_final_data/baseline")
+        ngat_8GPC     = append_row(ngat_8GPC,     benchmark, "../../final_final_data/nbwalker-full")
 
     plot_normalized_time(
-        baseline_2gpc=baseline_2gpc.copy(),
-        mpw_2gpc=mpw_2gpc.copy(),
-        ngat_2gpc=ngat_2gpc.copy(),
-        baseline_4gpc=baseline_4gpc.copy(),
-        mpw_4gpc=mpw_4gpc.copy(),
-        ngat_4gpc=ngat_4gpc.copy(),
-        baseline_8gpc=baseline_8gpc.copy(),
-        mpw_8gpc=mpw_8gpc.copy(),
-        ngat_8gpc=ngat_8gpc.copy(),
+        baseline_1GPC=baseline_1GPC.copy(),
+        ngat_1GPC=ngat_1GPC.copy(),
+        baseline_2GPC=baseline_2GPC.copy(),
+        ngat_2GPC=ngat_2GPC.copy(),
+        baseline_4GPC=baseline_4GPC.copy(),
+        ngat_4GPC=ngat_4GPC.copy(),
+        baseline_8GPC=baseline_8GPC.copy(),
+        ngat_8GPC=ngat_8GPC.copy(),
         out_dir=args.outDir,
     )
