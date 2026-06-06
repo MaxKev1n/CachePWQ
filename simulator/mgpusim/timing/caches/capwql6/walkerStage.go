@@ -6,7 +6,6 @@ import (
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
-	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -109,33 +108,6 @@ func (c *walkerStage) processWalkerWrite(
 	now akita.VTimeInSec,
 	trans *transaction,
 ) bool {
-	write := trans.write
-	addr := write.Address
-	pid := write.PID
-	PTEBlockSize := uint64(1 << (c.cache.log2BlockSize + c.cache.extendBits))
-	PTEBlockID := addr / PTEBlockSize * PTEBlockSize
-
-	mshrEntry := c.cache.mshr.QueryForWalker(
-		pid,
-		PTEBlockID,
-	)
-	if mshrEntry != nil {
-		offset := (addr >> c.cache.log2BlockSize) & c.cache.offsetMask
-
-		if mshrEntry.OffsetBits[int(offset)] {
-			return c.processWalkerWriteMSHRHit(
-				now,
-				trans,
-				mshrEntry,
-			)
-		}
-		return c.processWalkerWritePartialMSHRHit(
-			now,
-			trans,
-			mshrEntry,
-		)
-	}
-
 	if c.cache.mshr.IsFull() {
 		return false
 	}
@@ -189,87 +161,10 @@ func (c *walkerStage) fetchPTEsFromBottom(
 
 	PTEBlockSize := uint64(1 << (c.cache.log2BlockSize + c.cache.extendBits))
 	PTEBlockID := addr / PTEBlockSize * PTEBlockSize
-	PTEOffset := (addr >> c.cache.log2BlockSize) & c.cache.offsetMask
 
-	mshrEntry := c.cache.mshr.AddForWalker(pid, PTEBlockID, PTEOffset, 1<<int(c.cache.extendBits))
+	mshrEntry := c.cache.mshr.AddForWalker(pid, PTEBlockID, readToBottom.ID)
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
 	mshrEntry.ReadReq = readToBottom
-
-	return true
-}
-
-func (c *walkerStage) processWalkerWriteMSHRHit(
-	now akita.VTimeInSec,
-	trans *transaction,
-	mshrEntry *cache.MSHREntry,
-) bool {
-	if len(mshrEntry.Requests) >= 8 {
-		return false
-	}
-
-	mshrEntry.Requests = append(mshrEntry.Requests, trans)
-
-	c.cache.walkerDirBuf.Pop()
-
-	tracing.AddTaskStep(
-		trans.id,
-		now,
-		c.cache,
-		"ptw-read-mshr-hit",
-	)
-
-	return true
-}
-
-func (c *walkerStage) processWalkerWritePartialMSHRHit(
-	now akita.VTimeInSec,
-	trans *transaction,
-	mshrEntry *cache.MSHREntry,
-) bool {
-	if len(mshrEntry.Requests) >= 8 {
-		return false
-	}
-
-	addr := trans.Address()
-	pid := trans.PID()
-	blockSize := uint64(1 << c.cache.log2BlockSize)
-	cacheLineID := addr / blockSize * blockSize
-
-	bottomModule := c.cache.lowModuleFinder.Find(cacheLineID)
-	readReqInfo := &mem.ReadReqInfo{ReturnAccessInfo: true}
-	readToBottom := mem.ReadReqBuilder{}.
-		WithSendTime(now).
-		WithSrc(c.cache.BottomPort).
-		WithDst(bottomModule).
-		WithAddress(cacheLineID).
-		WithPID(pid).
-		WithByteSize(blockSize).
-		WithInfo(readReqInfo).
-		Build()
-
-	readToBottom.PTW = true
-
-	err := c.cache.BottomPort.Send(readToBottom)
-	if err != nil {
-		return false
-	}
-
-	tracing.AddTaskStep(
-		trans.id,
-		now,
-		c.cache,
-		"ptw-read-mshr-partial-hit",
-	)
-
-	tracing.TraceReqInitiate(readToBottom, now, c.cache, trans.id)
-	trans.readToBottom = readToBottom
-
-	PTEOffset := (addr >> c.cache.log2BlockSize) & c.cache.offsetMask
-
-	mshrEntry.Requests = append(mshrEntry.Requests, trans)
-	mshrEntry.OffsetBits[int(PTEOffset)] = true
-
-	c.cache.walkerDirBuf.Pop()
 
 	return true
 }

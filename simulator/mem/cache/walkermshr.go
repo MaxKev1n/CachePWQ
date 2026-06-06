@@ -40,9 +40,9 @@ func (m *walkerMSHR) Add(pid ca.PID, addr uint64) *MSHREntry {
 	return entry
 }
 
-func (m *walkerMSHR) AddForWalker(pid ca.PID, addr uint64, offset uint64, numSubEntries int) *MSHREntry {
+func (m *walkerMSHR) AddForWalker(pid ca.PID, addr uint64, id string) *MSHREntry {
 	for _, e := range m.entries {
-		if e.PID == pid && e.Address == addr && e.PTW {
+		if e.PID == pid && e.Address == addr && e.PTW && e.ID == id {
 			panic("entry already in mshr")
 		}
 	}
@@ -51,11 +51,11 @@ func (m *walkerMSHR) AddForWalker(pid ca.PID, addr uint64, offset uint64, numSub
 		log.Panic("Walker MSHR is full")
 	}
 
-	entry := NewMSHREntry(numSubEntries)
+	entry := NewMSHREntry(0)
 	entry.PID = pid
 	entry.Address = addr
 	entry.PTW = true
-	entry.OffsetBits[int(offset)] = true
+	entry.ID = id
 	m.entries = append(m.entries, entry)
 	return entry
 }
@@ -69,9 +69,9 @@ func (m *walkerMSHR) Query(pid ca.PID, addr uint64) *MSHREntry {
 	return nil
 }
 
-func (m *walkerMSHR) QueryForWalker(pid ca.PID, addr uint64) *MSHREntry {
+func (m *walkerMSHR) QueryForWalker(pid ca.PID, addr uint64, id string) *MSHREntry {
 	for _, e := range m.entries {
-		if e.PID == pid && e.Address == addr && e.PTW {
+		if e.PID == pid && e.Address == addr && e.PTW && e.ID == id {
 			return e
 		}
 	}
@@ -88,9 +88,9 @@ func (m *walkerMSHR) Remove(pid ca.PID, addr uint64) *MSHREntry {
 	panic("trying to remove an non-exist entry")
 }
 
-func (m *walkerMSHR) RemoveForWalker(pid ca.PID, addr uint64) *MSHREntry {
+func (m *walkerMSHR) RemoveForWalker(pid ca.PID, addr uint64, id string) *MSHREntry {
 	for i, e := range m.entries {
-		if e.PID == pid && e.Address == addr && e.PTW {
+		if e.PID == pid && e.Address == addr && e.PTW && e.ID == id {
 			m.entries = append(m.entries[:i], m.entries[i+1:]...)
 			return e
 		}

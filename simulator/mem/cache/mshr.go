@@ -19,6 +19,7 @@ type MSHREntry struct {
 	Data       []byte
 	PTW        bool
 	OffsetBits []bool
+	ID         string
 }
 
 // NewMSHREntry returns a new MSHR entry object
@@ -32,11 +33,11 @@ func NewMSHREntry(numSubEntry int) *MSHREntry {
 // MSHR is an interface that controls MSHR entries
 type MSHR interface {
 	Query(pid ca.PID, addr uint64) *MSHREntry
-	QueryForWalker(pid ca.PID, addr uint64) *MSHREntry
+	QueryForWalker(pid ca.PID, addr uint64, id string) *MSHREntry
 	Add(pid ca.PID, addr uint64) *MSHREntry
-	AddForWalker(pid ca.PID, addr uint64, offset uint64, numSubEntries int) *MSHREntry
+	AddForWalker(pid ca.PID, addr uint64, id string) *MSHREntry
 	Remove(pid ca.PID, addr uint64) *MSHREntry
-	RemoveForWalker(pid ca.PID, addr uint64) *MSHREntry
+	RemoveForWalker(pid ca.PID, addr uint64, id string) *MSHREntry
 	AllEntries() []*MSHREntry
 	IsFull() bool
 	IsPartialFull(remaining int) bool
@@ -75,7 +76,7 @@ func (m *mshrImpl) Add(pid ca.PID, addr uint64) *MSHREntry {
 	return entry
 }
 
-func (m *mshrImpl) AddForWalker(pid ca.PID, addr uint64, offset uint64, numSubEntries int) *MSHREntry {
+func (m *mshrImpl) AddForWalker(pid ca.PID, addr uint64, id string) *MSHREntry {
 	panic("AddForWalker is not supported in this MSHR")
 }
 
@@ -88,7 +89,7 @@ func (m *mshrImpl) Query(pid ca.PID, addr uint64) *MSHREntry {
 	return nil
 }
 
-func (m *mshrImpl) QueryForWalker(pid ca.PID, addr uint64) *MSHREntry {
+func (m *mshrImpl) QueryForWalker(pid ca.PID, addr uint64, id string) *MSHREntry {
 	panic("QueryWithOffset is not supported in this MSHR")
 }
 
@@ -102,7 +103,7 @@ func (m *mshrImpl) Remove(pid ca.PID, addr uint64) *MSHREntry {
 	panic("trying to remove an non-exist entry")
 }
 
-func (m *mshrImpl) RemoveForWalker(pid ca.PID, addr uint64) *MSHREntry {
+func (m *mshrImpl) RemoveForWalker(pid ca.PID, addr uint64, id string) *MSHREntry {
 	panic("RemoveForWalker is not supported in this MSHR")
 }
 

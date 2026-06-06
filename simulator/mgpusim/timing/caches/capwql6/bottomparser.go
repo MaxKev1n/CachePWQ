@@ -105,11 +105,9 @@ func (p *bottomParser) processPTEsDataReady(
 	PTEBlockID := addr / PTEBlockSize * PTEBlockSize
 	data := dr.Data
 
-	mshrEntry := p.cache.mshr.QueryForWalker(pid, PTEBlockID)
-
-	PTEOffset := (addr >> p.cache.log2BlockSize) & p.cache.offsetMask
-	if !mshrEntry.OffsetBits[int(PTEOffset)] {
-		panic("the PTE is not in the MSHR")
+	mshrEntry := p.cache.mshr.QueryForWalker(pid, PTEBlockID, dr.GetRespondTo())
+	if mshrEntry == nil {
+		panic("cannot find mshr entry for walker")
 	}
 
 	cachelineID := (addr >> p.cache.log2BlockSize) << p.cache.log2BlockSize
@@ -132,19 +130,7 @@ func (p *bottomParser) processPTEsDataReady(
 
 	p.removeTransaction(trans)
 
-	mshrEntry.OffsetBits[int(PTEOffset)] = false
-
-	isAllEmpty := true
-	for _, flag := range mshrEntry.OffsetBits {
-		if flag {
-			isAllEmpty = false
-			break
-		}
-	}
-
-	if isAllEmpty {
-		p.cache.mshr.RemoveForWalker(pid, PTEBlockID)
-	}
+	p.cache.mshr.RemoveForWalker(pid, PTEBlockID, dr.GetRespondTo())
 
 	p.cache.BottomPort.Retrieve(now)
 
