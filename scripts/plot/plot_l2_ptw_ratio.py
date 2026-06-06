@@ -23,10 +23,13 @@ def collect_performance_data(benchmark_name: str, input_dir: str) -> float:
         return performance_data
     df = pd.read_csv(file_path)
     for _, row in df.iterrows():
-        if row.iloc[2] == " mmu_access_count":
+        if "L2_" not in row.iloc[1]:
+            continue
+        
+        if " ptw-read-" in row.iloc[2]:
             performance_data += row.iloc[3]
             all_data += row.iloc[3]
-        elif row.iloc[2] == " core_access_count":
+        elif " write-" in row.iloc[2] or " read-" in row.iloc[2]:
             all_data += row.iloc[3]
             
     return performance_data / all_data
@@ -35,6 +38,7 @@ def collect_performance_data(benchmark_name: str, input_dir: str) -> float:
 def plot_normalized_time(
     baseline: pd.DataFrame,
     opt: pd.DataFrame,
+    infinite: pd.DataFrame,
     out_dir: str,
 ) -> None:
     """
@@ -63,8 +67,9 @@ def plot_normalized_time(
     benchmarks = get_high_mpki_benchmarks()
 
     bar_width = 0.1
-    r1 = np.arange(len(benchmarks) + 1) * (2 * bar_width + 0.2)
+    r1 = np.arange(len(benchmarks) + 1) * (3 * bar_width + 0.2)
     r2 = [x + bar_width for x in r1]
+    r3 = [x + bar_width for x in r2]
 
     # Ave
     baseline = pd.concat(
@@ -91,10 +96,24 @@ def plot_normalized_time(
         ],
         ignore_index=True,
     )
+    infinite = pd.concat(
+        [
+            infinite,
+            pd.DataFrame(
+                {
+                    "Benchmark": ["Ave."],
+                    "Data": [harmonic_mean(infinite["Data"])],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
     print("Baseline Data:")
     print(baseline)
     print("\nOptimized Data:")
     print(opt)
+    print("\nInfinite Walker Data:")
+    print(infinite)
     
     bar1 = plt.bar(
         r1,
@@ -111,6 +130,15 @@ def plot_normalized_time(
         width=bar_width,
         label="NB-Walker + AMR",
         color="#5D73A1",
+        edgecolor="black",
+        linewidth=1.5,
+    )
+    bar3 = plt.bar(
+        r3,
+        infinite["Data"],
+        width=bar_width,
+        label="infinite walkers",
+        color="#313A5B",
         edgecolor="black",
         linewidth=1.5,
     )
@@ -134,7 +162,7 @@ def plot_normalized_time(
     # )
 
 
-    for bar in bar1 + bar2:
+    for bar in bar1 + bar2 + bar3:
         height = bar.get_height()
         x = bar.get_x() + bar.get_width() / 2
 
@@ -174,21 +202,20 @@ def plot_normalized_time(
         #         # arrowprops=dict(arrowstyle="-", color="red", lw=2),
         #     )
 
-    plt.xlim(min(r1) - bar_width, max(r2) + bar_width)
+    plt.xlim(min(r1) - bar_width, max(r3) + bar_width)
     plt.xticks(
-        [r +  0.5 * bar_width for r in r1],
+        [r +  1 * bar_width for r in r1],
         [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["HMean"],
         fontsize=36,
         fontweight="bold",
     )
     plt.ylabel("Ratio of L2\n req. for PTWs", fontsize=36, fontweight="bold")
     plt.yticks(
-        np.arange(0, 1.01, 0.2),
+        np.arange(0, 0.41, 0.1),
         fontsize=36,
         fontweight="bold",
     )
-    plt.ylim(0, 1)
-    
+    plt.ylim(0, 0.4)
     plt.legend(
         loc="upper center",
         ncol=4,
@@ -227,6 +254,7 @@ if __name__ == "__main__":
     # Cleaner loop — rebuild from scratch properly
     baseline = pd.DataFrame(columns=["Benchmark", "Data"])
     opt     = pd.DataFrame(columns=["Benchmark", "Data"])
+    infinite   = pd.DataFrame(columns=["Benchmark", "Data"])
 
     for benchmark in get_high_mpki_benchmarks():
         def append_row(df, benchmark, input_dir):
@@ -238,9 +266,11 @@ if __name__ == "__main__":
 
         baseline = append_row(baseline, benchmark, "../../final_final_data/baseline")
         opt     = append_row(opt,     benchmark, "../../final_final_data/nbwalker-full")
+        infinite   = append_row(infinite,   benchmark, "../../final_final_data/infinitewalker")
 
     plot_normalized_time(
         baseline=baseline.copy(),
         opt=opt.copy(),
+        infinite=infinite.copy(),
         out_dir=args.outDir,
     )
