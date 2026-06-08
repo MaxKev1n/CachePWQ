@@ -125,22 +125,25 @@ func (m *CaPWQMonitor) Tick(now akita.VTimeInSec) bool {
 		walkerData := m.walkerData[i]
 
 		totalLength := uint64(0)
+		walkLengh := uint64(0)
 		for _, stat := range l1VData {
 			totalLength += stat.L1VLength - stat.L1VWalkerLength
+			walkLengh += stat.L1VWalkerLength
 		}
 
 		numInflightPTW := walkerData.NumPTW
 
 		avgWalkerMSHR := float64(numInflightPTW) / float64(numL1VPerGPC)
 		avgL1MSHR := (float64(totalLength) / float64(numL1VPerGPC))
+		avgL1WalkerMSHR := (float64(walkLengh) / float64(numL1VPerGPC))
 
 		numReserved := m.reserver[i].GetReserveCount(int(avgWalkerMSHR), int(avgL1MSHR))
 
 		for _, l1v := range l1VCaches {
 			l1v.SentCommand(numReserved)
 		}
-		log.Printf("Epoch %d: GPC %d, HP Occupancy %.2f, Normal Occupancy %.2f, Reserve %d\n",
-			m.numEpoches, i, avgWalkerMSHR, avgL1MSHR, numReserved)
+		log.Printf("Epoch %d: GPC %d, HP Occupancy %.2f, Normal Occupancy %.2f, Walk Occupancy %.2f, Reserve %d\n",
+			m.numEpoches, i, avgWalkerMSHR, avgL1MSHR, avgL1WalkerMSHR, numReserved)
 	}
 
 	// Reset the stats for the next epoch
