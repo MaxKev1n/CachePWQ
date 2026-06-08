@@ -6,6 +6,7 @@ import (
 	"gitlab.com/akita/mem/vm/mmu"
 	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/akitaext"
+	"gitlab.com/akita/util/pipelining"
 )
 
 // A MMUBuilder can build MMU component
@@ -88,6 +89,14 @@ func (b MMUBuilder) Build(name string) mmu.MMU {
 	mmu.nextPointer = 0
 
 	mmu.ToPageWalkCache = akita.NewLimitNumMsgPort(mmu, 4096, name+".ToPageWalkCache")
+
+	mmu.lookupBuffer = util.NewBuffer(2 * b.maxNumReqInFlight)
+	pipelineBuilder := pipelining.MakeBuilder().
+		WithPipelineWidth(b.maxNumReqInFlight).
+		WithNumStage(1).
+		WithCyclePerStage(10).
+		WithPostPipelineBuffer(mmu.lookupBuffer)
+	mmu.pipeline = pipelineBuilder.Build(mmu.Name() + "_pipeline")
 
 	return mmu
 }

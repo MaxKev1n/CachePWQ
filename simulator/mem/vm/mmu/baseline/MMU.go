@@ -12,8 +12,10 @@ import (
 	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mem/monitor"
 	"gitlab.com/akita/mem/vm/mmu"
+	"gitlab.com/akita/util"
 	"gitlab.com/akita/util/akitaext"
 	"gitlab.com/akita/util/ca"
+	"gitlab.com/akita/util/pipelining"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -63,6 +65,15 @@ type PageWalkerImpl struct {
 	inflightTrans *transactionImpl
 }
 
+type mmuPipelineItem struct {
+	taskID string
+	msg    interface{}
+}
+
+func (i mmuPipelineItem) TaskID() string {
+	return i.taskID
+}
+
 // MMUImpl is the default mmu implementation. It is also an akita Component.
 type MMUImpl struct {
 	akita.TickingComponent
@@ -83,6 +94,9 @@ type MMUImpl struct {
 	queueCapacity int
 
 	monitorStats *monitor.CaPWQMonitorStats
+
+	pipeline     pipelining.Pipeline
+	lookupBuffer util.Buffer
 }
 
 func (m *MMUImpl) SentCommand(info interface{}) {
@@ -109,6 +123,9 @@ func (impl *MMUImpl) Tick(now akita.VTimeInSec) bool {
 	madeProgress = impl.topSender.Tick(now) || madeProgress
 	madeProgress = impl.walkPageTable(now) || madeProgress
 	madeProgress = impl.parseFromPageWalkCache(now) || madeProgress
+	madeProgress = impl.processLookupBuffer(now) || madeProgress
+	madeProgress = impl.startWalkingFromQueues(now) || madeProgress
+	madeProgress = impl.pipeline.Tick(now) || madeProgress
 	madeProgress = impl.parseFromMem(now) || madeProgress
 	madeProgress = impl.parseFromTop(now) || madeProgress
 
@@ -198,19 +215,28 @@ func (impl *MMUImpl) parseFromPageWalkCache(now akita.VTimeInSec) bool {
 }
 
 func (impl *MMUImpl) parseFromMem(now akita.VTimeInSec) bool {
-	madeProgress := false
 	item := impl.TranslationPort.Peek()
-	if item != nil {
-		switch msg := item.(type) {
-		case *mem.DataReadyRsp:
-			impl.handleMemResponse(msg, now)
-		default:
-			panic("unknown message type")
-		}
-		madeProgress = true
+	if item == nil {
+		return false
 	}
+
+	if !impl.pipeline.CanAccept() {
+		return false
+	}
+
+	switch msg := item.(type) {
+	case *mem.DataReadyRsp:
+		impl.pipeline.Accept(now, mmuPipelineItem{
+			taskID: msg.ID,
+			msg:    msg,
+		})
+	default:
+		panic("unknown message type")
+	}
+
 	impl.TranslationPort.Retrieve(now)
-	return madeProgress
+
+	return true
 }
 
 func (impl *MMUImpl) sendToMem(now akita.VTimeInSec, trans *transactionImpl) {
@@ -385,42 +411,87 @@ func (impl *MMUImpl) doPageWalkHit(
 }
 
 func (impl *MMUImpl) parseFromTop(now akita.VTimeInSec) bool {
-	madeProgress := false
-
 	item := impl.ToTop.Peek()
-
-	if item != nil {
-		req, ok := item.(*device.TranslationReq)
-		if !ok {
-			log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(req))
-		}
-
-		for i := 0; i < len(impl.pageWalkers); i++ {
-			index := (impl.nextPointer + i) % len(impl.pageWalkers)
-			if len(impl.pageWalkers[index].queue) < impl.queueCapacity {
-				impl.pageWalkers[index].queue = append(impl.pageWalkers[index].queue, req)
-				impl.nextPointer = (index + 1) % len(impl.pageWalkers)
-
-				impl.ToTop.Retrieve(now)
-
-				tracing.StartTask(
-					tracing.MsgIDAtReceiver(req, impl),
-					req.Meta().ID,
-					now,
-					impl,
-					"req",
-					reflect.TypeOf(req).String(),
-					req,
-				)
-
-				tracing.TraceReqReceive(req, now, impl)
-
-				madeProgress = true
-
-				break
-			}
-		}
+	if item == nil {
+		return false
 	}
+
+	if !impl.pipeline.CanAccept() {
+		return false
+	}
+
+	req, ok := item.(*device.TranslationReq)
+	if !ok {
+		log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(item))
+	}
+
+	impl.pipeline.Accept(now, mmuPipelineItem{
+		taskID: akita.GetIDGenerator().Generate(),
+		msg:    req,
+	})
+	impl.ToTop.Retrieve(now)
+
+	return true
+}
+
+func (impl *MMUImpl) processLookupBuffer(now akita.VTimeInSec) bool {
+	item := impl.lookupBuffer.Peek()
+	if item == nil {
+		return false
+	}
+
+	pipelineItem := item.(mmuPipelineItem)
+
+	switch msg := pipelineItem.msg.(type) {
+	case *device.TranslationReq:
+		return impl.handleTopRequest(msg, now)
+	case *mem.DataReadyRsp:
+		impl.handleMemResponse(msg, now)
+		impl.lookupBuffer.Pop()
+		return true
+	default:
+		log.Panicf("MMU cannot handle pipeline item of type %s", reflect.TypeOf(msg))
+	}
+
+	return false
+}
+
+func (impl *MMUImpl) handleTopRequest(
+	req *device.TranslationReq,
+	now akita.VTimeInSec,
+) bool {
+	for i := 0; i < len(impl.pageWalkers); i++ {
+		index := (impl.nextPointer + i) % len(impl.pageWalkers)
+		if len(impl.pageWalkers[index].queue) >= impl.queueCapacity {
+			continue
+		}
+
+		impl.pageWalkers[index].queue = append(
+			impl.pageWalkers[index].queue, req)
+		impl.nextPointer = (index + 1) % len(impl.pageWalkers)
+
+		tracing.StartTask(
+			tracing.MsgIDAtReceiver(req, impl),
+			req.Meta().ID,
+			now,
+			impl,
+			"req",
+			reflect.TypeOf(req).String(),
+			req,
+		)
+
+		tracing.TraceReqReceive(req, now, impl)
+
+		impl.lookupBuffer.Pop()
+
+		return true
+	}
+
+	return false
+}
+
+func (impl *MMUImpl) startWalkingFromQueues(now akita.VTimeInSec) bool {
+	madeProgress := false
 
 	for i := range impl.pageWalkers {
 		walker := &impl.pageWalkers[i]
