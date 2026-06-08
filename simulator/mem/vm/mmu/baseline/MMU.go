@@ -65,12 +65,12 @@ type PageWalkerImpl struct {
 	inflightTrans *transactionImpl
 }
 
-type mmuPipelineItem struct {
+type memRspPipelineItem struct {
 	taskID string
-	msg    interface{}
+	rsp    *mem.DataReadyRsp
 }
 
-func (i mmuPipelineItem) TaskID() string {
+func (i memRspPipelineItem) TaskID() string {
 	return i.taskID
 }
 
@@ -124,7 +124,6 @@ func (impl *MMUImpl) Tick(now akita.VTimeInSec) bool {
 	madeProgress = impl.walkPageTable(now) || madeProgress
 	madeProgress = impl.parseFromPageWalkCache(now) || madeProgress
 	madeProgress = impl.processLookupBuffer(now) || madeProgress
-	madeProgress = impl.startWalkingFromQueues(now) || madeProgress
 	madeProgress = impl.pipeline.Tick(now) || madeProgress
 	madeProgress = impl.parseFromMem(now) || madeProgress
 	madeProgress = impl.parseFromTop(now) || madeProgress
@@ -226,15 +225,28 @@ func (impl *MMUImpl) parseFromMem(now akita.VTimeInSec) bool {
 
 	switch msg := item.(type) {
 	case *mem.DataReadyRsp:
-		impl.pipeline.Accept(now, mmuPipelineItem{
+		impl.pipeline.Accept(now, memRspPipelineItem{
 			taskID: msg.ID,
-			msg:    msg,
+			rsp:    msg,
 		})
 	default:
 		panic("unknown message type")
 	}
 
 	impl.TranslationPort.Retrieve(now)
+
+	return true
+}
+
+func (impl *MMUImpl) processLookupBuffer(now akita.VTimeInSec) bool {
+	item := impl.lookupBuffer.Peek()
+	if item == nil {
+		return false
+	}
+
+	pipelineItem := item.(memRspPipelineItem)
+	impl.handleMemResponse(pipelineItem.rsp, now)
+	impl.lookupBuffer.Pop()
 
 	return true
 }
@@ -411,87 +423,42 @@ func (impl *MMUImpl) doPageWalkHit(
 }
 
 func (impl *MMUImpl) parseFromTop(now akita.VTimeInSec) bool {
+	madeProgress := false
+
 	item := impl.ToTop.Peek()
-	if item == nil {
-		return false
-	}
 
-	if !impl.pipeline.CanAccept() {
-		return false
-	}
-
-	req, ok := item.(*device.TranslationReq)
-	if !ok {
-		log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(item))
-	}
-
-	impl.pipeline.Accept(now, mmuPipelineItem{
-		taskID: akita.GetIDGenerator().Generate(),
-		msg:    req,
-	})
-	impl.ToTop.Retrieve(now)
-
-	return true
-}
-
-func (impl *MMUImpl) processLookupBuffer(now akita.VTimeInSec) bool {
-	item := impl.lookupBuffer.Peek()
-	if item == nil {
-		return false
-	}
-
-	pipelineItem := item.(mmuPipelineItem)
-
-	switch msg := pipelineItem.msg.(type) {
-	case *device.TranslationReq:
-		return impl.handleTopRequest(msg, now)
-	case *mem.DataReadyRsp:
-		impl.handleMemResponse(msg, now)
-		impl.lookupBuffer.Pop()
-		return true
-	default:
-		log.Panicf("MMU cannot handle pipeline item of type %s", reflect.TypeOf(msg))
-	}
-
-	return false
-}
-
-func (impl *MMUImpl) handleTopRequest(
-	req *device.TranslationReq,
-	now akita.VTimeInSec,
-) bool {
-	for i := 0; i < len(impl.pageWalkers); i++ {
-		index := (impl.nextPointer + i) % len(impl.pageWalkers)
-		if len(impl.pageWalkers[index].queue) >= impl.queueCapacity {
-			continue
+	if item != nil {
+		req, ok := item.(*device.TranslationReq)
+		if !ok {
+			log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(req))
 		}
 
-		impl.pageWalkers[index].queue = append(
-			impl.pageWalkers[index].queue, req)
-		impl.nextPointer = (index + 1) % len(impl.pageWalkers)
+		for i := 0; i < len(impl.pageWalkers); i++ {
+			index := (impl.nextPointer + i) % len(impl.pageWalkers)
+			if len(impl.pageWalkers[index].queue) < impl.queueCapacity {
+				impl.pageWalkers[index].queue = append(impl.pageWalkers[index].queue, req)
+				impl.nextPointer = (index + 1) % len(impl.pageWalkers)
 
-		tracing.StartTask(
-			tracing.MsgIDAtReceiver(req, impl),
-			req.Meta().ID,
-			now,
-			impl,
-			"req",
-			reflect.TypeOf(req).String(),
-			req,
-		)
+				impl.ToTop.Retrieve(now)
 
-		tracing.TraceReqReceive(req, now, impl)
+				tracing.StartTask(
+					tracing.MsgIDAtReceiver(req, impl),
+					req.Meta().ID,
+					now,
+					impl,
+					"req",
+					reflect.TypeOf(req).String(),
+					req,
+				)
 
-		impl.lookupBuffer.Pop()
+				tracing.TraceReqReceive(req, now, impl)
 
-		return true
+				madeProgress = true
+
+				break
+			}
+		}
 	}
-
-	return false
-}
-
-func (impl *MMUImpl) startWalkingFromQueues(now akita.VTimeInSec) bool {
-	madeProgress := false
 
 	for i := range impl.pageWalkers {
 		walker := &impl.pageWalkers[i]
