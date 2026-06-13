@@ -189,6 +189,7 @@ func (b LastLevelTLBBuilder) Build(name string) TLB {
 	default:
 		panic(fmt.Sprintf("unsupported dispatch policy: %s", b.dispatchPolicy))
 	}
+	tlb.cuDispatcher = &internal.LeaseFirstDispatcher{}
 
 	return tlb
 }

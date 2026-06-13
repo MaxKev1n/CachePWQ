@@ -241,6 +241,12 @@ func (b *MGPUSimNUMAGPUBuilder) establishL1ToL2RoutingPath(chiplet *Chiplet) {
 		b.l1Tol2Connection.PlugIn(l1v.GetBottomPort(), 16)
 	}
 
+	for _, cu := range chiplet.CUs {
+		cu.L2CacheModules = lowModuleFinder
+
+		b.l1Tol2Connection.PlugIn(cu.ToL2, 16)
+	}
+
 	for _, l1s := range chiplet.L1SCaches {
 		l1s.SetLowModuleFinder(lowModuleFinder)
 
@@ -314,6 +320,16 @@ func (b *MGPUSimNUMAGPUBuilder) establishL2TLBToL3TLBRoutingPath(chiplet *Chiple
 
 	chiplet.L3TLBs[0].SetTLBFinder(singleLowModuleFinder)
 	b.l2TLBToL3TLB.PlugIn(chiplet.L3TLBs[0].GetTopPort(), 128)
+
+	// Connect CU to L3 TLB
+	for _, cu := range chiplet.CUs {
+		b.l2TLBToL3TLB.PlugIn(cu.ToL3TLB, 16)
+
+		chiplet.L3TLBs[0].(*tlb.LastLevelTLB).RegisterCU(cu.ToL3TLB)
+
+		cu.L3TLB = chiplet.L3TLBs[0].GetBottomPort()
+		cu.PWC = chiplet.L3TLBs[0].(*tlb.LastLevelTLB).PWCWritePort
+	}
 }
 
 func (b *MGPUSimNUMAGPUBuilder) establishMMUToL2RoutingPath(chiplet *Chiplet) {

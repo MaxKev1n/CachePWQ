@@ -82,7 +82,7 @@ func (b *Builder) WithDeviceID(n uint64) {
 
 }
 
-//WithCtrlPort sets the port of the component that can send ctrl reqs to AT
+// WithCtrlPort sets the port of the component that can send ctrl reqs to AT
 func (b *Builder) WithCtrlPort(p akita.Port) {
 	b.ctrlPort = p
 

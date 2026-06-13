@@ -78,7 +78,9 @@ func (u *ScalarUnit) runReadStage(now akita.VTimeInSec) bool {
 	}
 
 	if u.toExec == nil {
-		u.scratchpadPreparer.Prepare(u.toRead, u.toRead)
+		if u.toRead.Translation == nil {
+			u.scratchpadPreparer.Prepare(u.toRead, u.toRead)
+		}
 
 		u.toExec = u.toRead
 		u.toRead = nil
@@ -92,6 +94,9 @@ func (u *ScalarUnit) runExecStage(now akita.VTimeInSec) bool {
 		return false
 	}
 	if u.toWrite == nil {
+		if u.toExec.Translation != nil {
+			return u.executeTranslation()
+		}
 		if u.toExec.Inst().FormatType == insts.SMEM {
 			u.executeSMEMInst(now)
 			return true
@@ -105,6 +110,15 @@ func (u *ScalarUnit) runExecStage(now akita.VTimeInSec) bool {
 		return true
 	}
 	return false
+}
+
+func (u *ScalarUnit) executeTranslation() bool {
+	u.toExec.PC += 0x8
+	u.toExec.State = wavefront.WfReady
+
+	u.toExec = nil
+
+	return true
 }
 
 func (u *ScalarUnit) executeSMEMInst(now akita.VTimeInSec) bool {

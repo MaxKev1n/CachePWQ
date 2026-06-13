@@ -16,6 +16,9 @@ type vectorMemInst struct {
 }
 
 func (i vectorMemInst) TaskID() string {
+	if i.wavefront.Translation != nil {
+		return i.wavefront.Translation.ID
+	}
 	return i.wavefront.DynamicInst().ID
 }
 

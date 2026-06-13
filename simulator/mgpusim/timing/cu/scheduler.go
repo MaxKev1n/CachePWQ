@@ -35,6 +35,8 @@ type SchedulerImpl struct {
 	cyclesNoProgress                  int
 	stopTickingAfterNCyclesNoProgress int
 
+	translationWf *wavefront.Wavefront
+
 	isPaused bool
 }
 
@@ -55,6 +57,10 @@ func NewScheduler(
 
 	s.stopTickingAfterNCyclesNoProgress = 4
 
+	s.translationWf = wavefront.NewWavefront(nil)
+	s.translationWf.State = wavefront.WfDispatching
+	s.translationWf.Translation = wavefront.NewTranslationWavefront()
+
 	return s
 }
 
@@ -64,6 +70,7 @@ func (s *SchedulerImpl) Run(now akita.VTimeInSec) bool {
 	if s.isPaused == false {
 		madeProgress = s.EvaluateInternalInst(now) || madeProgress
 		madeProgress = s.DecodeNextInst(now) || madeProgress
+		madeProgress = s.DoIssueTranslation(now) || madeProgress
 		madeProgress = s.DoIssue(now) || madeProgress
 		madeProgress = s.DoFetch(now) || madeProgress
 	}
@@ -189,6 +196,48 @@ func (s *SchedulerImpl) DoFetch(now akita.VTimeInSec) bool {
 	return madeProgress
 }
 
+func (s *SchedulerImpl) DoIssueTranslation(now akita.VTimeInSec) bool {
+	if s.isPaused == false {
+		wf := s.translationWf
+
+		if wf.State == wavefront.WfDispatching {
+			if wf.PC != 0x0 {
+				panic("Translation wavefront should start with PC 0.")
+			}
+
+			for i, t := range wf.Translation.Threads {
+				if t.Status == wavefront.Valid {
+					t.Status = wavefront.Walking
+
+					// update EXEC
+					wf.EXEC |= 1 << uint64(i)
+				}
+			}
+
+			if wf.EXEC != 0x0 {
+				wf.State = wavefront.WfReady
+			}
+		}
+
+		if wf.State != wavefront.WfReady {
+			return false
+		}
+
+		if wf.Translation.NextExecUnit(wf.PC) == insts.ExeUnitSpecial {
+			return s.issueWalkerToInternal(wf, now)
+		}
+
+		unit := s.getUnitToIssueTo(wf.Translation.NextExecUnit(wf.PC))
+		if unit.CanAcceptWave() {
+			unit.AcceptWave(wf, now)
+			wf.State = wavefront.WfRunning
+
+			return true
+		}
+	}
+	return false
+}
+
 // DoIssue function of the scheduler issues fetched instruction to the decoding
 // units
 func (s *SchedulerImpl) DoIssue(now akita.VTimeInSec) bool {
@@ -238,6 +287,13 @@ func (s *SchedulerImpl) DoIssue(now akita.VTimeInSec) bool {
 	return madeProgress
 }
 
+func (s *SchedulerImpl) issueWalkerToInternal(wf *wavefront.Wavefront, now akita.VTimeInSec) bool {
+	s.internalExecuting = append(s.internalExecuting, wf)
+	wf.State = wavefront.WfRunning
+
+	return true
+}
+
 func (s *SchedulerImpl) issueToInternal(wf *wavefront.Wavefront, now akita.VTimeInSec) bool {
 	wf.SetDynamicInst(wf.InstToIssue)
 
@@ -263,6 +319,8 @@ func (s *SchedulerImpl) getUnitToIssueTo(u insts.ExeUnit) SubComponent {
 		return s.cu.VectorMemDecoder
 	case insts.ExeUnitScalar:
 		return s.cu.ScalarDecoder
+	case insts.ExeUnitWalkerMem:
+		return s.cu.WalkerMemDecoder
 	default:
 		log.Panic("not sure where to dispatch the instruction")
 	}
@@ -283,26 +341,43 @@ func (s *SchedulerImpl) EvaluateInternalInst(now akita.VTimeInSec) bool {
 		instProgress := false
 		instCompleted := false
 
-		switch executing.Inst().Opcode {
-		case 1: // S_ENDPGM
-			instProgress, instCompleted = s.evalSEndPgm(executing, now)
-		case 10: // S_BARRIER
-			instProgress, instCompleted = s.evalSBarrier(executing, now)
-		case 12: // S_WAITCNT
-			instProgress, instCompleted = s.evalSWaitCnt(executing, now)
-		default:
-			// The program has to make progress
-			s.cu.UpdatePCAndSetReady(executing)
-			executing.State = wavefront.WfReady
-			instProgress = true
-			instCompleted = true
-		}
-		madeProgress = instProgress || madeProgress
+		if executing.Translation != nil {
+			switch executing.PC {
+			case 0x98:
+				instProgress, instCompleted = s.evalPTEWaitCnt(executing, now)
+			case 0xc0:
+				instProgress, instCompleted = s.evalWalkDone(executing, now)
+			default:
+				panic(fmt.Sprintf("PC %#X in translation wavefront is not supported.", executing.PC))
+			}
 
-		if instCompleted {
-			s.cu.logInstTask(now, executing, executing.DynamicInst(), true)
+			madeProgress = instProgress || madeProgress
+
+			if !instCompleted {
+				newExecuting = append(newExecuting, executing)
+			}
 		} else {
-			newExecuting = append(newExecuting, executing)
+			switch executing.Inst().Opcode {
+			case 1: // S_ENDPGM
+				instProgress, instCompleted = s.evalSEndPgm(executing, now)
+			case 10: // S_BARRIER
+				instProgress, instCompleted = s.evalSBarrier(executing, now)
+			case 12: // S_WAITCNT
+				instProgress, instCompleted = s.evalSWaitCnt(executing, now)
+			default:
+				// The program has to make progress
+				s.cu.UpdatePCAndSetReady(executing)
+				executing.State = wavefront.WfReady
+				instProgress = true
+				instCompleted = true
+			}
+			madeProgress = instProgress || madeProgress
+
+			if instCompleted {
+				s.cu.logInstTask(now, executing, executing.DynamicInst(), true)
+			} else {
+				newExecuting = append(newExecuting, executing)
+			}
 		}
 	}
 
@@ -397,6 +472,46 @@ func (s *SchedulerImpl) removeAllWfFromBarrierBuffer(wg *wavefront.WorkGroup) {
 		}
 	}
 	s.barrierBuffer = newBarrierBuffer
+}
+
+func (s *SchedulerImpl) evalPTEWaitCnt(
+	wf *wavefront.Wavefront,
+	now akita.VTimeInSec,
+) (madeProgress bool, instCompleted bool) {
+	done := true
+
+	if wf.OutstandingVectorMemAccess > 0 {
+		done = false
+	}
+
+	if done {
+		wf.State = wavefront.WfReady
+		wf.PC += 8
+		return true, true
+	}
+
+	return false, false
+}
+
+func (s *SchedulerImpl) evalWalkDone(
+	wf *wavefront.Wavefront,
+	now akita.VTimeInSec,
+) (madeProgress bool, instCompleted bool) {
+	if wf.OutstandingVectorMemAccess > 0 {
+		return false, false
+	}
+
+	if wf.EXEC != 0x0 {
+		panic("walk done should be the last instruction in the translation wavefront")
+	}
+
+	wf.Translation.Complete()
+
+	wf.State = wavefront.WfDispatching
+	wf.PC = 0x0
+	wf.EXEC = 0x0
+
+	return true, true
 }
 
 func (s *SchedulerImpl) evalSWaitCnt(

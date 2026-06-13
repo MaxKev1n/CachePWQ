@@ -53,13 +53,17 @@ func (d *LeaseFirstDispatcher) Distribute(msg akita.Msg) akita.Port {
 		return nil
 	}
 
-	min := d.counter[0]
-	minIndex := 0
-	for i := 1; i < len(d.counter); i++ {
+	min := 64
+	minIndex := -1
+	for i := 0; i < len(d.counter); i++ {
 		if d.counter[i] < min {
 			min = d.counter[i]
 			minIndex = i
 		}
+	}
+
+	if minIndex == -1 {
+		return nil
 	}
 
 	d.counter[minIndex]++
@@ -79,6 +83,7 @@ func (d *LeaseFirstDispatcher) Receive(port akita.Port) {
 			return
 		}
 	}
+	panic("port not found")
 }
 
 type BackToSourceDispatcher struct {

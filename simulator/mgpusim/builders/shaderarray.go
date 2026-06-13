@@ -422,7 +422,8 @@ func (b *shaderArrayBuilder) buildCUs(sa *shaderArray) {
 	cuBuilder := cu.MakeBuilder().
 		WithEngine(b.engine).
 		WithFreq(b.freq).
-		WithLog2CachelineSize(b.log2CacheLineSize)
+		WithLog2CachelineSize(b.log2CacheLineSize).
+		WithPageTable(b.pageTable.(*device.PageTableImpl))
 
 	for i := 0; i < b.numCU; i++ {
 		cuName := fmt.Sprintf("%s.CU_%02d", b.name, i)

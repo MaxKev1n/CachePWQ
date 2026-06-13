@@ -73,7 +73,8 @@ type LastLevelTLB struct {
 
 	inflightPageWalkCacheReqs map[string]*device.TranslationReq
 
-	dispatcher internal.Dispatcher
+	dispatcher   internal.Dispatcher
+	cuDispatcher internal.Dispatcher
 }
 
 func (tlb *LastLevelTLB) SentCommand(info interface{}) {
@@ -150,6 +151,10 @@ func (tlb *LastLevelTLB) SetGPCID(id int) {
 
 func (tlb *LastLevelTLB) RegisterMMU(mmu akita.Port) {
 	tlb.dispatcher.Register(mmu)
+}
+
+func (tlb *LastLevelTLB) RegisterCU(cu akita.Port) {
+	tlb.cuDispatcher.Register(cu)
 }
 
 // Reset sets all the entries int he LastLevelTLB to be invalid
@@ -623,7 +628,7 @@ func (tlb *LastLevelTLB) parseBottom(now akita.VTimeInSec) bool {
 	tlb.BottomPort.Retrieve(now)
 	tracing.TraceReqFinalize(mshrEntry.reqToBottom, now, tlb)
 
-	tlb.dispatcher.Receive(rsp.Src)
+	tlb.cuDispatcher.Receive(rsp.Src)
 
 	tracing.EndTask(tlb.Name()+"stall", now, tlb)
 	return true
@@ -646,7 +651,7 @@ func (tlb *LastLevelTLB) parseFromPageWalkCache(now akita.VTimeInSec) bool {
 		panic("not found!")
 	}
 
-	dstPort := tlb.dispatcher.Distribute(req)
+	dstPort := tlb.cuDispatcher.Distribute(req)
 	if dstPort == nil {
 		return false
 	}

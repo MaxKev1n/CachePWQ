@@ -65,13 +65,24 @@ func (u *SIMDUnit) AcceptWave(wave *wavefront.Wavefront, now akita.VTimeInSec) {
 	u.toExec = wave
 
 	u.cycleLeft = 64 / u.NumSinglePrecisionUnit
-	u.logPipelineTask(now, u.toExec.DynamicInst(), false)
+	if wave.Translation == nil {
+		u.logPipelineTask(now, u.toExec.DynamicInst(), false)
+	}
 }
 
 // Run executes three pipeline stages that are controlled by the SIMDUnit
 func (u *SIMDUnit) Run(now akita.VTimeInSec) bool {
 	madeProgress := u.runExecStage(now)
 	return madeProgress
+}
+
+func (u *SIMDUnit) execTranslationWavefront(now akita.VTimeInSec) bool {
+	u.toExec.PC += 0x8
+	u.toExec.State = wavefront.WfReady
+
+	u.toExec = nil
+
+	return true
 }
 
 func (u *SIMDUnit) runExecStage(now akita.VTimeInSec) bool {
@@ -82,6 +93,10 @@ func (u *SIMDUnit) runExecStage(now akita.VTimeInSec) bool {
 	u.cycleLeft--
 	if u.cycleLeft > 0 {
 		return true
+	}
+
+	if u.toExec.Translation != nil {
+		return u.execTranslationWavefront(now)
 	}
 
 	u.scratchpadPreparer.Prepare(u.toExec, u.toExec)

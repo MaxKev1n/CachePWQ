@@ -56,6 +56,8 @@ type Wavefront struct {
 
 	OutstandingScalarMemAccess int
 	OutstandingVectorMemAccess int
+
+	Translation *TranslationWavefront
 }
 
 // NewWavefront creates a new Wavefront of the timing package, wrapping the

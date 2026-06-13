@@ -65,7 +65,9 @@ func (u *LDSUnit) runReadStage(now akita.VTimeInSec) bool {
 	}
 
 	if u.toExec == nil {
-		u.scratchpadPreparer.Prepare(u.toRead, u.toRead)
+		if u.toRead.Translation == nil {
+			u.scratchpadPreparer.Prepare(u.toRead, u.toRead)
+		}
 
 		u.toExec = u.toRead
 		u.toRead = nil
@@ -80,8 +82,10 @@ func (u *LDSUnit) runExecStage(now akita.VTimeInSec) bool {
 	}
 
 	if u.toWrite == nil {
-		u.alu.SetLDS(u.toExec.WG.LDS)
-		u.alu.Run(u.toExec)
+		if u.toExec.Translation == nil {
+			u.alu.SetLDS(u.toExec.WG.LDS)
+			u.alu.Run(u.toExec)
+		}
 
 		u.toWrite = u.toExec
 		u.toExec = nil
@@ -90,9 +94,22 @@ func (u *LDSUnit) runExecStage(now akita.VTimeInSec) bool {
 	return false
 }
 
+func (u *LDSUnit) writeTranslationWavefront() bool {
+	u.toWrite.PC += 0x8
+	u.toWrite.State = wavefront.WfReady
+
+	u.toWrite = nil
+
+	return true
+}
+
 func (u *LDSUnit) runWriteStage(now akita.VTimeInSec) bool {
 	if u.toWrite == nil {
 		return false
+	}
+
+	if u.toWrite.Translation != nil {
+		return u.writeTranslationWavefront()
 	}
 
 	u.scratchpadPreparer.Commit(u.toWrite, u.toWrite)

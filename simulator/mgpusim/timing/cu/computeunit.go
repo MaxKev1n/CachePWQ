@@ -1,6 +1,7 @@
 package cu
 
 import (
+	"fmt"
 	"log"
 	"reflect"
 
@@ -8,6 +9,7 @@ import (
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
+	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mgpusim/emu"
 	"gitlab.com/akita/mgpusim/insts"
 	"gitlab.com/akita/mgpusim/kernels"
@@ -30,6 +32,7 @@ type ComputeUnit struct {
 	InFlightInstFetch            []*InstFetchReqInfo
 	InFlightScalarMemAccess      []*ScalarMemAccessInfo
 	InFlightVectorMemAccess      []VectorMemAccessInfo
+	InFlightVectorPTEAccess      []VectorMemAccessInfo
 	InFlightVectorMemAccessLimit int
 
 	shadowInFlightInstFetch       []*InstFetchReqInfo
@@ -43,6 +46,8 @@ type ComputeUnit struct {
 	BranchUnit       SubComponent
 	VectorMemDecoder SubComponent
 	VectorMemUnit    SubComponent
+	WalkerMemDecoder SubComponent
+	WalkerMemUnit    SubComponent
 	ScalarDecoder    SubComponent
 	VectorDecoder    SubComponent
 	LDSDecoder       SubComponent
@@ -62,6 +67,8 @@ type ComputeUnit struct {
 	ToScalarMem akita.Port
 	ToVectorMem akita.Port
 	ToCP        akita.Port
+	ToL3TLB     akita.Port
+	ToL2        akita.Port
 
 	inCPRequestProcessingStage akita.Msg
 	cpRequestHandlingComplete  bool
@@ -81,6 +88,12 @@ type ComputeUnit struct {
 	CurrentWavefrontCount int
 
 	scratchpadPreparer ScratchpadPreparer
+
+	PageTable *device.PageTableImpl
+
+	L2CacheModules cache.LowModuleFinder
+	L3TLB          akita.Port
+	PWC            akita.Port
 }
 
 // Handle processes that events that are scheduled on the ComputeUnit
@@ -178,6 +191,8 @@ func (cu *ComputeUnit) runPipeline(now akita.VTimeInSec) bool {
 		madeProgress = cu.LDSDecoder.Run(now) || madeProgress
 		madeProgress = cu.VectorMemUnit.Run(now) || madeProgress
 		madeProgress = cu.VectorMemDecoder.Run(now) || madeProgress
+		madeProgress = cu.WalkerMemUnit.Run(now) || madeProgress
+		madeProgress = cu.WalkerMemDecoder.Run(now) || madeProgress
 		madeProgress = cu.Scheduler.Run(now) || madeProgress
 	}
 
@@ -209,11 +224,47 @@ func (cu *ComputeUnit) processInput(now akita.VTimeInSec) bool {
 		madeProgress = cu.processInputFromInstMem(now) || madeProgress
 		madeProgress = cu.processInputFromScalarMem(now) || madeProgress
 		madeProgress = cu.processInputFromVectorMem(now) || madeProgress
+		madeProgress = cu.processInputFromL3TLB(now) || madeProgress
+		madeProgress = cu.processInputFromL2(now) || madeProgress
 	}
 
 	madeProgress = cu.processInputFromCP(now) || madeProgress
 
 	return madeProgress
+}
+
+func (cu *ComputeUnit) processInputFromL3TLB(now akita.VTimeInSec) bool {
+	req := cu.ToL3TLB.Peek()
+	if req == nil {
+		return false
+	}
+
+	switch req := req.(type) {
+	case *device.TranslationReq:
+		return cu.processSoftWalker(now, req)
+	case *mem.WriteDoneRsp:
+		cu.ToL3TLB.Retrieve(now)
+	default:
+		panic(fmt.Sprintf("cannot handle request of type %s from ToL3TLB port",
+			reflect.TypeOf(req)))
+	}
+
+	return true
+}
+
+func (cu *ComputeUnit) processSoftWalker(
+	now akita.VTimeInSec,
+	req *device.TranslationReq,
+) bool {
+	scheduler := cu.Scheduler.(*SchedulerImpl)
+
+	if scheduler.translationWf.Translation.Accept(req) {
+		cu.ToL3TLB.Retrieve(now)
+
+		return true
+	}
+
+	return false
 }
 
 func (cu *ComputeUnit) processInputFromCP(now akita.VTimeInSec) bool {
@@ -332,6 +383,8 @@ func (cu *ComputeUnit) flushInternalComponents() {
 	cu.LDSDecoder.Flush()
 	cu.VectorMemDecoder.Flush()
 	cu.VectorMemUnit.Flush()
+	cu.WalkerMemDecoder.Flush()
+	cu.WalkerMemUnit.Flush()
 }
 
 func (cu *ComputeUnit) processInputFromACE(now akita.VTimeInSec) bool {
@@ -604,6 +657,23 @@ func (cu *ComputeUnit) processInputFromVectorMem(now akita.VTimeInSec) bool {
 	return true
 }
 
+func (cu *ComputeUnit) processInputFromL2(now akita.VTimeInSec) bool {
+	rsp := cu.ToL2.Retrieve(now)
+	if rsp == nil {
+		return false
+	}
+
+	switch rsp := rsp.(type) {
+	case *mem.DataReadyRsp:
+		cu.handleL2DataLoadReturn(now, rsp)
+	default:
+		log.Panicf("cannot handle request of type %s from ToInstMem port",
+			reflect.TypeOf(rsp))
+	}
+
+	return true
+}
+
 //nolint:gocyclo
 func (cu *ComputeUnit) handleVectorDataLoadReturn(
 	now akita.VTimeInSec,
@@ -655,6 +725,55 @@ func (cu *ComputeUnit) handleVectorDataLoadReturn(
 
 		cu.logInstTask(now, wf, info.Inst, true)
 	}
+}
+
+//nolint:gocyclo
+func (cu *ComputeUnit) handleL2DataLoadReturn(
+	now akita.VTimeInSec,
+	rsp *mem.DataReadyRsp,
+) {
+	if len(cu.InFlightVectorPTEAccess) == 0 {
+		return
+	}
+
+	var info VectorMemAccessInfo
+	for i, access := range cu.InFlightVectorPTEAccess {
+		if access.Read == nil {
+			continue
+		}
+
+		if access.Read.ID == rsp.RespondTo {
+			info = access
+
+			cu.InFlightVectorPTEAccess = append(
+				cu.InFlightVectorPTEAccess[:i],
+				cu.InFlightVectorPTEAccess[i+1:]...)
+			tracing.TraceReqFinalize(info.Read, now, cu)
+
+			break
+		}
+	}
+
+	wf := info.Wavefront
+
+	if wf.Translation == nil {
+		panic("L2 data load return should be for translation")
+	}
+
+	for _, laneInfo := range info.laneInfo {
+		offset := laneInfo.addrOffsetInCacheLine
+
+		complete := wf.Translation.HandlePTEDataLoadReturn(
+			laneInfo.laneID,
+			rsp.Data[offset:offset+8],
+		)
+
+		if complete {
+			wf.EXEC &= ^(1 << laneInfo.laneID)
+		}
+	}
+
+	wf.OutstandingVectorMemAccess--
 }
 
 func (cu *ComputeUnit) handleVectorDataStoreRsp(
@@ -709,6 +828,7 @@ func (cu *ComputeUnit) flushCUBuffers() {
 	cu.InFlightInstFetch = nil
 	cu.InFlightScalarMemAccess = nil
 	cu.InFlightVectorMemAccess = nil
+	cu.InFlightVectorPTEAccess = nil
 }
 
 func (cu *ComputeUnit) logInstTask(
@@ -931,6 +1051,8 @@ func NewComputeUnit(
 	cu.ToScalarMem = akita.NewLimitNumMsgPort(cu, 4, name+".ToScalarMem")
 	cu.ToVectorMem = akita.NewLimitNumMsgPort(cu, 4, name+".ToVectorMem")
 	cu.ToCP = akita.NewLimitNumMsgPort(cu, 4, name+".ToCP")
+	cu.ToL3TLB = akita.NewLimitNumMsgPort(cu, 4, name+".ToL3TLB")
+	cu.ToL2 = akita.NewLimitNumMsgPort(cu, 4, name+".ToL2")
 
 	return cu
 }

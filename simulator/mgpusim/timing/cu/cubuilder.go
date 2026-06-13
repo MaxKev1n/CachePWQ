@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/mem/device"
 	"gitlab.com/akita/mgpusim/emu"
 	"gitlab.com/akita/mgpusim/insts"
 	"gitlab.com/akita/util"
@@ -27,6 +28,8 @@ type Builder struct {
 
 	visTracer        tracing.Tracer
 	enableVisTracing bool
+
+	pageTable *device.PageTableImpl
 }
 
 // MakeBuilder returns a default builder object
@@ -88,6 +91,12 @@ func (b Builder) WithVisTracer(t tracing.Tracer) Builder {
 	return b
 }
 
+// WithPageTable sets the page table to use for address translation.
+func (b Builder) WithPageTable(pt *device.PageTableImpl) Builder {
+	b.pageTable = pt
+	return b
+}
+
 // Build returns a newly constructed compute unit according to the
 // configuration.
 func (b *Builder) Build(name string) *ComputeUnit {
@@ -102,6 +111,7 @@ func (b *Builder) Build(name string) *ComputeUnit {
 	b.scratchpadPreparer = NewScratchpadPreparerImpl(cu)
 	cu.ALU = b.alu
 	cu.scratchpadPreparer = b.scratchpadPreparer
+	cu.PageTable = b.pageTable
 
 	for i := 0; i < 4; i++ {
 		cu.WfPools = append(cu.WfPools, NewWavefrontPool(10))
@@ -112,6 +122,7 @@ func (b *Builder) Build(name string) *ComputeUnit {
 	b.equipSIMDUnits(cu)
 	b.equipLDSUnit(cu)
 	b.equipVectorMemoryUnit(cu)
+	b.equipWalkerVectorMemoryUnit(cu)
 	b.equipRegisterFiles(cu)
 
 	return cu
@@ -123,6 +134,7 @@ func (b *Builder) equipScheduler(cu *ComputeUnit) {
 	issueArbitor := new(IssueArbiter)
 	scheduler := NewScheduler(cu, fetchArbitor, issueArbitor)
 	cu.Scheduler = scheduler
+	cu.Scheduler.(*SchedulerImpl).translationWf.Translation.PageTable = b.pageTable
 }
 
 func (b *Builder) equipScalarUnits(cu *ComputeUnit) {
@@ -188,6 +200,33 @@ func (b *Builder) equipVectorMemoryUnit(cu *ComputeUnit) {
 
 	for i := 0; i < b.simdCount; i++ {
 		vectorMemDecoder.AddExecutionUnit(vectorMemoryUnit)
+	}
+}
+
+func (b *Builder) equipWalkerVectorMemoryUnit(cu *ComputeUnit) {
+	walkerMemDecoder := NewDecodeUnit(cu)
+	cu.WalkerMemDecoder = walkerMemDecoder
+
+	coalescer := &walkerCoalescer{
+		log2CacheLineSize: b.log2CachelineSize,
+	}
+	vectorMemoryUnit := NewWalkerVectorMemoryUnit(cu, b.scratchpadPreparer, coalescer)
+	cu.WalkerMemUnit = vectorMemoryUnit
+
+	vectorMemoryUnit.postInstructionPipelineBuffer = util.NewBuffer(8)
+	vectorMemoryUnit.instructionPipeline = pipelining.NewPipeline(
+		cu.Name()+".VectorMemoryUnit.InstPipeline",
+		6, 1,
+		vectorMemoryUnit.postInstructionPipelineBuffer)
+
+	vectorMemoryUnit.postTransactionPipelineBuffer = util.NewBuffer(8)
+	vectorMemoryUnit.transactionPipeline = pipelining.NewPipeline(
+		cu.Name()+".VectorMemoryUnit.TransactionPipeline",
+		10, 1,
+		vectorMemoryUnit.postTransactionPipelineBuffer)
+
+	for i := 0; i < b.simdCount; i++ {
+		walkerMemDecoder.AddExecutionUnit(vectorMemoryUnit)
 	}
 }
 

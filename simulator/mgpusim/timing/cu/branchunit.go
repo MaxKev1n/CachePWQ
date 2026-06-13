@@ -1,6 +1,8 @@
 package cu
 
 import (
+	"fmt"
+
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mgpusim/emu"
 	"gitlab.com/akita/mgpusim/timing/wavefront"
@@ -68,7 +70,9 @@ func (u *BranchUnit) runReadStage(now akita.VTimeInSec) bool {
 	}
 
 	if u.toExec == nil {
-		u.scratchpadPreparer.Prepare(u.toRead, u.toRead)
+		if u.toRead.Translation == nil {
+			u.scratchpadPreparer.Prepare(u.toRead, u.toRead)
+		}
 
 		u.toExec = u.toRead
 		u.toRead = nil
@@ -78,13 +82,35 @@ func (u *BranchUnit) runReadStage(now akita.VTimeInSec) bool {
 	return false
 }
 
+func (u *BranchUnit) writeTranslation() bool {
+	if u.toWrite.PC == 0x50 {
+		if u.toWrite.EXEC == 0x0 {
+			u.toWrite.PC = 0xb8
+		} else {
+			u.toWrite.PC += 0x8
+		}
+	} else if u.toWrite.PC == 0xb0 {
+		u.toWrite.PC = 0x40
+	} else {
+		panic(fmt.Sprintf("Unexpected PC: 0x%x", u.toWrite.PC))
+	}
+
+	u.toWrite.State = wavefront.WfReady
+	u.toWrite = nil
+	u.isIdle = false
+
+	return true
+}
+
 func (u *BranchUnit) runExecStage(now akita.VTimeInSec) bool {
 	if u.toExec == nil {
 		return false
 	}
 
 	if u.toWrite == nil {
-		u.alu.Run(u.toExec)
+		if u.toExec.Translation == nil {
+			u.alu.Run(u.toExec)
+		}
 
 		u.toWrite = u.toExec
 		u.toExec = nil
@@ -96,6 +122,10 @@ func (u *BranchUnit) runExecStage(now akita.VTimeInSec) bool {
 func (u *BranchUnit) runWriteStage(now akita.VTimeInSec) bool {
 	if u.toWrite == nil {
 		return false
+	}
+
+	if u.toWrite.Translation != nil {
+		return u.writeTranslation()
 	}
 
 	u.scratchpadPreparer.Commit(u.toWrite, u.toWrite)
