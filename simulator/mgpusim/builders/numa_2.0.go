@@ -1237,6 +1237,8 @@ func (b *MGPUSimNUMAGPUBuilder) establishCaPWQMonitor(c *Chiplet) {
 		}
 	}
 
+	caPWQMonitor.RegisterL3TLB(c.L3TLBs[0].(*tlb.LastLevelTLB))
+
 	b.gpu.CaPWQMonitor = append(b.gpu.CaPWQMonitor, caPWQMonitor)
 
 	tracing.CollectTrace(caPWQMonitor, b.caPWQTracer)

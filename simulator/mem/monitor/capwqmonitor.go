@@ -18,9 +18,11 @@ type CaPWQMonitor struct {
 
 	L1VCaches []MonitorComponent
 	Walkers   []MonitorComponent
+	l3TLB     MonitorComponent
 
 	l1vData    []CaPWQMonitorStats
 	walkerData []CaPWQMonitorStats
+	l3TLBData  CaPWQMonitorStats
 
 	reserver []*SnapshotReserver
 
@@ -63,6 +65,8 @@ func (m *CaPWQMonitor) Tick(now akita.VTimeInSec) bool {
 	for _, walker := range m.Walkers {
 		m.CollectWalkerComponentStats(walker)
 	}
+
+	m.CollectL3TLBComponentStats(m.l3TLB)
 
 	//l1vCacheLength := uint64(0)
 	//l1vCacheWalkerLength := uint64(0)
@@ -110,10 +114,28 @@ func (m *CaPWQMonitor) Tick(now akita.VTimeInSec) bool {
 		// Reset the stats for the next epoch
 		m.l1vData = []CaPWQMonitorStats{}
 		m.walkerData = []CaPWQMonitorStats{}
+		m.l3TLBData = CaPWQMonitorStats{}
 
 		// 第一个 epoch 主要是为了收集初始状态，暂不调整预留
 		log.Printf("Epoch %d: Initial data collected, no reserve adjustment\n", m.numEpoches)
 		return true
+	}
+
+	if m.UseSoftWalker() {
+		for _, l1v := range m.L1VCaches {
+			l1v.SentCommand(0)
+		}
+
+		m.l3TLB.SentCommand(true)
+
+		// Reset the stats for the next epoch
+		m.l1vData = []CaPWQMonitorStats{}
+		m.walkerData = []CaPWQMonitorStats{}
+		m.l3TLBData = CaPWQMonitorStats{}
+
+		return true
+	} else {
+		m.l3TLB.SentCommand(false)
 	}
 
 	// adaptive control l1v mshr
@@ -149,8 +171,29 @@ func (m *CaPWQMonitor) Tick(now akita.VTimeInSec) bool {
 	// Reset the stats for the next epoch
 	m.l1vData = []CaPWQMonitorStats{}
 	m.walkerData = []CaPWQMonitorStats{}
+	m.l3TLBData = CaPWQMonitorStats{}
 
 	return true
+}
+
+func (m *CaPWQMonitor) UseSoftWalker() bool {
+	numL1VPerGPC := 16
+	for i := 0; i < 8; i++ {
+		l1VData := m.l1vData[i*numL1VPerGPC : (i+1)*numL1VPerGPC]
+
+		totalLength := uint64(0)
+		for _, stat := range l1VData {
+			totalLength += stat.L1VLength - stat.L1VWalkerLength
+		}
+
+		if m.l3TLBData.NumPTW > 8 && (float64(totalLength)/float64(numL1VPerGPC)) > 24 {
+			log.Printf("Epoch %d: L3TLB NumPTW %d, L1MSHR %.2f, Using soft walker\n",
+				m.numEpoches, m.l3TLBData.NumPTW, float64(totalLength)/float64(numL1VPerGPC))
+			return true
+		}
+	}
+
+	return false
 }
 
 // GetReserveCount 基于快照决定预留
@@ -215,6 +258,11 @@ func (m *CaPWQMonitor) RegisterPageWalker(walker MonitorComponent) {
 	m.Walkers = append(m.Walkers, walker)
 }
 
+func (m *CaPWQMonitor) RegisterL3TLB(l3tlb MonitorComponent) {
+	l3tlb.InitMonitorStats()
+	m.l3TLB = l3tlb
+}
+
 func (m *CaPWQMonitor) Start(now akita.VTimeInSec) {
 	if !m.initialized {
 		for _, l1v := range m.L1VCaches {
@@ -225,11 +273,14 @@ func (m *CaPWQMonitor) Start(now akita.VTimeInSec) {
 			walker.ClearMonitorStats()
 		}
 
+		m.l3TLB.ClearMonitorStats()
+
 		m.initialized = true
 		m.numEpoches = 0
 
 		m.l1vData = []CaPWQMonitorStats{}
 		m.walkerData = []CaPWQMonitorStats{}
+		m.l3TLBData = CaPWQMonitorStats{}
 	}
 
 	m.running = true
@@ -245,6 +296,8 @@ func (m *CaPWQMonitor) Stop() {
 	for _, walker := range m.Walkers {
 		walker.ClearMonitorStats()
 	}
+
+	m.l3TLB.ClearMonitorStats()
 
 	m.running = false
 
@@ -278,6 +331,20 @@ func (m *CaPWQMonitor) CollectWalkerComponentStats(
 	component.ClearMonitorStats()
 }
 
+func (m *CaPWQMonitor) CollectL3TLBComponentStats(
+	component MonitorComponent,
+) {
+	if m.numEpoches == 0 {
+		component.ClearMonitorStats()
+
+		return
+	}
+
+	m.l3TLBData = *component.GetMonitorStats().(*CaPWQMonitorStats)
+
+	component.ClearMonitorStats()
+}
+
 type CaPWQMonitorStats struct {
 	Name string
 
@@ -293,6 +360,7 @@ func (stat *CaPWQMonitorStats) Clear() {
 	stat.L1VWalkerLength = 0
 	stat.ReqLength = 0
 	stat.RspLength = 0
+	stat.NumPTW = 0
 }
 
 type StatItem struct {
@@ -302,4 +370,5 @@ type StatItem struct {
 	WalkerReqUtilization      float64
 	WalkerRspUtilization      float64
 	NumInflightPTW            float64
+	NumIssuedPTW              float64
 }

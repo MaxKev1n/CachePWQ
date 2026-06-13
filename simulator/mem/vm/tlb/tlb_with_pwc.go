@@ -3,6 +3,7 @@ package tlb
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	// "math"
 	"reflect"
@@ -69,25 +70,28 @@ type LastLevelTLB struct {
 
 	gpcID int
 
-	monitorStats *monitor.MonitorStats
+	monitorStats *monitor.CaPWQMonitorStats
 
 	inflightPageWalkCacheReqs map[string]*device.TranslationReq
 
 	dispatcher   internal.Dispatcher
 	cuDispatcher internal.Dispatcher
+
+	useSoftWalker bool
 }
 
 func (tlb *LastLevelTLB) SentCommand(info interface{}) {
-	//TODO implement me
-	panic("implement me")
+	if info.(bool) {
+		tlb.useSoftWalker = true
+	} else {
+		tlb.useSoftWalker = false
+	}
 }
 
 func (tlb *LastLevelTLB) InitMonitorStats() {
-	tlb.monitorStats = &monitor.MonitorStats{
-		Name:     tlb.Name(),
-		Hits:     0,
-		MSHRHits: 0,
-		Misses:   0,
+	tlb.monitorStats = &monitor.CaPWQMonitorStats{
+		Name:   tlb.Name(),
+		NumPTW: 0,
 	}
 }
 
@@ -204,6 +208,10 @@ func (tlb *LastLevelTLB) Tick(now akita.VTimeInSec) bool {
 
 		for i := 0; i < tlb.numReqPerCycle; i++ {
 			madeProgress = tlb.parseFromTop(now) || madeProgress
+		}
+
+		if tlb.monitorStats != nil {
+			tlb.monitorStats.NumPTW = uint64(len(tlb.mshr.AllEntries()))
 		}
 	}
 	return madeProgress
@@ -371,10 +379,6 @@ func (tlb *LastLevelTLB) lookup(now akita.VTimeInSec) bool {
 				"l3tlb_hits",
 			)
 
-			if tlb.monitorStats != nil {
-				tlb.monitorStats.MSHRHits += 1
-			}
-
 			tlb.lookupBuffer.Pop()
 			// if tlb.stats.sendStateInfo {
 			tlb.stats.numAccess += 1
@@ -414,10 +418,6 @@ func (tlb *LastLevelTLB) handleTranslationHit(
 	}
 	tlb.visit(setID, wayID)
 	tlb.lookupBuffer.Pop()
-
-	if tlb.monitorStats != nil {
-		tlb.monitorStats.Hits += 1
-	}
 
 	// if tlb.stats.sendStateInfo {
 	tlb.stats.numAccess += 1
@@ -462,10 +462,6 @@ func (tlb *LastLevelTLB) handleTranslationMiss(
 	if fetched {
 		//tlb.TopPort.Retrieve(now)
 		tlb.lookupBuffer.Pop()
-
-		if tlb.monitorStats != nil {
-			tlb.monitorStats.Misses += 1
-		}
 
 		// if tlb.stats.sendStateInfo {
 		tlb.stats.numAccess += 1
@@ -628,7 +624,11 @@ func (tlb *LastLevelTLB) parseBottom(now akita.VTimeInSec) bool {
 	tlb.BottomPort.Retrieve(now)
 	tracing.TraceReqFinalize(mshrEntry.reqToBottom, now, tlb)
 
-	tlb.cuDispatcher.Receive(rsp.Src)
+	if strings.Contains(rsp.Src.Name(), "CaPWQMMUL6") {
+		tlb.dispatcher.Receive(rsp.Src)
+	} else {
+		tlb.cuDispatcher.Receive(rsp.Src)
+	}
 
 	tracing.EndTask(tlb.Name()+"stall", now, tlb)
 	return true
@@ -651,7 +651,15 @@ func (tlb *LastLevelTLB) parseFromPageWalkCache(now akita.VTimeInSec) bool {
 		panic("not found!")
 	}
 
-	dstPort := tlb.cuDispatcher.Distribute(req)
+	var dstPort akita.Port
+	if tlb.useSoftWalker {
+		dstPort = tlb.cuDispatcher.Distribute(req)
+	}
+
+	if !tlb.useSoftWalker || dstPort == nil {
+		dstPort = tlb.dispatcher.Distribute(req)
+	}
+
 	if dstPort == nil {
 		return false
 	}
