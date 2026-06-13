@@ -120,50 +120,54 @@ func (b *Benchmark) initMem() {
 		b.vec[j] = (rand.Float32() * b.maxval)
 	}
 
+	nItemsBytes := uint64(b.nItems) * 4
+	dimBytes := uint64(b.Dim) * 4
+	rowDelimitersBytes := uint64(b.Dim+1) * 4
+
 	if b.useUnifiedMemory {
 		b.dValData = b.driver.AllocateUnifiedMemory(b.context,
-			uint64(b.nItems*4))
+			nItemsBytes)
 		b.dVecData = b.driver.AllocateUnifiedMemory(b.context,
-			uint64(b.Dim*4))
+			dimBytes)
 		b.dColsData = b.driver.AllocateUnifiedMemory(b.context,
-			uint64(b.nItems*4))
+			nItemsBytes)
 		b.dRowDData = b.driver.AllocateUnifiedMemory(b.context,
-			uint64((b.Dim+1)*4))
+			rowDelimitersBytes)
 		b.dOutData = b.driver.AllocateUnifiedMemory(b.context,
-			uint64(b.Dim*4))
+			dimBytes)
 	} else if b.useLASPMemoryAlloc {
 		b.dValData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.nItems*4), "div4")
+			nItemsBytes, "div4")
 		b.dVecData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.Dim*4), "div4")
+			dimBytes, "div4")
 		b.dColsData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.nItems*4), "div4")
+			nItemsBytes, "div4")
 		b.dRowDData = b.driver.AllocateMemoryLASP(b.context,
-			uint64((b.Dim+1)*4), "div4")
+			rowDelimitersBytes, "div4")
 		b.dOutData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.Dim*4), "div4")
+			dimBytes, "div4")
 	} else if b.useLASPHSLMemoryAlloc {
 		b.dValData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.nItems*4), "div4")
+			nItemsBytes, "div4")
 		b.dColsData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.nItems*4), "div4")
+			nItemsBytes, "div4")
 		b.dVecData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.Dim*4), "div4")
+			dimBytes, "div4")
 		b.dRowDData = b.driver.AllocateMemoryLASP(b.context,
-			uint64((b.Dim+1)*4), "div4")
+			rowDelimitersBytes, "div4")
 		b.dOutData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.Dim*4), "div4")
+			dimBytes, "div4")
 	} else {
 		b.dValData = b.driver.AllocateMemory(b.context,
-			uint64(b.nItems*4))
+			nItemsBytes)
 		b.dVecData = b.driver.AllocateMemory(b.context,
-			uint64(b.Dim*4))
+			dimBytes)
 		b.dColsData = b.driver.AllocateMemory(b.context,
-			uint64(b.nItems*4))
+			nItemsBytes)
 		b.dRowDData = b.driver.AllocateMemory(b.context,
-			uint64((b.Dim+1)*4))
+			rowDelimitersBytes)
 		b.dOutData = b.driver.AllocateMemory(b.context,
-			uint64(b.Dim*4))
+			dimBytes)
 	}
 	if b.useCustomHSL {
 		// define cusotm HSL here
