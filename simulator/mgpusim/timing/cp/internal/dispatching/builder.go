@@ -74,6 +74,8 @@ func (b Builder) WithAlg(alg string) Builder {
 		b.alg = alg
 	case "lasp":
 		b.alg = alg
+	case "dist":
+		b.alg = alg
 	default:
 		panic("unknown dispatching algorithm " + alg)
 	}
@@ -133,6 +135,11 @@ func (b Builder) Build(name string) Dispatcher {
 			gridBuilder: kernels.NewGridBuilder(),
 			cuPool:      b.cuResourcePool,
 			partition:   b.partition,
+		}
+	case "dist":
+		d.alg = &distAlgorithm{
+			gridBuilder: kernels.NewGridBuilder(),
+			cuPool:      b.cuResourcePool,
 		}
 
 	default:

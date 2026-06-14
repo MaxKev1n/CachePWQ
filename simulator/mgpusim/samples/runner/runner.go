@@ -109,7 +109,7 @@ var filenameFlag = flag.String("metric-file-name", "metrics",
 var platformType = flag.String("platform-type", "mcmgpu",
 	"Name of the platform to build (ideal, mcmgpu, distlb, etc)")
 var schedulingAlg = flag.String("scheduling", "chiplet-aware",
-	"Name of the scheduling algorithm to use (chiplet-aware, greedy, round-robin, lasp)")
+	"Name of the scheduling algorithm to use (chiplet-aware, greedy, round-robin, lasp, dist)")
 var schedulingPartition = flag.String("sched-partition", "Xdiv",
 	"Name of the scheduling partition to use (Xdiv4, Ydiv4, Xblk4, Yblk4)")
 var useCoalescingTLBPort = flag.Bool("use-coalescing-tlb-port", false,
