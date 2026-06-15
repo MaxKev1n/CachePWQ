@@ -119,6 +119,7 @@ func (b *Builder) Build(name string) *ComputeUnit {
 
 	b.equipScheduler(cu)
 	b.equipScalarUnits(cu)
+	b.equipWalkerScalarUnits(cu)
 	b.equipSIMDUnits(cu)
 	b.equipLDSUnit(cu)
 	b.equipVectorMemoryUnit(cu)
@@ -145,6 +146,17 @@ func (b *Builder) equipScalarUnits(cu *ComputeUnit) {
 	scalarUnit := NewScalarUnit(cu, b.scratchpadPreparer, b.alu)
 	scalarUnit.log2CachelineSize = b.log2CachelineSize
 	cu.ScalarUnit = scalarUnit
+	for i := 0; i < b.simdCount; i++ {
+		scalarDecoder.AddExecutionUnit(scalarUnit)
+	}
+}
+
+func (b *Builder) equipWalkerScalarUnits(cu *ComputeUnit) {
+	scalarDecoder := NewDecodeUnit(cu)
+	cu.WalkerScalarDecoder = scalarDecoder
+	scalarUnit := NewScalarUnit(cu, b.scratchpadPreparer, b.alu)
+	scalarUnit.log2CachelineSize = b.log2CachelineSize
+	cu.WalkerScalarUnit = scalarUnit
 	for i := 0; i < b.simdCount; i++ {
 		scalarDecoder.AddExecutionUnit(scalarUnit)
 	}

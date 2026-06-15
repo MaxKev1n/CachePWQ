@@ -166,7 +166,7 @@ func (wf *TranslationWavefront) NextExecUnit(PC uint64) insts.ExeUnit {
 	case 0x40:
 		return insts.ExeUnitVALU
 	case 0x48:
-		return insts.ExeUnitScalar
+		return insts.ExeUnitWalkerScalar
 	case 0x50:
 		return insts.ExeUnitBranch
 	case 0x58:

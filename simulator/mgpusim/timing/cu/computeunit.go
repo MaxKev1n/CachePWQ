@@ -41,21 +41,23 @@ type ComputeUnit struct {
 
 	running bool
 
-	Scheduler        Scheduler
-	ALU              emu.ALU
-	BranchUnit       SubComponent
-	VectorMemDecoder SubComponent
-	VectorMemUnit    SubComponent
-	WalkerMemDecoder SubComponent
-	WalkerMemUnit    SubComponent
-	ScalarDecoder    SubComponent
-	VectorDecoder    SubComponent
-	LDSDecoder       SubComponent
-	ScalarUnit       SubComponent
-	SIMDUnit         []SubComponent
-	LDSUnit          SubComponent
-	SRegFile         RegisterFile
-	VRegFile         []RegisterFile
+	Scheduler           Scheduler
+	ALU                 emu.ALU
+	BranchUnit          SubComponent
+	VectorMemDecoder    SubComponent
+	VectorMemUnit       SubComponent
+	WalkerMemDecoder    SubComponent
+	WalkerMemUnit       SubComponent
+	ScalarDecoder       SubComponent
+	WalkerScalarDecoder SubComponent
+	VectorDecoder       SubComponent
+	LDSDecoder          SubComponent
+	ScalarUnit          SubComponent
+	WalkerScalarUnit    SubComponent
+	SIMDUnit            []SubComponent
+	LDSUnit             SubComponent
+	SRegFile            RegisterFile
+	VRegFile            []RegisterFile
 
 	InstMem          akita.Port
 	ScalarMem        akita.Port
@@ -182,7 +184,9 @@ func (cu *ComputeUnit) runPipeline(now akita.VTimeInSec) bool {
 	if !cu.isPaused {
 		madeProgress = cu.BranchUnit.Run(now) || madeProgress
 		madeProgress = cu.ScalarUnit.Run(now) || madeProgress
+		madeProgress = cu.WalkerScalarUnit.Run(now) || madeProgress
 		madeProgress = cu.ScalarDecoder.Run(now) || madeProgress
+		madeProgress = cu.WalkerScalarDecoder.Run(now) || madeProgress
 		for _, simdUnit := range cu.SIMDUnit {
 			madeProgress = simdUnit.Run(now) || madeProgress
 		}
@@ -373,6 +377,9 @@ func (cu *ComputeUnit) flushInternalComponents() {
 
 	cu.ScalarUnit.Flush()
 	cu.ScalarDecoder.Flush()
+
+	cu.WalkerScalarUnit.Flush()
+	cu.WalkerScalarDecoder.Flush()
 
 	for _, simdUnit := range cu.SIMDUnit {
 		simdUnit.Flush()

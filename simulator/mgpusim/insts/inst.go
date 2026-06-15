@@ -20,6 +20,7 @@ const (
 	ExeUnitGDS
 	ExeUnitSpecial
 	ExeUnitWalkerMem
+	ExeUnitWalkerScalar
 )
 
 var instNameTypeCache = make(map[string]OpcodeType)
