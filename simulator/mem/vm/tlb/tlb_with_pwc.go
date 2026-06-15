@@ -624,7 +624,7 @@ func (tlb *LastLevelTLB) parseBottom(now akita.VTimeInSec) bool {
 	tlb.BottomPort.Retrieve(now)
 	tracing.TraceReqFinalize(mshrEntry.reqToBottom, now, tlb)
 
-	if strings.Contains(rsp.Src.Name(), "CaPWQMMUL6") {
+	if strings.Contains(rsp.Src.Name(), "MMU") {
 		tlb.dispatcher.Receive(rsp.Src)
 	} else {
 		tlb.cuDispatcher.Receive(rsp.Src)
@@ -675,7 +675,12 @@ func (tlb *LastLevelTLB) parseFromPageWalkCache(now akita.VTimeInSec) bool {
 		Build()
 	err := tlb.BottomPort.Send(fetchBottom)
 	if err != nil {
-		tlb.cuDispatcher.Receive(dstPort)
+		if strings.Contains(dstPort.Name(), "MMU") {
+			tlb.dispatcher.Receive(dstPort)
+		} else {
+			tlb.cuDispatcher.Receive(dstPort)
+		}
+
 		return false
 	}
 
