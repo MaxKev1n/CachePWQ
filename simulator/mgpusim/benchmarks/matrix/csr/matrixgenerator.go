@@ -7,7 +7,7 @@ type MatrixGenerator struct {
 	numNode, numConnection   uint32
 	xCoords, yCoords         []uint32
 	values                   []float32
-	positionOccupied         map[uint32]bool
+	positionOccupied         map[uint64]bool
 	xCoordIndex, yCoordIndex map[uint32][]uint32
 }
 
@@ -32,7 +32,7 @@ func (g *MatrixGenerator) init() {
 	g.xCoords = make([]uint32, 0, g.numConnection)
 	g.yCoords = make([]uint32, 0, g.numConnection)
 	g.values = make([]float32, 0, g.numConnection)
-	g.positionOccupied = make(map[uint32]bool)
+	g.positionOccupied = make(map[uint64]bool)
 	g.xCoordIndex = make(map[uint32][]uint32)
 	g.yCoordIndex = make(map[uint32][]uint32)
 }
@@ -138,10 +138,14 @@ func (g MatrixGenerator) generateUnoccupiedPosition() (x, y uint32) {
 }
 
 func (g MatrixGenerator) isPositionOccupied(x, y uint32) bool {
-	_, ok := g.positionOccupied[y*g.numNode+x]
+	_, ok := g.positionOccupied[g.positionKey(x, y)]
 	return ok
 }
 
 func (g MatrixGenerator) markPositionOccupied(x, y uint32) {
-	g.positionOccupied[y*g.numNode+x] = true
+	g.positionOccupied[g.positionKey(x, y)] = true
+}
+
+func (g MatrixGenerator) positionKey(x, y uint32) uint64 {
+	return uint64(y)*uint64(g.numNode) + uint64(x)
 }

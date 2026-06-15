@@ -4,6 +4,7 @@ package spmv
 import (
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 
 	"gitlab.com/akita/mgpusim/benchmarks/matrix/csr"
@@ -54,6 +55,8 @@ type Benchmark struct {
 	maxval    float32
 	matrix    csr.Matrix
 }
+
+const maxKernelIndex = int64(1<<31 - 1)
 
 // NewBenchmark creates a new benchmark
 func NewBenchmark(driver *driver.Driver) *Benchmark {
@@ -107,7 +110,7 @@ func (b *Benchmark) Run() {
 }
 
 func (b *Benchmark) initMem() {
-	b.nItems = int32(float64(b.Dim) * float64(b.Dim) * b.Sparsity)
+	b.nItems = b.calculateNumItems()
 	fmt.Printf("Number of non-zero elements %d\n", b.nItems)
 
 	b.matrix = csr.
@@ -122,54 +125,90 @@ func (b *Benchmark) initMem() {
 
 	if b.useUnifiedMemory {
 		b.dValData = b.driver.AllocateUnifiedMemory(b.context,
-			uint64(b.nItems*4))
+			b.sizeOfFloat32s(uint64(b.nItems)))
 		b.dVecData = b.driver.AllocateUnifiedMemory(b.context,
-			uint64(b.Dim*4))
+			b.sizeOfFloat32s(uint64(b.Dim)))
 		b.dColsData = b.driver.AllocateUnifiedMemory(b.context,
-			uint64(b.nItems*4))
+			b.sizeOfUint32s(uint64(b.nItems)))
 		b.dRowDData = b.driver.AllocateUnifiedMemory(b.context,
-			uint64((b.Dim+1)*4))
+			b.sizeOfUint32s(uint64(b.Dim)+1))
 		b.dOutData = b.driver.AllocateUnifiedMemory(b.context,
-			uint64(b.Dim*4))
+			b.sizeOfFloat32s(uint64(b.Dim)))
 	} else if b.useLASPMemoryAlloc {
 		b.dValData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.nItems*4), "div4")
+			b.sizeOfFloat32s(uint64(b.nItems)), "div4")
 		b.dVecData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.Dim*4), "div4")
+			b.sizeOfFloat32s(uint64(b.Dim)), "div4")
 		b.dColsData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.nItems*4), "div4")
+			b.sizeOfUint32s(uint64(b.nItems)), "div4")
 		b.dRowDData = b.driver.AllocateMemoryLASP(b.context,
-			uint64((b.Dim+1)*4), "div4")
+			b.sizeOfUint32s(uint64(b.Dim)+1), "div4")
 		b.dOutData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.Dim*4), "div4")
+			b.sizeOfFloat32s(uint64(b.Dim)), "div4")
 	} else if b.useLASPHSLMemoryAlloc {
 		b.dValData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.nItems*4), "div4")
+			b.sizeOfFloat32s(uint64(b.nItems)), "div4")
 		b.dColsData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.nItems*4), "div4")
+			b.sizeOfUint32s(uint64(b.nItems)), "div4")
 		b.dVecData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.Dim*4), "div4")
+			b.sizeOfFloat32s(uint64(b.Dim)), "div4")
 		b.dRowDData = b.driver.AllocateMemoryLASP(b.context,
-			uint64((b.Dim+1)*4), "div4")
+			b.sizeOfUint32s(uint64(b.Dim)+1), "div4")
 		b.dOutData = b.driver.AllocateMemoryLASP(b.context,
-			uint64(b.Dim*4), "div4")
+			b.sizeOfFloat32s(uint64(b.Dim)), "div4")
 	} else {
 		b.dValData = b.driver.AllocateMemory(b.context,
-			uint64(b.nItems*4))
+			b.sizeOfFloat32s(uint64(b.nItems)))
 		b.dVecData = b.driver.AllocateMemory(b.context,
-			uint64(b.Dim*4))
+			b.sizeOfFloat32s(uint64(b.Dim)))
 		b.dColsData = b.driver.AllocateMemory(b.context,
-			uint64(b.nItems*4))
+			b.sizeOfUint32s(uint64(b.nItems)))
 		b.dRowDData = b.driver.AllocateMemory(b.context,
-			uint64((b.Dim+1)*4))
+			b.sizeOfUint32s(uint64(b.Dim)+1))
 		b.dOutData = b.driver.AllocateMemory(b.context,
-			uint64(b.Dim*4))
+			b.sizeOfFloat32s(uint64(b.Dim)))
 	}
 	if b.useCustomHSL {
 		// define cusotm HSL here
 		// the number of TLB entries to stripe at
 		b.driver.SetHSL(512 * 4)
 	}
+}
+
+func (b *Benchmark) calculateNumItems() int32 {
+	if b.Dim <= 0 {
+		log.Panicf("invalid SPMV dimension %d: must be positive", b.Dim)
+	}
+	if math.IsNaN(b.Sparsity) || math.IsInf(b.Sparsity, 0) ||
+		b.Sparsity < 0 || b.Sparsity > 1 {
+		log.Panicf("invalid SPMV sparsity %f: must be in [0, 1]", b.Sparsity)
+	}
+
+	dim := uint64(b.Dim)
+	totalPositions := dim * dim
+	numItems := float64(totalPositions) * b.Sparsity
+	if numItems > float64(maxKernelIndex) {
+		log.Panicf(
+			"SPMV non-zero element count %.0f exceeds int32 kernel index limit %d",
+			numItems, maxKernelIndex)
+	}
+
+	return int32(numItems)
+}
+
+func (b *Benchmark) sizeOfFloat32s(count uint64) uint64 {
+	return b.sizeOf4ByteElements(count)
+}
+
+func (b *Benchmark) sizeOfUint32s(count uint64) uint64 {
+	return b.sizeOf4ByteElements(count)
+}
+
+func (b *Benchmark) sizeOf4ByteElements(count uint64) uint64 {
+	if count > ^uint64(0)/4 {
+		log.Panicf("SPMV allocation size overflow: %d 4-byte elements", count)
+	}
+	return count * 4
 }
 
 func (b *Benchmark) exec() {
