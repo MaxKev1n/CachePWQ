@@ -96,10 +96,10 @@ func (s *pageWalkCacheBankStage) finalizeReadHit(now akita.VTimeInSec) bool {
 }
 
 func (s *pageWalkCacheBankStage) finalizeWriteHit(now akita.VTimeInSec) bool {
-	if !s.cache.mmuSender.CanSend(1) {
-		s.cycleLeft = 0
-		return false
-	}
+	// if !s.cache.mmuSender.CanSend(1) {
+	// 	s.cycleLeft = 0
+	// 	return false
+	// }
 
 	write := s.currentTrans.write
 	block := s.currentTrans.block
@@ -119,13 +119,13 @@ func (s *pageWalkCacheBankStage) finalizeWriteHit(now akita.VTimeInSec) bool {
 
 	s.currentTrans = nil
 
-	done := mem.WriteDoneRspBuilder{}.
-		WithSendTime(now).
-		WithSrc(s.cache.ToMMUs).
-		WithDst(write.Src).
-		WithRspTo(write.ID).
-		Build()
-	s.cache.mmuSender.Send(done)
+	// done := mem.WriteDoneRspBuilder{}.
+	// 	WithSendTime(now).
+	// 	WithSrc(s.cache.ToMMUs).
+	// 	WithDst(write.Src).
+	// 	WithRspTo(write.ID).
+	// 	Build()
+	// s.cache.mmuSender.Send(done)
 
 	tracing.TraceReqComplete(write, now, s.cache)
 

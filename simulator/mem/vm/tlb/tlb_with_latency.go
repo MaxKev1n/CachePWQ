@@ -705,7 +705,8 @@ func (tlb *LatTLB) parseBottom(now akita.VTimeInSec) bool {
 
 	mshrEntryPresent := tlb.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
 	if !mshrEntryPresent {
-		return tlb.parseBottomExtend(now)
+		tlb.BottomPort.Retrieve(now)
+		tracing.TraceReqFinalize(rsp, now, tlb)
 	}
 
 	setID := tlb.vAddrToSetID(page.VAddr)
