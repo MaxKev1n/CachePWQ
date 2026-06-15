@@ -5,6 +5,7 @@ import (
 	"log"
 	"math/bits"
 
+	"github.com/tebeka/atexit"
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mgpusim/insts"
@@ -60,6 +61,22 @@ func NewScheduler(
 	s.translationWf = wavefront.NewWavefront(nil)
 	s.translationWf.State = wavefront.WfDispatching
 	s.translationWf.Translation = wavefront.NewTranslationWavefront()
+
+	atexit.Register(func() {
+		fmt.Printf("%s: %d cycles without progress\n", s.cu.Name(), s.cyclesNoProgress)
+		fmt.Printf("%s: translation state=%v, pc=%#X, exec=%#X\n",
+			s.cu.Name(),
+			s.translationWf.State,
+			s.translationWf.PC,
+			s.translationWf.EXEC)
+
+		for i, thread := range s.translationWf.Translation.Threads {
+			fmt.Printf("%s: translation thread %d status=%v\n",
+				s.cu.Name(),
+				i,
+				thread.Status)
+		}
+	})
 
 	return s
 }
