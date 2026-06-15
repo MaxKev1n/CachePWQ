@@ -321,6 +321,8 @@ func (s *SchedulerImpl) getUnitToIssueTo(u insts.ExeUnit) SubComponent {
 		return s.cu.ScalarDecoder
 	case insts.ExeUnitWalkerMem:
 		return s.cu.WalkerMemDecoder
+	case insts.ExeUnitWalkerScalar:
+		return s.cu.WalkerScalarDecoder
 	default:
 		log.Panic("not sure where to dispatch the instruction")
 	}

@@ -667,6 +667,7 @@ func (tlb *LastLevelTLB) parseFromPageWalkCache(now akita.VTimeInSec) bool {
 		Build()
 	err := tlb.BottomPort.Send(fetchBottom)
 	if err != nil {
+		tlb.cuDispatcher.Receive(dstPort)
 		return false
 	}
 
