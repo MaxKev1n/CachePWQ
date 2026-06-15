@@ -177,7 +177,9 @@ func (b LastLevelTLBBuilder) Build(name string) TLB {
 
 	switch b.dispatchPolicy {
 	case "roundrobin":
-		tlb.dispatcher = &internal.RoundRobinDispatcher{}
+		tlb.dispatcher = &internal.RoundRobinDispatcher{
+			MaxInflight: 8,
+		}
 	case "leasefirst":
 		tlb.dispatcher = &internal.LeaseFirstDispatcher{}
 	case "backtosource":

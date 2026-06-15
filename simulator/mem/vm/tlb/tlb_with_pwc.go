@@ -651,9 +651,9 @@ func (tlb *LastLevelTLB) parseFromPageWalkCache(now akita.VTimeInSec) bool {
 		panic("not found!")
 	}
 
-	dstPort := tlb.cuDispatcher.Distribute(req)
+	dstPort := tlb.dispatcher.Distribute(req)
 	if dstPort == nil {
-		dstPort = tlb.dispatcher.Distribute(req)
+		dstPort = tlb.cuDispatcher.Distribute(req)
 	}
 
 	if dstPort == nil {

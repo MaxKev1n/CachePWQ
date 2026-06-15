@@ -15,12 +15,15 @@ type Dispatcher interface {
 
 type RoundRobinDispatcher struct {
 	nextPtr int
+	counter []int
 
-	ports []akita.Port
+	ports       []akita.Port
+	MaxInflight int
 }
 
 func (d *RoundRobinDispatcher) Register(port akita.Port) {
 	d.ports = append(d.ports, port)
+	d.counter = append(d.counter, 0)
 }
 
 func (d *RoundRobinDispatcher) Distribute(msg akita.Msg) akita.Port {
@@ -28,13 +31,38 @@ func (d *RoundRobinDispatcher) Distribute(msg akita.Msg) akita.Port {
 		return nil
 	}
 
-	port := d.ports[d.nextPtr%len(d.ports)]
-	d.nextPtr++
-	return port
+	maxInflight := d.MaxInflight
+	if maxInflight == 0 {
+		maxInflight = 8
+	}
+
+	for i := 0; i < len(d.ports); i++ {
+		index := (d.nextPtr + i) % len(d.ports)
+		if d.counter[index] >= maxInflight {
+			continue
+		}
+
+		d.counter[index]++
+		d.nextPtr = index + 1
+		return d.ports[index]
+	}
+
+	return nil
 }
 
 func (d *RoundRobinDispatcher) Receive(port akita.Port) {
-	// Do nothing
+	for i, p := range d.ports {
+		if p == port {
+			d.counter[i]--
+
+			if d.counter[i] < 0 {
+				panic("counter should not be negative")
+			}
+
+			return
+		}
+	}
+	panic("port not found")
 }
 
 type LeaseFirstDispatcher struct {
