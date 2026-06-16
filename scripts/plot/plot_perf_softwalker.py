@@ -52,6 +52,7 @@ def plot_normalized_time(
     Opt2: pd.DataFrame,
     Opt3: pd.DataFrame,
     Opt4: pd.DataFrame,
+    Opt5: pd.DataFrame,
     out_dir: str,
 ) -> None:
     """
@@ -114,6 +115,14 @@ def plot_normalized_time(
         (
             baseline["Data"][i] / Opt4["Data"][i]
             if Opt4["Data"][i] != 0 and baseline["Data"][i] != 0
+            else 0
+        )
+        for i in range(len(benchmarks))
+    ]
+    Opt5["Data"] = [
+        (
+            baseline["Data"][i] / Opt5["Data"][i]
+            if Opt5["Data"][i] != 0 and baseline["Data"][i] != 0
             else 0
         )
         for i in range(len(benchmarks))
@@ -181,43 +190,54 @@ def plot_normalized_time(
         ],
         ignore_index=True,
     )
-    
-    print(f"baseline: {baseline['Data'].tolist()}")
-    print(f"Opt1: {Opt1['Data'].tolist()}")
-    print(f"Opt2: {Opt2['Data'].tolist()}")
-    print(f"Opt3: {Opt3['Data'].tolist()}")
-    print(f"Opt4: {Opt4['Data'].tolist()}")
+    Opt5 = pd.concat(
+        [
+            Opt5,
+            pd.DataFrame(
+                {
+                    "Benchmark": ["Ave."],
+                    "Data": [harmonic_mean(Opt5["Data"])],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+    print("Opt1 Data:", Opt1["Data"].tolist())
+    print("Opt2 Data:", Opt2["Data"].tolist())
+    print("Opt3 Data:", Opt3["Data"].tolist())
+    print("Opt4 Data:", Opt4["Data"].tolist())
+    print("Opt5 Data:", Opt5["Data"].tolist())
 
     bar1 = plt.bar(
         r1,
-        baseline["Data"],
+        Opt1["Data"],
         width=bar_width,
-        label="baseline",
+        label="SoftWalker",
         color="#8D2E2C",
         edgecolor="black",
         linewidth=1.5,
     )
     bar2 = plt.bar(
         r2,
-        Opt1["Data"],
+        Opt2["Data"],
         width=bar_width,
-        label="SoftWalker",
+        label="SoftWalker + Hardware",
         color="#FDE4EA",
         edgecolor="black",
         linewidth=1.5,
     )
     bar3 = plt.bar(
         r3,
-        Opt2["Data"],
+        Opt3["Data"],
         width=bar_width,
-        label="MPW",
+        label="Hardware + SoftWalker",
         color="#C3D9F1",
         edgecolor="black",
         linewidth=1.5,
     )
     bar4 = plt.bar(
         r4,
-        Opt3["Data"],
+        Opt4["Data"],
         width=bar_width,
         label="NB-Walker + AMR",
         color="#5D73A1",
@@ -226,9 +246,9 @@ def plot_normalized_time(
     )
     bar5 = plt.bar(
         r5,
-        Opt4["Data"],
+        Opt5["Data"],
         width=bar_width,
-        label="infinite walker",
+        label="NB-Walke + AMR + SoftWalker",
         color="#313A5B",
         edgecolor="black",
         linewidth=1.5,
@@ -290,7 +310,7 @@ def plot_normalized_time(
     plt.ylim(0, 6)
     plt.legend(
         loc="upper center",
-        ncol=5,
+        ncol=3,
         bbox_to_anchor=(0.5, 1),
         bbox_transform=plt.gcf().transFigure,  # 使用图形坐标系
         frameon=True,
@@ -298,7 +318,7 @@ def plot_normalized_time(
         framealpha=0.7,
         prop={"weight": "bold", "size": 26},
     )
-    plt.tight_layout(rect=[0, 0, 1, 0.925])
+    plt.tight_layout(rect=[0, 0, 1, 0.85])
     plt.grid(axis="y", alpha=0.3)
     plt.axhline(y=1, color="red", linewidth=0.8, linestyle="--")
 
@@ -309,7 +329,7 @@ def plot_normalized_time(
         spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
 
     output_file = os.path.join(
-        out_dir, "New_PTW_Performance"
+        out_dir, "Softwalker_Performance"
     )
     plt.savefig(output_file + ".png")
     plt.savefig(output_file + ".pdf")
@@ -328,6 +348,7 @@ if __name__ == "__main__":
     Opt2     = pd.DataFrame(columns=["Benchmark", "Data"])
     Opt3     = pd.DataFrame(columns=["Benchmark", "Data"])
     Opt4     = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt5     = pd.DataFrame(columns=["Benchmark", "Data"])
 
     for benchmark in get_high_mpki_benchmarks():
         def append_row(df, benchmark, input_dir):
@@ -338,10 +359,11 @@ if __name__ == "__main__":
             )
 
         baseline = append_row(baseline, benchmark, "../../final_final_data/baseline")
-        Opt1     = append_row(Opt1,     benchmark, "../../final_final_data/hardware+softwalker")
-        Opt2     = append_row(Opt2,     benchmark, "../../final_final_data/mpw")
-        Opt3     = append_row(Opt3,     benchmark, "../../final_final_data/nbwalker-full")
-        Opt4     = append_row(Opt4,     benchmark, "../../final_final_data/infinitewalker")
+        Opt1     = append_row(Opt1,     benchmark, "../../final_final_data/pure_softwalker")
+        Opt2     = append_row(Opt2,     benchmark, "../../final_final_data/softwalker+hardware")
+        Opt3     = append_row(Opt3,     benchmark, "../../final_final_data/hardware+softwalker")
+        Opt4     = append_row(Opt4,     benchmark, "../../final_final_data/nbwalker-full")
+        Opt5     = append_row(Opt5,     benchmark, "../../final_final_data/nbwalkerfull+softwalker")
 
     plot_normalized_time(
         baseline=baseline.copy(),
@@ -349,5 +371,6 @@ if __name__ == "__main__":
         Opt2=Opt2.copy(),
         Opt3=Opt3.copy(),
         Opt4=Opt4.copy(),
+        Opt5=Opt5.copy(),
         out_dir=args.outDir,
     )
