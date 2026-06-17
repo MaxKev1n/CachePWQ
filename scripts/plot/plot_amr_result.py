@@ -140,16 +140,16 @@ def plot_data(
     plt.rcParams["mathtext.it"] = "Arial:italic"
     plt.rcParams["mathtext.bf"] = "Arial:bold"
 
-    plt.figure(figsize=(4, 3), dpi=300)
+    plt.figure(figsize=(4.25, 3), dpi=300)
     
     # 绘制两组数据
     plt.plot(x_values, df['Walk Occupancy'], label='MSHR for Walk', marker='.', linestyle='-', color="#313A5B")
-    plt.plot(x_values, df['Normal Occupancy'], label='MSHR for Kernel', marker='.', linestyle='--', color="#C3D9F1")
+    plt.plot(x_values, df['Normal Occupancy'], label='MSHR for Kernel', marker='.', linestyle='--', color="#7AB656")
     plt.plot(x_values, df['Reserve'], label='Reserved MSHR', marker='.', linestyle='-', color="red", linewidth=0.5, markersize=2)
     
     # 添加图表信息
     # plt.xlabel(r'Cycles ($\times 10^4$)', fontsize=28, fontweight='bold')
-    # plt.ylabel('Occupancy (%)', fontsize=26, fontweight='bold')
+    plt.ylabel('Occupancy (%)', fontsize=26, fontweight='bold')
     plt.xlim(-x_padding, x_max + x_padding)
     ax = plt.gca()
     plt.xticks(
@@ -184,7 +184,7 @@ def plot_data(
     plt.figure(figsize=(10, 1), dpi=300)
     legend_elements = [
         Line2D([0], [0], label='MSHR for Walk Occupancy', marker='.', linestyle='-', color="#313A5B", lw=2),
-        Line2D([0], [0], label='MSHR for Kernel Occupancy', marker='.', linestyle='--', color="#C3D9F1", lw=2),
+        Line2D([0], [0], label='MSHR for Kernel Occupancy', marker='.', linestyle='--', color="#7AB656", lw=2),
         Line2D([0], [0], label='Reserved MSHR', marker='.', linestyle='-', color="red", lw=2),
     ]
     plt.legend(
