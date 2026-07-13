@@ -74,7 +74,7 @@ def plot_normalized_time(
     plt.rcParams["mathtext.it"] = "Arial:italic"
     plt.rcParams["mathtext.bf"] = "Arial:bold"
 
-    plt.figure(figsize=(20, 5), dpi=300)
+    plt.figure(figsize=(20, 4.5), dpi=300)
 
     benchmarks = get_high_mpki_benchmarks()
 
@@ -202,7 +202,7 @@ def plot_normalized_time(
         Opt1["Data"],
         width=bar_width,
         label="SoftWalker",
-        color="#FDE4EA",
+        color="#C3D9F1",
         edgecolor="black",
         linewidth=1.5,
     )
@@ -211,7 +211,7 @@ def plot_normalized_time(
         Opt2["Data"],
         width=bar_width,
         label="MPW",
-        color="#C3D9F1",
+        color="#5D73A1",
         edgecolor="black",
         linewidth=1.5,
     )
@@ -220,21 +220,21 @@ def plot_normalized_time(
         Opt3["Data"],
         width=bar_width,
         label="NB-Walker + AMR",
-        color="#5D73A1",
-        edgecolor="black",
-        linewidth=1.5,
-    )
-    bar5 = plt.bar(
-        r5,
-        Opt4["Data"],
-        width=bar_width,
-        label="infinite walker",
         color="#313A5B",
         edgecolor="black",
         linewidth=1.5,
     )
+    # bar5 = plt.bar(
+    #     r5,
+    #     Opt4["Data"],
+    #     width=bar_width,
+    #     label="infinite walker",
+    #     color="#313A5B",
+    #     edgecolor="black",
+    #     linewidth=1.5,
+    # )
 
-    for bar in bar1 + bar2 + bar3 + bar4 + bar5:
+    for bar in bar1 + bar2 + bar3 + bar4:
         height = bar.get_height()
         x = bar.get_x() + bar.get_width() / 2
 
@@ -274,9 +274,9 @@ def plot_normalized_time(
         #         # arrowprops=dict(arrowstyle="-", color="red", lw=2),
         #     )
 
-    plt.xlim(min(r1) - bar_width, max(r5) + bar_width)
+    plt.xlim(min(r1) - bar_width, max(r4) + bar_width)
     plt.xticks(
-        [r + 2 * bar_width for r in r1],
+        [r + 1.5 * bar_width for r in r1],
         [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["HMean"],
         fontsize=36,
         fontweight="bold",
@@ -290,7 +290,7 @@ def plot_normalized_time(
     plt.ylim(0, 6)
     plt.legend(
         loc="upper center",
-        ncol=5,
+        ncol=4,
         bbox_to_anchor=(0.5, 1),
         bbox_transform=plt.gcf().transFigure,  # 使用图形坐标系
         frameon=True,

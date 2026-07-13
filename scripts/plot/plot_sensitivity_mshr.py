@@ -71,7 +71,7 @@ def plot_normalized_time(
     plt.rcParams["mathtext.bf"] = "Arial:bold"
     plt.rcParams["hatch.linewidth"] = 2.0
 
-    plt.figure(figsize=(20, 5), dpi=300)
+    plt.figure(figsize=(20, 4.5), dpi=300)
 
     benchmarks = get_high_mpki_benchmarks()
 
@@ -269,7 +269,7 @@ def plot_normalized_time(
         prop={"weight": "bold", "size": 28},
     )
     
-    plt.tight_layout(rect=[0, 0, 1, 0.925])
+    plt.tight_layout(rect=[0, 0, 1, 0.9])
     plt.grid(axis="y", alpha=0.3)
     plt.axhline(y=1, color="red", linewidth=0.8, linestyle="--")
 

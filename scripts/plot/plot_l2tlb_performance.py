@@ -67,7 +67,7 @@ def plot_normalized_time(
     plt.rcParams["mathtext.bf"] = "Arial:bold"
     plt.rcParams["hatch.linewidth"] = 2.0
 
-    plt.figure(figsize=(20, 5), dpi=300)
+    plt.figure(figsize=(20, 4.75), dpi=300)
 
     benchmarks = get_high_mpki_benchmarks()
 

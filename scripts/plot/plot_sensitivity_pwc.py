@@ -69,7 +69,7 @@ def plot_normalized_time(
     plt.rcParams["mathtext.bf"] = "Arial:bold"
     plt.rcParams["hatch.linewidth"] = 2.0
 
-    plt.figure(figsize=(20, 5), dpi=300)
+    plt.figure(figsize=(20, 4.5), dpi=300)
 
     benchmarks = get_high_mpki_benchmarks()
 
@@ -146,8 +146,8 @@ def plot_normalized_time(
         r1,
         nbwalker_32["Data"],
         width=bar_width,
-        label=r"32 Entries (0.25$\times$)",
-        color="#C3D9F1",
+        label=r"32 Entries",
+        color="#8D2E2C",
         edgecolor="black",
         linewidth=1.5,
     )
@@ -155,16 +155,34 @@ def plot_normalized_time(
         r2,
         nbwalker_128["Data"],
         width=bar_width,
-        label=r"128 Entries (1$\times$)",
-        color="#5D73A1",
+        label=r"64 Entries",
+        color="#FDE4EA",
         edgecolor="black",
         linewidth=1.5,
     )
     bar3 = plt.bar(
         r3,
+        nbwalker_128["Data"],
+        width=bar_width,
+        label=r"128 Entries",
+        color="#C3D9F1",
+        edgecolor="black",
+        linewidth=1.5,
+    )
+    bar4 = plt.bar(
+        r4,
+        nbwalker_256["Data"],
+        width=bar_width,
+        label=r"256 Entries",
+        color="#5D73A1",
+        edgecolor="black",
+        linewidth=1.5,
+    )
+    bar5 = plt.bar(
+        r5,
         nbwalker_512["Data"],
         width=bar_width,
-        label=r"512 Entries (4$\times$)",
+        label=r"512 Entries",
         color="#313A5B",
         edgecolor="black",
         linewidth=1.5,
@@ -227,7 +245,7 @@ def plot_normalized_time(
     
     plt.legend(
         loc="upper center",
-        ncol=4,
+        ncol=5,
         bbox_to_anchor=(0.5, 1),
         bbox_transform=plt.gcf().transFigure,
         frameon=True,
