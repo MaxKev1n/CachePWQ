@@ -3,8 +3,16 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from benchmark import get_high_mpki_benchmarks, get_short_name
-from matplotlib.patches import Patch
+from benchmark import get_high_mpki_benchmarks, get_short_name, low_mpki_benchmarks, high_mpki_benchmarks
+
+
+def geometric_mean(df: pd.DataFrame) -> float:
+    data = df.tolist()
+    if not data or any(x <= 0 for x in data):
+        return 0.0
+    product = np.prod(data)
+    return product ** (1 / len(data))
+
 
 def harmonic_mean(df: pd.DataFrame) -> float:
     data = df.tolist()
@@ -38,16 +46,11 @@ def collect_performance_data(benchmark_name: str, input_dir: str) -> float:
             break
     return performance_data
 
-
 def plot_normalized_time(
-    baseline_16: pd.DataFrame,
-    ngat_16: pd.DataFrame,
-    baseline_32: pd.DataFrame,
-    ngat_32: pd.DataFrame,
-    baseline_48: pd.DataFrame,
-    ngat_48: pd.DataFrame,
-    baseline_64: pd.DataFrame,
-    ngat_64: pd.DataFrame,
+    baseline: pd.DataFrame,
+    Opt1: pd.DataFrame,
+    Opt2: pd.DataFrame,
+    Opt3: pd.DataFrame,
     out_dir: str,
 ) -> None:
     """
@@ -69,141 +72,112 @@ def plot_normalized_time(
     plt.rcParams["mathtext.rm"] = "Arial"
     plt.rcParams["mathtext.it"] = "Arial:italic"
     plt.rcParams["mathtext.bf"] = "Arial:bold"
-    plt.rcParams["hatch.linewidth"] = 2.0
 
-    plt.figure(figsize=(20, 4.5), dpi=300)
+    plt.figure(figsize=(20, 4.75), dpi=300)
 
     benchmarks = get_high_mpki_benchmarks()
 
-    bar_width = 0.1
-    r1 = np.arange(len(benchmarks) + 1) * (4 * bar_width + 0.2)
+    bar_width = 0.15
+    r1 = np.arange(len(benchmarks) + 1) * (3 * bar_width + 0.2)
     r2 = [x + bar_width for x in r1]
     r3 = [x + bar_width for x in r2]
-    r4 = [x + bar_width for x in r3]
 
     # Normalize the time
-    ngat_16["Data"] = [
+    Opt1["Data"] = [
         (
-            baseline_16["Data"][i] / ngat_16["Data"][i]
-            if ngat_16["Data"][i] != 0 and baseline_16["Data"][i] != 0
+            baseline["Data"][i] / Opt1["Data"][i]
+            if Opt1["Data"][i] != 0 and baseline["Data"][i] != 0
             else 0
         )
         for i in range(len(benchmarks))
     ]
-    ngat_32["Data"] = [
+    Opt2["Data"] = [
         (
-            baseline_32["Data"][i] / ngat_32["Data"][i]
-            if ngat_32["Data"][i] != 0 and baseline_32["Data"][i] != 0
+            baseline["Data"][i] / Opt2["Data"][i]
+            if Opt2["Data"][i] != 0 and baseline["Data"][i] != 0
             else 0
         )
         for i in range(len(benchmarks))
     ]
-    ngat_48["Data"] = [
+    Opt3["Data"] = [
         (
-            baseline_32["Data"][i] / ngat_48["Data"][i]
-            if ngat_48["Data"][i] != 0 and baseline_32["Data"][i] != 0
-            else 0
-        )
-        for i in range(len(benchmarks))
-    ]
-    ngat_64["Data"] = [
-        (
-            baseline_32["Data"][i] / ngat_64["Data"][i]
-            if ngat_64["Data"][i] != 0 and baseline_32["Data"][i] != 0
+            baseline["Data"][i] / Opt3["Data"][i]
+            if Opt3["Data"][i] != 0 and baseline["Data"][i] != 0
             else 0
         )
         for i in range(len(benchmarks))
     ]
 
     # Ave.
-    ngat_16 = pd.concat(
+    Opt1 = pd.concat(
         [
-            ngat_16,
+            Opt1,
             pd.DataFrame(
                 {
                     "Benchmark": ["Ave."],
-                    "Data": [harmonic_mean(ngat_16["Data"])],
+                    "Data": [harmonic_mean(Opt1["Data"])],
                 }
             ),
         ],
         ignore_index=True,
     )
-    ngat_32 = pd.concat(
+    Opt2 = pd.concat(
         [
-            ngat_32,
+            Opt2,
             pd.DataFrame(
                 {
                     "Benchmark": ["Ave."],
-                    "Data": [harmonic_mean(ngat_32["Data"])],
+                    "Data": [harmonic_mean(Opt2["Data"])],
                 }
             ),
         ],
         ignore_index=True,
     )
-    ngat_48 = pd.concat(
+    Opt3 = pd.concat(
         [
-            ngat_48,
+            Opt3,
             pd.DataFrame(
                 {
                     "Benchmark": ["Ave."],
-                    "Data": [harmonic_mean(ngat_48["Data"])],
+                    "Data": [harmonic_mean(Opt3["Data"])],
                 }
             ),
         ],
         ignore_index=True,
     )
-    ngat_64 = pd.concat(
-        [
-            ngat_64,
-            pd.DataFrame(
-                {
-                    "Benchmark": ["Ave."],
-                    "Data": [harmonic_mean(ngat_64["Data"])],
-                }
-            ),
-        ],
-        ignore_index=True,
-    )
-    
+    print("Opt1 Data:", Opt1["Data"].tolist())
+    print("Opt2 Data:", Opt2["Data"].tolist())
+    print("Opt3 Data:", Opt3["Data"].tolist())
+
     bar1 = plt.bar(
         r1,
-        ngat_16["Data"],
+        Opt1["Data"],
         width=bar_width,
-        label="16 MSHR",
-        color="#8D2E2C",
+        label="250 KHz",
+        color="#C3D9F1",
         edgecolor="black",
         linewidth=1.5,
     )
     bar2 = plt.bar(
         r2,
-        ngat_32["Data"],
+        Opt2["Data"],
         width=bar_width,
-        label="32 MSHR",
-        color="#C3D9F1",
+        label="500 KHz",
+        color="#5D73A1",
         edgecolor="black",
         linewidth=1.5,
     )
     bar3 = plt.bar(
         r3,
-        ngat_48["Data"],
+        Opt3["Data"],
         width=bar_width,
-        label="48 MSHR",
-        color="#5D73A1",
-        edgecolor="black",
-        linewidth=1.5,
-    )
-    bar4 = plt.bar(
-        r4,
-        ngat_64["Data"],
-        width=bar_width,
-        label="64 MSHR",
+        label="1 MHz",
         color="#313A5B",
         edgecolor="black",
         linewidth=1.5,
     )
 
-
-    for bar in bar1 + bar2 + bar3 + bar4:
+    for bar in bar1 + bar2 + bar3:
         height = bar.get_height()
         x = bar.get_x() + bar.get_width() / 2
 
@@ -243,9 +217,9 @@ def plot_normalized_time(
         #         # arrowprops=dict(arrowstyle="-", color="red", lw=2),
         #     )
 
-    plt.xlim(min(r1) - bar_width, max(r4) + bar_width)
+    plt.xlim(min(r1) - bar_width, max(r3) + bar_width)
     plt.xticks(
-        [r + 1.5 * bar_width for r in r1],
+        [r + 1 * bar_width for r in r1],
         [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["HMean"],
         fontsize=36,
         fontweight="bold",
@@ -257,19 +231,17 @@ def plot_normalized_time(
         fontweight="bold",
     )
     plt.ylim(0, 6)
-    
     plt.legend(
         loc="upper center",
         ncol=4,
         bbox_to_anchor=(0.5, 1),
-        bbox_transform=plt.gcf().transFigure,
+        bbox_transform=plt.gcf().transFigure,  # 使用图形坐标系
         frameon=True,
         fancybox=True,
         framealpha=0.7,
         prop={"weight": "bold", "size": 28},
     )
-    
-    plt.tight_layout(rect=[0, 0, 1, 0.9])
+    plt.tight_layout(rect=[0, 0, 1, 0.925])
     plt.grid(axis="y", alpha=0.3)
     plt.axhline(y=1, color="red", linewidth=0.8, linestyle="--")
 
@@ -280,11 +252,12 @@ def plot_normalized_time(
         spine.set_linewidth(1.75)  # 设置边框宽度为 2.5，可根据需要调整
 
     output_file = os.path.join(
-        out_dir, "sensitivity_mshr"
+        out_dir, "AMR_Frequency_Performance"
     )
     plt.savefig(output_file + ".png")
     plt.savefig(output_file + ".pdf")
     print(f"Plot saved to {output_file}")
+
 
 
 if __name__ == "__main__":
@@ -293,15 +266,10 @@ if __name__ == "__main__":
                         help="Directory path to save the output plots.")
     args = parser.parse_args()
 
-    # Cleaner loop — rebuild from scratch properly
-    baseline_16 = pd.DataFrame(columns=["Benchmark", "Data"])
-    ngat_16     = pd.DataFrame(columns=["Benchmark", "Data"])
-    baseline_32 = pd.DataFrame(columns=["Benchmark", "Data"])
-    ngat_32     = pd.DataFrame(columns=["Benchmark", "Data"])
-    baseline_48 = pd.DataFrame(columns=["Benchmark", "Data"])
-    ngat_48     = pd.DataFrame(columns=["Benchmark", "Data"])
-    baseline_64 = pd.DataFrame(columns=["Benchmark", "Data"])
-    ngat_64     = pd.DataFrame(columns=["Benchmark", "Data"])
+    baseline = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt1     = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt2     = pd.DataFrame(columns=["Benchmark", "Data"])
+    Opt3     = pd.DataFrame(columns=["Benchmark", "Data"])
 
     for benchmark in get_high_mpki_benchmarks():
         def append_row(df, benchmark, input_dir):
@@ -311,23 +279,15 @@ if __name__ == "__main__":
                 ignore_index=True,
             )
 
-        baseline_16 = append_row(baseline_16, benchmark, "../../final_final_data/16_mshr_baseline")
-        ngat_16     = append_row(ngat_16,     benchmark, "../../final_final_data/16_mshr_nbwalker")
-        baseline_32 = append_row(baseline_32, benchmark, "../../final_final_data/baseline")
-        ngat_32     = append_row(ngat_32,     benchmark, "../../final_final_data/nbwalker-full")
-        baseline_48 = append_row(baseline_48,     benchmark, "../../final_final_data/48_mshr_baseline")
-        ngat_48     = append_row(ngat_48,     benchmark, "../../final_final_data/48_mshr_nbwalker")
-        baseline_64 = append_row(baseline_64,     benchmark, "../../final_final_data/64_mshr_baseline")
-        ngat_64     = append_row(ngat_64,     benchmark, "../../final_final_data/64_mshr_nbwalker")
+        baseline = append_row(baseline, benchmark, "../../final_final_data/baseline")
+        Opt1     = append_row(Opt1,     benchmark, "../../final_final_data/250KHz")
+        Opt2     = append_row(Opt2,     benchmark, "../../final_final_data/500KHz")
+        Opt3     = append_row(Opt3,     benchmark, "../../final_final_data/1MHz")
 
     plot_normalized_time(
-        baseline_16=baseline_16.copy(),
-        ngat_16=ngat_16.copy(),
-        baseline_32=baseline_32.copy(),
-        ngat_32=ngat_32.copy(),
-        baseline_48=baseline_48.copy(),
-        ngat_48=ngat_48.copy(),
-        baseline_64=baseline_64.copy(),
-        ngat_64=ngat_64.copy(),
+        baseline=baseline.copy(),
+        Opt1=Opt1.copy(),
+        Opt2=Opt2.copy(),
+        Opt3=Opt3.copy(),
         out_dir=args.outDir,
     )

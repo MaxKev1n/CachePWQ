@@ -140,7 +140,7 @@ def plot_data(
     plt.rcParams["mathtext.it"] = "Arial:italic"
     plt.rcParams["mathtext.bf"] = "Arial:bold"
 
-    plt.figure(figsize=(4.25, 3), dpi=300)
+    plt.figure(figsize=(4.25, 2.65), dpi=300)
     
     # 绘制两组数据
     plt.plot(x_values, df['Walk Occupancy'], label='MSHR for Walk', marker='.', linestyle='-', color="#313A5B")
@@ -149,7 +149,7 @@ def plot_data(
     
     # 添加图表信息
     # plt.xlabel(r'Cycles ($\times 10^4$)', fontsize=28, fontweight='bold')
-    plt.ylabel('Occupancy (%)', fontsize=26, fontweight='bold')
+    plt.ylabel('Occupancy (%)', fontsize=24, fontweight='bold')
     plt.xlim(-x_padding, x_max + x_padding)
     ax = plt.gca()
     plt.xticks(
@@ -161,7 +161,7 @@ def plot_data(
     plt.ylim(0, 100)
     plt.yticks(
         [0, 25, 50, 75, 100],
-        ["0", "25", "50", "75", "100"],
+        ["0", "", "50", "", "100"],
         fontsize=28,
         fontweight="bold",
     )

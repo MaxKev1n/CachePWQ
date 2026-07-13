@@ -34,10 +34,31 @@ def collect_performance_data(benchmark_name: str, input_dir: str) -> float:
             
     return performance_data / all_data
 
+def collect_performance_data_mmu(benchmark_name: str, input_dir: str) -> float:
+    performance_data = 0
+    all_data = 0
+    file_path = os.path.join(input_dir, f"{benchmark_name}.csv")
+    if not os.path.exists(file_path):
+        print(f"Performance data file {file_path} does not exist.")
+        return performance_data
+    df = pd.read_csv(file_path)
+    for _, row in df.iterrows():
+        if "L2_" not in row.iloc[1]:
+            continue
+        
+        if row.iloc[2] == " mmu_access_count":
+            performance_data += row.iloc[3]
+            all_data += row.iloc[3]
+        elif row.iloc[2] == " core_access_count":
+            all_data += row.iloc[3]
+            
+    return performance_data / all_data
+
 
 def plot_normalized_time(
     baseline: pd.DataFrame,
     opt: pd.DataFrame,
+    opt_mmu: pd.DataFrame,
     infinite: pd.DataFrame,
     out_dir: str,
 ) -> None:
@@ -67,9 +88,8 @@ def plot_normalized_time(
     benchmarks = get_high_mpki_benchmarks()
 
     bar_width = 0.1
-    r1 = np.arange(len(benchmarks) + 1) * (3 * bar_width + 0.2)
+    r1 = np.arange(len(benchmarks) + 1) * (2 * bar_width + 0.2)
     r2 = [x + bar_width for x in r1]
-    r3 = [x + bar_width for x in r2]
 
     # Ave
     baseline = pd.concat(
@@ -91,6 +111,18 @@ def plot_normalized_time(
                 {
                     "Benchmark": ["Ave."],
                     "Data": [harmonic_mean(opt["Data"])],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+    opt_mmu = pd.concat(
+        [
+            opt_mmu,
+            pd.DataFrame(
+                {
+                    "Benchmark": ["Ave."],
+                    "Data": [harmonic_mean(opt_mmu["Data"])],
                 }
             ),
         ],
@@ -126,7 +158,7 @@ def plot_normalized_time(
     )
     bar2 = plt.bar(
         r2,
-        opt["Data"],
+        opt_mmu["Data"],
         width=bar_width,
         label="NB-Walker + AMR",
         color="#5D73A1",
@@ -134,13 +166,14 @@ def plot_normalized_time(
         linewidth=1.5,
     )
     bar3 = plt.bar(
-        r3,
-        infinite["Data"],
+        r2,
+        opt["Data"] - opt_mmu["Data"],
         width=bar_width,
-        label="infinite walkers",
-        color="#313A5B",
+        color="#5D73A1",
         edgecolor="black",
         linewidth=1.5,
+        hatch="///",
+        bottom=opt_mmu["Data"],
     )
     # bar3 = plt.bar(
     #     r3,
@@ -202,9 +235,9 @@ def plot_normalized_time(
         #         # arrowprops=dict(arrowstyle="-", color="red", lw=2),
         #     )
 
-    plt.xlim(min(r1) - bar_width, max(r3) + bar_width)
+    plt.xlim(min(r1) - bar_width, max(r2) + bar_width)
     plt.xticks(
-        [r +  1 * bar_width for r in r1],
+        [r + 0.5 * bar_width for r in r1],
         [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["HMean"],
         fontsize=36,
         fontweight="bold",
@@ -216,16 +249,32 @@ def plot_normalized_time(
         fontweight="bold",
     )
     plt.ylim(0, 0.4)
-    plt.legend(
-        loc="upper center",
-        ncol=4,
-        bbox_to_anchor=(0.5, 1),
+    legend_gpc = [
+        Patch(facecolor="#C3D9F1", edgecolor="black", linewidth=1.5, label="baseline"),
+        Patch(facecolor="#5D73A1", edgecolor="black", linewidth=1.5, label="NB-Walker + AMR"),
+    ]
+    legend_type = [
+        Patch(facecolor="white", edgecolor="black", linewidth=1.5, label="Issued from Walker"),
+        Patch(facecolor="white", edgecolor="black", linewidth=1.5, hatch="///", label="Issued from L1"),
+    ]
+
+    leg1 = plt.legend(
+        handles=legend_gpc,
+        loc="upper left", bbox_to_anchor=(0.05, 1.0),
         bbox_transform=plt.gcf().transFigure,
-        frameon=True,
-        fancybox=True,
-        framealpha=0.7,
-        prop={"weight": "bold", "size": 28},
+        frameon=True, fancybox=True, framealpha=0.7,
+        ncol=2, prop={"weight": "bold", "size": 26},
+        title_fontproperties={"weight": "bold", "size": 22},
     )
+    leg2 = plt.legend(
+        handles=legend_type,
+        loc="upper right", bbox_to_anchor=(0.95, 1.0),
+        bbox_transform=plt.gcf().transFigure,
+        frameon=True, fancybox=True, framealpha=0.7,
+        ncol=2, prop={"weight": "bold", "size": 26},
+        title_fontproperties={"weight": "bold", "size": 22},
+    )
+    plt.gca().add_artist(leg1)
     
     plt.tight_layout(rect=[0, 0, 1, 0.925])
     plt.grid(axis="y", alpha=0.3)
@@ -254,6 +303,7 @@ if __name__ == "__main__":
     # Cleaner loop — rebuild from scratch properly
     baseline = pd.DataFrame(columns=["Benchmark", "Data"])
     opt     = pd.DataFrame(columns=["Benchmark", "Data"])
+    opt_mmu   = pd.DataFrame(columns=["Benchmark", "Data"])
     infinite   = pd.DataFrame(columns=["Benchmark", "Data"])
 
     for benchmark in get_high_mpki_benchmarks():
@@ -267,10 +317,21 @@ if __name__ == "__main__":
         baseline = append_row(baseline, benchmark, "../../final_final_data/baseline")
         opt     = append_row(opt,     benchmark, "../../final_final_data/nbwalker-full")
         infinite   = append_row(infinite,   benchmark, "../../final_final_data/infinitewalker")
+        
+    for benchmark in get_high_mpki_benchmarks():
+        def append_row(df, benchmark, input_dir):
+            perf_data = collect_performance_data_mmu(benchmark_name=benchmark, input_dir=input_dir)
+            return pd.concat(
+                [df, pd.DataFrame({"Benchmark": [benchmark], "Data": [perf_data]})],
+                ignore_index=True,
+            )
+
+        opt_mmu   = append_row(opt_mmu,   benchmark, "../../final_final_data/nbwalker-full")
 
     plot_normalized_time(
         baseline=baseline.copy(),
         opt=opt.copy(),
+        opt_mmu=opt_mmu.copy(),
         infinite=infinite.copy(),
         out_dir=args.outDir,
     )

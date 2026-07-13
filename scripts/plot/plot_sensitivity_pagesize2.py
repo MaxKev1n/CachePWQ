@@ -1,9 +1,65 @@
 import argparse
 import os
+import shutil
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from benchmark import get_high_mpki_benchmarks, get_short_name, low_mpki_benchmarks, high_mpki_benchmarks
+
+
+DATA_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "../../final_final_data/sensitivity_pagesize")
+)
+INSTRUCTION_COUNTS = ("1B", "10M", "1M")
+PAGE_SIZES = ("4KB", "32KB", "64KB", "128KB", "2MB")
+
+
+def prepare_best_available_results(page_size: str, benchmarks: list[str]) -> tuple[str, str]:
+    """Collect the largest paired baseline/opt result available per benchmark.
+
+    A result is considered complete when its CSV file exists.  For each benchmark,
+    both configurations must exist at the same instruction count.  The search order
+    is 1B, 10M, then 1M.
+    """
+    page_dir = os.path.join(DATA_ROOT, page_size)
+    baseline_output = os.path.join(page_dir, "baseline")
+    opt_output = os.path.join(page_dir, "opt")
+    os.makedirs(baseline_output, exist_ok=True)
+    os.makedirs(opt_output, exist_ok=True)
+
+    for benchmark in benchmarks:
+        baseline_destination = os.path.join(baseline_output, f"{benchmark}.csv")
+        opt_destination = os.path.join(opt_output, f"{benchmark}.csv")
+
+        # Avoid accidentally reusing a file selected by an earlier invocation.
+        for destination in (baseline_destination, opt_destination):
+            if os.path.exists(destination):
+                os.remove(destination)
+
+        for instruction_count in INSTRUCTION_COUNTS:
+            baseline_source = os.path.join(
+                page_dir,
+                f"BaselineMMU_{page_size}_{instruction_count}",
+                f"{benchmark}.csv",
+            )
+            opt_source = os.path.join(
+                page_dir,
+                f"nbwalkerfull_{page_size}_{instruction_count}",
+                f"{benchmark}.csv",
+            )
+
+            if os.path.isfile(baseline_source) and os.path.isfile(opt_source):
+                shutil.copy2(baseline_source, baseline_destination)
+                shutil.copy2(opt_source, opt_destination)
+                print(f"[{page_size}] {benchmark}: selected {instruction_count}")
+                break
+        else:
+            print(
+                f"Warning: [{page_size}] {benchmark} has no paired results "
+                f"at 1B, 10M, or 1M."
+            )
+
+    return baseline_output, opt_output
 
 
 def geometric_mean(df: pd.DataFrame) -> float:
@@ -51,15 +107,17 @@ def collect_performance_data(benchmark_name: str, input_dir: str) -> float:
     for _, row in df.iterrows():
         if row.iloc[2] == " inst_count":
             inst_count += row.iloc[3]
-            
-    print(f"Benchmark: {file_path}, Kernel Time: {kernel_time}, Instruction Count: {inst_count}")
         
     return float(inst_count) / float(kernel_time) if kernel_time != 0 else 0
 
 def plot_normalized_time(
+    baseline_4K: pd.DataFrame,
+    baseline_32K: pd.DataFrame,
     baseline_64K: pd.DataFrame,
     baseline_128K: pd.DataFrame,
     baseline_2M: pd.DataFrame,
+    opt_4K: pd.DataFrame,
+    opt_32K: pd.DataFrame,
     opt_64K: pd.DataFrame,
     opt_128K: pd.DataFrame,
     opt_2M: pd.DataFrame,
@@ -85,16 +143,34 @@ def plot_normalized_time(
     plt.rcParams["mathtext.it"] = "Arial:italic"
     plt.rcParams["mathtext.bf"] = "Arial:bold"
 
-    plt.figure(figsize=(20, 4.5), dpi=300)
+    plt.figure(figsize=(20, 5), dpi=300)
 
     benchmarks = get_high_mpki_benchmarks()
 
     bar_width = 0.15
-    r1 = np.arange(len(benchmarks) + 1) * (3 * bar_width + 0.2)
+    r1 = np.arange(len(benchmarks) + 1) * (5 * bar_width + 0.2)
     r2 = [x + bar_width for x in r1]
     r3 = [x + bar_width for x in r2]
+    r4 = [x + bar_width for x in r3]
+    r5 = [x + bar_width for x in r4]
 
     # Normalize the time
+    opt_4K["Data"] = [
+        (
+            opt_4K["Data"][i] / baseline_4K["Data"][i]
+            if opt_4K["Data"][i] != 0 and baseline_4K["Data"][i] != 0
+            else 0
+        )
+        for i in range(len(benchmarks))
+    ]
+    opt_32K["Data"] = [
+        (
+            opt_32K["Data"][i] / baseline_32K["Data"][i]
+            if opt_32K["Data"][i] != 0 and baseline_32K["Data"][i] != 0
+            else 0
+        )
+        for i in range(len(benchmarks))
+    ]
     opt_64K["Data"] = [
         (
             opt_64K["Data"][i] / baseline_64K["Data"][i]
@@ -119,7 +195,37 @@ def plot_normalized_time(
         )
         for i in range(len(benchmarks))
     ]
+    
+    print("opt_4K Data:", opt_4K["Data"].tolist())
+    print("opt_32K Data:", opt_32K["Data"].tolist())
+    print("opt_64K Data:", opt_64K["Data"].tolist())
+    print("opt_128K Data:", opt_128K["Data"].tolist())
+    print("opt_2M Data:", opt_2M["Data"].tolist())
 
+    opt_4K = pd.concat(
+        [
+            opt_4K,
+            pd.DataFrame(
+                {
+                    "Benchmark": ["Ave."],
+                    "Data": [harmonic_mean(opt_4K["Data"])],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+    opt_32K = pd.concat(
+        [
+            opt_32K,
+            pd.DataFrame(
+                {
+                    "Benchmark": ["Ave."],
+                    "Data": [harmonic_mean(opt_32K["Data"])],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
     opt_64K = pd.concat(
         [
             opt_64K,
@@ -156,59 +262,74 @@ def plot_normalized_time(
         ],
         ignore_index=True,
     )
-    print("opt_64K Data:", opt_64K["Data"].tolist())
-    print("opt_128K Data:", opt_128K["Data"].tolist())
-    print("opt_2M Data:", opt_2M["Data"].tolist())
 
     bar1 = plt.bar(
         r1,
-        opt_64K["Data"],
+        opt_4K["Data"],
         width=bar_width,
-        label="64KB Page Size",
-        color="#C3D9F1",
+        label="4KB",
+        color="#8D2E2C",
         edgecolor="black",
         linewidth=1.5,
     )
     bar2 = plt.bar(
         r2,
-        opt_128K["Data"],
+        opt_32K["Data"],
         width=bar_width,
-        label="128KB Page Size",
-        color="#5D73A1",
+        label="32KB",
+        color="#FDE4EA",
         edgecolor="black",
         linewidth=1.5,
     )
     bar3 = plt.bar(
         r3,
+        opt_64K["Data"],
+        width=bar_width,
+        label="64KB",
+        color="#C3D9F1",
+        edgecolor="black",
+        linewidth=1.5,
+    )
+    bar4 = plt.bar(
+        r4,
+        opt_128K["Data"],
+        width=bar_width,
+        label="128KB",
+        color="#5D73A1",
+        edgecolor="black",
+        linewidth=1.5,
+    )
+    bar5 = plt.bar(
+        r5,
         opt_2M["Data"],
         width=bar_width,
-        label="2MB Page Size",
+        label="2MB",
         color="#313A5B",
         edgecolor="black",
         linewidth=1.5,
     )
 
-    for bar in bar1 + bar2 + bar3:
+    for bar in bar1 + bar2 + bar3 + bar4 + bar5:
         height = bar.get_height()
         x = bar.get_x() + bar.get_width() / 2
 
-        if height >= 5.9:
-            plt.annotate(
-                f"{height:.2f}",
-                xy=(x, 5.25),
-                xytext=(0, 0),  # 相对偏移 (0,15) 表示向上15pt
-                textcoords="offset points",
-                ha="center",
-                va="bottom",
-                fontsize=24,
-                fontweight="bold",
-                bbox=dict(
-                    facecolor="white",
-                    edgecolor="black",
-                    boxstyle="round,pad=0.1",
-                ),
-                # arrowprops=dict(arrowstyle="-", color="red", lw=2),
-            )
+        # if height >= 4:
+        #     plt.annotate(
+        #         f"{height:.2f}",
+        #         xy=(x, 3.65),
+        #         xytext=(0, 0),  # 相对偏移 (0,15) 表示向上15pt
+        #         textcoords="offset points",
+        #         ha="center",
+        #         va="bottom",
+        #         fontsize=22,
+        #         fontweight="bold",
+        #         bbox=dict(
+        #             facecolor="white",
+        #             edgecolor="black",
+        #             boxstyle="round,pad=0.1",
+        #         ),
+        #         # arrowprops=dict(arrowstyle="-", color="red", lw=2),
+        #     )
         # else:
         #     plt.annotate(
         #         f"{height:.2f}",
@@ -228,14 +349,14 @@ def plot_normalized_time(
         #         # arrowprops=dict(arrowstyle="-", color="red", lw=2),
         #     )
 
-    plt.xlim(min(r1) - bar_width, max(r3) + bar_width)
+    plt.xlim(min(r1) - bar_width, max(r5) + bar_width)
     plt.xticks(
-        [r + 1 * bar_width for r in r1],
+        [r + 2 * bar_width for r in r1],
         [get_short_name(benchmarks[i]) for i in range(len(benchmarks))] + ["HMean"],
         fontsize=36,
         fontweight="bold",
     )
-    plt.ylabel("Norm. IPC", fontsize=36, fontweight="bold")
+    plt.ylabel("Speedup", fontsize=36, fontweight="bold")
     plt.yticks(
         np.arange(0, 6.1, 2),
         fontsize=36,
@@ -244,7 +365,7 @@ def plot_normalized_time(
     plt.ylim(0, 6)
     plt.legend(
         loc="upper center",
-        ncol=3,
+        ncol=5,
         bbox_to_anchor=(0.5, 1),
         bbox_transform=plt.gcf().transFigure,  # 使用图形坐标系
         frameon=True,
@@ -252,7 +373,7 @@ def plot_normalized_time(
         framealpha=0.7,
         prop={"weight": "bold", "size": 28},
     )
-    plt.tight_layout(rect=[0, 0, 1, 0.9])
+    plt.tight_layout(rect=[0, 0, 1, 0.925])
     plt.grid(axis="y", alpha=0.3)
     plt.axhline(y=1, color="red", linewidth=0.8, linestyle="--")
 
@@ -277,14 +398,24 @@ if __name__ == "__main__":
                         help="Directory path to save the output plots.")
     args = parser.parse_args()
 
+    baseline_4K = pd.DataFrame(columns=["Benchmark", "Data"])
+    baseline_32K = pd.DataFrame(columns=["Benchmark", "Data"])
     baseline_64K = pd.DataFrame(columns=["Benchmark", "Data"])
     baseline_128K = pd.DataFrame(columns=["Benchmark", "Data"])
     baseline_2M = pd.DataFrame(columns=["Benchmark", "Data"])
+    opt_4K = pd.DataFrame(columns=["Benchmark", "Data"])
+    opt_32K = pd.DataFrame(columns=["Benchmark", "Data"])
     opt_64K = pd.DataFrame(columns=["Benchmark", "Data"])
     opt_128K = pd.DataFrame(columns=["Benchmark", "Data"])
     opt_2M = pd.DataFrame(columns=["Benchmark", "Data"])
 
-    for benchmark in get_high_mpki_benchmarks():
+    benchmarks = get_high_mpki_benchmarks()
+    selected_dirs = {
+        page_size: prepare_best_available_results(page_size, benchmarks)
+        for page_size in PAGE_SIZES
+    }
+
+    for benchmark in benchmarks:
         def append_row(df, benchmark, input_dir):
             perf_data = collect_performance_data(benchmark_name=benchmark, input_dir=input_dir)
             return pd.concat(
@@ -292,17 +423,25 @@ if __name__ == "__main__":
                 ignore_index=True,
             )
 
-        baseline_64K  = append_row(baseline_64K, benchmark, "../../final_final_data/baseline_64KB")
-        baseline_128K = append_row(baseline_128K, benchmark, "../../final_final_data/baseline_128KB")
-        baseline_2M  = append_row(baseline_2M, benchmark, "../../final_final_data/baseline_2MB")
-        opt_64K   = append_row(opt_64K,    benchmark, "../../final_final_data/nbwalkerfull_64KB")
-        opt_128K  = append_row(opt_128K,   benchmark, "../../final_final_data/nbwalkerfull_128KB")
-        opt_2M    = append_row(opt_2M,     benchmark, "../../final_final_data/nbwalkerfull_2MB")
+        baseline_4K = append_row(baseline_4K, benchmark, selected_dirs["4KB"][0])
+        baseline_32K = append_row(baseline_32K, benchmark, selected_dirs["32KB"][0])
+        baseline_64K = append_row(baseline_64K, benchmark, selected_dirs["64KB"][0])
+        baseline_128K = append_row(baseline_128K, benchmark, selected_dirs["128KB"][0])
+        baseline_2M = append_row(baseline_2M, benchmark, selected_dirs["2MB"][0])
+        opt_4K = append_row(opt_4K, benchmark, selected_dirs["4KB"][1])
+        opt_32K = append_row(opt_32K, benchmark, selected_dirs["32KB"][1])
+        opt_64K = append_row(opt_64K, benchmark, selected_dirs["64KB"][1])
+        opt_128K = append_row(opt_128K, benchmark, selected_dirs["128KB"][1])
+        opt_2M = append_row(opt_2M, benchmark, selected_dirs["2MB"][1])
 
     plot_normalized_time(
+        baseline_4K=baseline_4K,
+        baseline_32K=baseline_32K,
         baseline_64K=baseline_64K,
         baseline_128K=baseline_128K,
         baseline_2M=baseline_2M,
+        opt_4K=opt_4K,
+        opt_32K=opt_32K,
         opt_64K=opt_64K,
         opt_128K=opt_128K,
         opt_2M=opt_2M,

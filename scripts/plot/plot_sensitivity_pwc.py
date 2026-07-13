@@ -73,7 +73,7 @@ def plot_normalized_time(
     plt.rcParams["mathtext.bf"] = "Arial:bold"
     plt.rcParams["hatch.linewidth"] = 2.0
 
-    plt.figure(figsize=(20, 5), dpi=300)
+    plt.figure(figsize=(20, 4.5), dpi=300)
 
     benchmarks = get_high_mpki_benchmarks()
 
@@ -192,7 +192,7 @@ def plot_normalized_time(
         r1,
         nbwalker_32["Data"],
         width=bar_width,
-        label=r"32 Entries (0.25$\times$)",
+        label=r"32 Entries",
         color="#8D2E2C",
         edgecolor="black",
         linewidth=1.5,
@@ -201,7 +201,7 @@ def plot_normalized_time(
         r2,
         nbwalker_64["Data"],
         width=bar_width,
-        label=r"64 Entries (0.5$\times$)",
+        label=r"64 Entries",
         color="#FDE4EA",
         edgecolor="black",
         linewidth=1.5,
@@ -210,7 +210,7 @@ def plot_normalized_time(
         r3,
         nbwalker_128["Data"],
         width=bar_width,
-        label=r"128 Entries (1$\times$)",
+        label=r"128 Entries",
         color="#C3D9F1",
         edgecolor="black",
         linewidth=1.5,
@@ -219,7 +219,7 @@ def plot_normalized_time(
         r4,
         nbwalker_256["Data"],
         width=bar_width,
-        label=r"256 Entries (2$\times$)",
+        label=r"256 Entries",
         color="#5D73A1",
         edgecolor="black",
         linewidth=1.5,
@@ -228,7 +228,7 @@ def plot_normalized_time(
         r5,
         nbwalker_512["Data"],
         width=bar_width,
-        label=r"512 Entries (4$\times$)",
+        label=r"512 Entries",
         color="#313A5B",
         edgecolor="black",
         linewidth=1.5,
@@ -291,7 +291,7 @@ def plot_normalized_time(
     
     plt.legend(
         loc="upper center",
-        ncol=3,
+        ncol=5,
         bbox_to_anchor=(0.5, 1),
         bbox_transform=plt.gcf().transFigure,
         frameon=True,
@@ -300,7 +300,7 @@ def plot_normalized_time(
         prop={"weight": "bold", "size": 26},
     )
     
-    plt.tight_layout(rect=[0, 0, 1, 0.85])
+    plt.tight_layout(rect=[0, 0, 1, 0.925])
     plt.grid(axis="y", alpha=0.3)
     plt.axhline(y=1, color="red", linewidth=0.8, linestyle="--")
 
