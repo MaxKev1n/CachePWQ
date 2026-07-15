@@ -33,21 +33,19 @@ high_mpki_benchmarks = [
 
 
 memory_overhead = {
-    "convolution2d": 3487,
-    "fastwalshtransform": 2537,
-    "gups": 1925,
-    "jacobi1d": 8728,
-    "jacobi2d": 3487,
-    "kmeans": 3843,
-    "matrixtranspose": 2289,
-    "mis": 2276,
-    "pagerank": 5386,
-    "shoc-reduction": 6704,
-    "simpleconvolution": 8696,
-    "stencil2d": 2121,
-    "syr2k": 2009,
-    "syrk": 2030,
-    "spmv": 7130,
+    "fastwalshtransform": 12817,
+    "gups": 51142,
+    "jacobi1d": 43281,
+    "jacobi2d": 47072,
+    "kmeans": 28810,
+    "matrixtranspose": 21837,
+    "mis": 8281,
+    "pagerank": 31996,
+    "spmv": 43753,
+    "shoc-reduction": 36918,
+    "simpleconvolution": 33928,
+    "stencil2d": 91556,
+    "gesummv": 45778,
 }
 
 
