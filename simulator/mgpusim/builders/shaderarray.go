@@ -300,9 +300,9 @@ func (b *shaderArrayBuilder) buildCaPWQL6Components(sa *shaderArray) {
 	b.buildL1SCache(sa)
 
 	b.buildL1ITLB(sa)
-	b.buildCaPWQL1IAddressTranslator(sa)
+	b.buildL1IAddressTranslator(sa)
 	b.buildL1IReorderBuffer(sa)
-	b.buildCaPWQL6L1ICache(sa)
+	b.buildL1ICache(sa)
 }
 
 func (b *shaderArrayBuilder) connectComponents(sa *shaderArray) {
