@@ -135,14 +135,6 @@ var customHSL = flag.Uint64("custom-hsl", 1,
 	"Specify the value of custom HSL directly to the builder")
 var yamlConfigFile = flag.String("yaml-config-file", "",
 	"Specify the path to a yaml config file to override default config values.")
-var GlobalNoCConfigFile = flag.String("global-noc-config-file", "",
-	"Specify the path to a booksim config file to configure the Global NoC.")
-var MemoryConfigFile = flag.String("memory-noc-config-file", "",
-	"Specify the path to a booksim config file to configure the Memory NoC.")
-var TLBConfigFile = flag.String("tlb-noc-config-file", "",
-	"Specify the path to a booksim config file to configure the TLB NoC.")
-var booksimDir = flag.String("booksim-dir", "",
-	"Specify the path to the booksim directory.")
 var monitorTLBFlag = flag.Bool("tlb-monitor", false,
 	"Enable the TLB monitor that tracks the number of the TLB queues.")
 var monitorCaPWQFlag = flag.Bool("capwq-monitor", false,
@@ -204,16 +196,6 @@ type TLBHitRateTracer struct {
 type CDMAAccessTracer struct {
 	tracer     *tracing.StepCountTracer
 	cdmaEngine akita.Component
-}
-
-type BookSimAccessTracer struct {
-	tracer *tracing.StepCountTracer
-	noc    tracing.NamedHookable
-}
-
-type BookSimLatencyTracer struct {
-	tracer *tracing.NocTracer
-	noc    tracing.NamedHookable
 }
 
 type L2AccessSourceTracer struct {
@@ -361,8 +343,6 @@ type Runner struct {
 	RTUTransactionCounters           []rtuTransactionCountTracer
 	CDMAAccessTracers                []CDMAAccessTracer
 	PageAccessTracers                []CDMAAccessTracer
-	BookSimAccessTracers             []BookSimAccessTracer
-	BookSimLatencyTracers            []BookSimLatencyTracer
 	L2AccessSourceTracers            []L2AccessSourceTracer
 	DRAMAccessSourceTracers          []DRAMAccessSourceTracer
 	RTUAccessTracers                 []RTUAccessTracer
@@ -426,7 +406,6 @@ type Runner struct {
 	ReportDRAMTransactionCount       bool
 	ReportRDMATransactionCount       bool
 	ReportCDMATransactionCount       bool
-	ReportBookSimNoc                 bool
 	ReportRTUTransactionCount        bool
 	ReportActiveWalkerCount          bool
 	L3TLBSQLTracing                  bool
@@ -605,7 +584,6 @@ func (r *Runner) ParseFlag() *Runner {
 		r.ReportTLBSetMissTracing = true
 		r.ReportTLBMSHRStallTracing = true
 		r.ReportTLBReqStalls = true
-		r.ReportBookSimNoc = true
 	}
 
 	// who decides what is essential?
@@ -694,7 +672,6 @@ func (r *Runner) Init() *Runner {
 	r.addPWCHitRateTracer()
 	r.addRDMAEngineTracer()
 	r.addCDMAEngineTracer()
-	r.addBookSimTracer()
 	r.addRTUTracer()
 	r.addActiveWalkerTracer()
 	r.addL3TLBQueueingImbalanceTracer()
@@ -1123,8 +1100,6 @@ func (r *Runner) buildTimingPlatform() {
 		b.WithSchedulingPartition(*schedulingPartition)
 		b.WithMemAllocatorType(*memAllocatorType)
 		b.WithLog2PageSize(*log2PageSize)
-		b.WithBookSimGlobal(*GlobalNoCConfigFile)
-		b.WithBookSimDir(*booksimDir)
 		r.Engine, r.GPUDriver = b.Build()
 	case "privateh2tlb":
 		b := platform.MakePrivateH2TLBPlatformBuilder()
@@ -2470,42 +2445,6 @@ func (r *Runner) addRDMAEngineTracer() {
 	}
 }
 
-func (r *Runner) addBookSimTracer() {
-	if !r.ReportBookSimNoc {
-		return
-	}
-
-	for _, gpu := range r.GPUDriver.GPUs {
-		for _, noc := range gpu.NoCs {
-			t := BookSimAccessTracer{}
-			t.noc = noc.(tracing.NamedHookable)
-
-			tracer := tracing.NewStepCountTracer(
-				func(task tracing.Task) bool { /*return true*/
-					return task.Kind == "req_in"
-				})
-			t.tracer = tracer
-			tracing.CollectTrace(t.noc, t.tracer)
-
-			r.BookSimAccessTracers = append(r.BookSimAccessTracers, t)
-		}
-
-		for _, noc := range gpu.NoCs {
-			t := BookSimLatencyTracer{}
-			t.noc = noc.(tracing.NamedHookable)
-
-			tracer := tracing.NewNocTracer(
-				func(task tracing.Task) bool { /*return true*/
-					return task.Kind == "req_out"
-				})
-			t.tracer = tracer
-			tracing.CollectTrace(t.noc, t.tracer)
-
-			r.BookSimLatencyTracers = append(r.BookSimLatencyTracers, t)
-		}
-	}
-}
-
 func (r *Runner) addRTUTracer() {
 	if !r.ReportRTUTransactionCount {
 		return
@@ -3213,7 +3152,6 @@ func (r *Runner) reportStats() {
 	r.reportTLBMSHRStallTracing()
 	r.reportTLBReqStalls()
 	r.reportTLBMonitor()
-	r.reportBookSimTracer()
 	r.reportMMUCacheReqLatency()
 
 	if *platformType != "ideal" {
@@ -3879,53 +3817,6 @@ func (r *Runner) reportRDMATransactionCount() {
 			t.rdmaEngine.Name(),
 			"incoming_trans_count",
 			float64(t.incomingTracer.TotalCount()),
-		)
-	}
-}
-
-func (r *Runner) reportBookSimTracer() {
-	for _, t := range r.BookSimAccessTracers {
-		noc := t.noc
-		booksimAccessTracer := t.tracer
-		for _, step := range booksimAccessTracer.GetStepNames() {
-			r.metricsCollector.Collect(
-				noc.Name(),
-				"BookSimNocTraffic: "+step,
-				float64(booksimAccessTracer.GetStepCount(step)),
-			)
-		}
-	}
-
-	for _, t := range r.BookSimLatencyTracers {
-		r.metricsCollector.Collect(
-			t.noc.Name(),
-			"total_count",
-			float64(t.tracer.TotalCount()),
-		)
-		r.metricsCollector.Collect(
-			t.noc.Name(),
-			"total_latency",
-			float64(t.tracer.AverageTime()),
-		)
-		r.metricsCollector.Collect(
-			t.noc.Name(),
-			"translation_count",
-			float64(t.tracer.TranslationCount()),
-		)
-		r.metricsCollector.Collect(
-			t.noc.Name(),
-			"translation_latency",
-			float64(t.tracer.TranslationAvgTime()),
-		)
-		r.metricsCollector.Collect(
-			t.noc.Name(),
-			"data_count",
-			float64(t.tracer.DataCount()),
-		)
-		r.metricsCollector.Collect(
-			t.noc.Name(),
-			"data_latency",
-			float64(t.tracer.DataAvgTime()),
 		)
 	}
 }

@@ -311,7 +311,7 @@ func (walker *CaPWQPageWalker) sendWriteReqToL1V(now akita.VTimeInSec) {
 	lowModules := walker.mmu.VCacheLowModuleFinder.(*cache.XORLowModuleFinder).LowModules
 	dstPort := lowModules[walker.mmu.vRR%uint64(len(lowModules))]
 
-	block := vm.CaPWQBlock{
+	block := vm.NBWalkerBlock{
 		PID:           trans.pid,
 		Address:       trans.Address,
 		PPNWithOffset: PPNWithOffset,
@@ -559,7 +559,7 @@ func (impl *NBWalkerMMU) handleL1ReadResponse(rsp *mem.DataReadyRsp, now akita.V
 		return false
 	}
 
-	block := rsp.Info.(vm.CaPWQBlock)
+	block := rsp.Info.(vm.NBWalkerBlock)
 
 	newTrans := &transactionImpl{
 		state:   l1Done,
