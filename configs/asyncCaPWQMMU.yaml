@@ -1,8 +1,0 @@
-# =============================
-# MMU Configuration Template
-# =============================
-
-MMU:
-  type: "AsyncCaPWQMMU"
-
-  numPageWalkers: 32
