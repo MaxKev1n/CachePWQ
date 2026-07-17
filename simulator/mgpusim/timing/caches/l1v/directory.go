@@ -97,15 +97,8 @@ func (d *directory) processMSHRHit(
 
 	if trans.read != nil {
 		tracing.AddTaskStep(trans.id, now, d.cache, "read-mshr-hit")
-
-		what := "l1_read_hits"
-		if d.cache.isInstCache {
-			what = "l1i_hits"
-		}
-		tracing.AddTaskStep("PowerStat", now, d.cache, what)
 	} else {
 		tracing.AddTaskStep(trans.id, now, d.cache, "write-mshr-hit")
-		tracing.AddTaskStep("PowerStat", now, d.cache, "l1_write_hits")
 	}
 
 	return true
@@ -134,12 +127,6 @@ func (d *directory) processReadHit(
 	d.cache.dirBuf.Pop()
 	d.numExecutedReqs++
 	tracing.AddTaskStep(trans.id, now, d.cache, "read-hit")
-
-	what := "l1_read_hits"
-	if d.cache.isInstCache {
-		what = "l1i_hits"
-	}
-	tracing.AddTaskStep("PowerStat", now, d.cache, what)
 
 	return true
 }
@@ -172,12 +159,6 @@ func (d *directory) processReadMiss(
 	d.numExecutedReqs++
 	tracing.AddTaskStep(trans.id, now, d.cache, "read-miss")
 
-	what := "l1_read_misses"
-	if d.cache.isInstCache {
-		what = "l1i_misses"
-	}
-	tracing.AddTaskStep("PowerStat", now, d.cache, what)
-
 	d.status = profile.BASE
 
 	return true
@@ -207,7 +188,6 @@ func (d *directory) processWrite(
 		ok := d.processWriteHit(now, trans, block)
 		if ok {
 			tracing.AddTaskStep(trans.id, now, d.cache, "write-hit")
-			tracing.AddTaskStep("PowerStat", now, d.cache, "l1_write_hits")
 		}
 
 		return ok
@@ -220,7 +200,6 @@ func (d *directory) processWrite(
 	ok := d.fullLineWriteMiss(now, trans)
 	if ok {
 		tracing.AddTaskStep(trans.id, now, d.cache, "write-miss")
-		tracing.AddTaskStep("PowerStat", now, d.cache, "l1_write_misses")
 	}
 
 	return ok
@@ -283,7 +262,6 @@ func (d *directory) partialWriteMiss(
 	d.cache.dirBuf.Pop()
 	d.numExecutedReqs++
 	tracing.AddTaskStep(trans.id, now, d.cache, "write-miss")
-	tracing.AddTaskStep("PowerStat", now, d.cache, "l1_write_misses")
 
 	d.status = profile.BASE
 

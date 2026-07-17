@@ -266,21 +266,6 @@ func (e *BookSimEndPoint) parseFromDevice(now akita.VTimeInSec) bool {
 
 	e.nocPort.Retrieve(now)
 
-	numFlits := (item.Meta().TrafficBytes + 40) / 40
-
-	what := "num_flits_cu_to_mem"
-	if e.isMemorySide {
-		what = "num_flits_mem_to_cu"
-	}
-
-	tracing.AddTaskStepWithDetail(
-		"PowerStat",
-		now,
-		e.noc,
-		what,
-		uint64(numFlits),
-	)
-
 	return true
 }
 

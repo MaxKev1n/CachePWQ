@@ -1,7 +1,6 @@
 package cu
 
 import (
-	"log"
 	"math/bits"
 
 	"gitlab.com/akita/akita"
@@ -92,14 +91,6 @@ func (u *SIMDUnit) runExecStage(now akita.VTimeInSec) bool {
 	u.logPipelineTask(now, u.toExec.DynamicInst(), true)
 	u.cu.logInstTask(now, u.toExec, u.toExec.DynamicInst(), true)
 
-	tracing.AddTaskStepWithDetail(
-		"PowerStat",
-		now,
-		u.cu,
-		"total_active_lanes",
-		u.toExec.NumActiveThreads(),
-	)
-
 	u.IncExecStat(u.toExec.Inst(), u.toExec.EXEC)
 
 	u.toExec = nil
@@ -110,56 +101,6 @@ func (u *SIMDUnit) IncExecStat(inst *insts.Inst, mask uint64) {
 	activeCount := uint64(bits.OnesCount64(mask))
 	if activeCount == 0 {
 		return
-	}
-
-	switch inst.OperationType() {
-	case insts.OpcodeType_IALU:
-		tracing.AddTaskStepWithDetail(
-			"PowerStat",
-			0,
-			u.cu,
-			"iAlu_accesses",
-			activeCount,
-		)
-		tracing.AddTaskStepWithDetail(
-			"PowerStat",
-			0,
-			u.cu,
-			"active_sp_lanes",
-			activeCount,
-		)
-	case insts.OpcodeType_FPU:
-		tracing.AddTaskStepWithDetail(
-			"PowerStat",
-			0,
-			u.cu,
-			"fpu_accesses",
-			activeCount,
-		)
-		tracing.AddTaskStepWithDetail(
-			"PowerStat",
-			0,
-			u.cu,
-			"active_sp_lanes",
-			activeCount,
-		)
-	case insts.OpcodeType_SFU:
-		tracing.AddTaskStepWithDetail(
-			"PowerStat",
-			0,
-			u.cu,
-			"SFU_accesses",
-			activeCount*4,
-		)
-		tracing.AddTaskStepWithDetail(
-			"PowerStat",
-			0,
-			u.cu,
-			"active_sfu_lanes",
-			activeCount*4,
-		)
-	default:
-		log.Panicf("Unknown opcode type for instruction %s", inst.InstName)
 	}
 }
 
