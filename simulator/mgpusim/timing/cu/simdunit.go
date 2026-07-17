@@ -1,11 +1,8 @@
 package cu
 
 import (
-	"math/bits"
-
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mgpusim/emu"
-	"gitlab.com/akita/mgpusim/insts"
 	"gitlab.com/akita/mgpusim/timing/wavefront"
 	"gitlab.com/akita/util/tracing"
 )
@@ -91,17 +88,8 @@ func (u *SIMDUnit) runExecStage(now akita.VTimeInSec) bool {
 	u.logPipelineTask(now, u.toExec.DynamicInst(), true)
 	u.cu.logInstTask(now, u.toExec, u.toExec.DynamicInst(), true)
 
-	u.IncExecStat(u.toExec.Inst(), u.toExec.EXEC)
-
 	u.toExec = nil
 	return true
-}
-
-func (u *SIMDUnit) IncExecStat(inst *insts.Inst, mask uint64) {
-	activeCount := uint64(bits.OnesCount64(mask))
-	if activeCount == 0 {
-		return
-	}
 }
 
 // Flush flushes
