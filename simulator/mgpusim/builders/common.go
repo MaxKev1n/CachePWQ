@@ -19,7 +19,6 @@ import (
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/pagemigrationcontroller"
-	"gitlab.com/akita/mgpusim/power"
 	"gitlab.com/akita/mgpusim/rdma"
 	"gitlab.com/akita/mgpusim/remotetranslation"
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
@@ -373,10 +372,6 @@ func (b *CommonBuilder) collectSAComponents(
 		chiplet.CUs = append(chiplet.CUs, cu)
 
 		b.gpu.ALUs = append(b.gpu.ALUs, cu.ALU)
-
-		if power.Model != nil {
-			power.Model.CUs = append(power.Model.CUs, cu)
-		}
 	}
 
 	for _, rob := range sa.l1vROBs {

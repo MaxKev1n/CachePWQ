@@ -49,7 +49,6 @@ type CommonPlatformBuilder struct {
 	useTLBMonitor   bool
 	useCaPWQMonitor bool
 	useCacheTEA     bool
-	usePowerModel   bool
 }
 
 // Makebuilder creates a EmuBuilder with default parameters.
@@ -158,10 +157,6 @@ func (b *CommonPlatformBuilder) WithCaPWQMonitor() {
 
 func (b *CommonPlatformBuilder) WithCacheTEA() {
 	b.useCacheTEA = true
-}
-
-func (b *CommonPlatformBuilder) WithPowerModel() {
-	b.usePowerModel = true
 }
 
 // // WithNumChiplets sets the number of chiplets in the mcm GPU.

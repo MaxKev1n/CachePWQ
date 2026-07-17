@@ -7,7 +7,6 @@ import (
 	"github.com/vbauerster/mpb/v4/decor"
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mgpusim/kernels"
-	"gitlab.com/akita/mgpusim/power"
 	"gitlab.com/akita/mgpusim/protocol"
 	"gitlab.com/akita/mgpusim/timing/cp/internal/resource"
 	"gitlab.com/akita/util/tracing"
@@ -217,8 +216,6 @@ func (d *DispatcherImpl) completeKernel(now akita.VTimeInSec) (
 
 	if err == nil {
 		d.dispatching = nil
-
-		power.End(now)
 
 		tracing.TraceReqComplete(req, now, d.cp)
 		tracing.AddTaskStepWithKind(
