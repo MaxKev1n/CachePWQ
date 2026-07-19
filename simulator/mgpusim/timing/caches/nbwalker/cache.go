@@ -1,4 +1,4 @@
-package l1v
+package NBWalker
 
 import (
 	"gitlab.com/akita/akita"
@@ -15,6 +15,8 @@ type Cache struct {
 	TopPort     akita.Port
 	BottomPort  akita.Port
 	ControlPort akita.Port
+	WalkerPort  akita.Port
+	PageWalker  akita.Port
 
 	numReqPerCycle   int
 	log2BlockSize    uint64
@@ -25,10 +27,12 @@ type Cache struct {
 	wayAssociativity int
 	lowModuleFinder  cache.LowModuleFinder
 
-	dirBuf   util.Buffer
-	bankBufs []util.Buffer
+	dirBuf       util.Buffer
+	walkerDirBuf util.Buffer
+	bankBufs     []util.Buffer
 
 	coalesceStage    *coalescer
+	walkerStage      *walkerStage
 	directoryStage   *directory
 	bankStages       []*bankStage
 	parseBottomStage *bottomParser
@@ -43,11 +47,15 @@ type Cache struct {
 	isInstCache bool
 
 	monitorStats *monitor.CaPWQMonitorStats
+
+	extendBits uint64
+	offsetMask uint64
+
+	numReservedPTWEntry int
 }
 
 func (c *Cache) SentCommand(info interface{}) {
-	//TODO implement me
-	panic("implement me")
+	c.numReservedPTWEntry = info.(int)
 }
 
 func (c *Cache) InitMonitorStats() {
@@ -88,6 +96,7 @@ func (c *Cache) runPipeline(now akita.VTimeInSec) bool {
 	madeProgress = c.tickBankStage(now) || madeProgress
 	madeProgress = c.tickDirectoryStage(now) || madeProgress
 	madeProgress = c.tickCoalesceState(now) || madeProgress
+	madeProgress = c.tickWalkerStage(now) || madeProgress
 	return madeProgress
 }
 
@@ -125,6 +134,14 @@ func (c *Cache) tickDirectoryStage(now akita.VTimeInSec) bool {
 	return madeProgress
 }
 
+func (c *Cache) tickWalkerStage(now akita.VTimeInSec) bool {
+	madeProgress := false
+	for i := 0; i < c.numReqPerCycle; i++ {
+		madeProgress = c.walkerStage.Tick(now) || madeProgress
+	}
+	return madeProgress
+}
+
 func (c *Cache) tickCoalesceState(now akita.VTimeInSec) bool {
 	madeProgress := false
 	for i := 0; i < c.numReqPerCycle; i++ {
@@ -145,6 +162,10 @@ func (c *Cache) GetControlPort() akita.Port {
 	return c.ControlPort
 }
 
+func (c *Cache) GetName() string {
+	return c.Name()
+}
+
 func (c *Cache) GetWalkerPort() akita.Port {
-	return nil
+	return c.WalkerPort
 }

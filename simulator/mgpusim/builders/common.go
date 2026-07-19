@@ -14,13 +14,11 @@ import (
 	"gitlab.com/akita/mem/idealmemcontroller"
 	"gitlab.com/akita/mem/vm/addresstranslator"
 	"gitlab.com/akita/mem/vm/mmu"
-	"gitlab.com/akita/mem/vm/mmu/asyncCaPWQ"
 	"gitlab.com/akita/mem/vm/mmu/baseline"
 	"gitlab.com/akita/mem/vm/mmu/mpw"
 	"gitlab.com/akita/mem/vm/tlb"
 	"gitlab.com/akita/mgpusim"
 	"gitlab.com/akita/mgpusim/pagemigrationcontroller"
-	"gitlab.com/akita/mgpusim/power"
 	"gitlab.com/akita/mgpusim/rdma"
 	"gitlab.com/akita/mgpusim/remotetranslation"
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
@@ -119,11 +117,6 @@ type CommonBuilder struct {
 	partition            string
 	useCoalescingTLBPort bool
 	useCoalescingRTU     bool
-
-	booksimGlobal string
-	booksimMemory string
-	booksimTLB    string
-	booksimDir    string
 }
 
 // MakeCommonBuilder provides a GPU builder that can builds the MCM GPU.
@@ -267,24 +260,6 @@ func (b *CommonBuilder) UseCoalescingRTU(u bool) {
 	b.useCoalescingRTU = u
 }
 
-// WithBooksimGlobal sets the path to booksim config file
-func (b *CommonBuilder) WithBooksimGlobal(config string) {
-	b.booksimGlobal = config
-}
-
-// WithBookSimMemory sets the path to booksim config file
-func (b *CommonBuilder) WithBookSimMemory(config string) {
-	b.booksimMemory = config
-}
-
-func (b *CommonBuilder) WithBookSimTLB(config string) {
-	b.booksimTLB = config
-}
-
-func (b *CommonBuilder) WithBookSimDir(dir string) {
-	b.booksimDir = dir
-}
-
 // CalculateMemoryParameters calculates
 // -> memoryPerChiplet
 // -> memoryPerBank
@@ -374,10 +349,6 @@ func (b *CommonBuilder) collectSAComponents(
 		chiplet.CUs = append(chiplet.CUs, cu)
 
 		b.gpu.ALUs = append(b.gpu.ALUs, cu.ALU)
-
-		if power.Model != nil {
-			power.Model.CUs = append(power.Model.CUs, cu)
-		}
 	}
 
 	for _, rob := range sa.l1vROBs {
@@ -629,29 +600,6 @@ func (b *CommonBuilder) buildIdealMMU(chiplet *Chiplet) {
 	}
 
 	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.IdealMMU", chiplet.name))
-
-	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
-}
-
-func (b *CommonBuilder) buildAsyncCAPWQMMU(chiplet *Chiplet) {
-	mmuBuilder := asyncCaPWQ.MakeAsyncCaPWQMMUBuilder().
-		WithEngine(b.engine).
-		WithFreq(1 * akita.GHz).
-		WithLog2PageSize(b.log2PageSize).
-		WithPageTable(b.pageTable).
-		WithMaxNumReqInFlight(16).
-		WithLog2CacheLineSize(b.log2CacheLineSize)
-
-	if numWalkers, ok := yamlconfig.OverrideConfig["MMU.numPageWalkers"]; ok {
-		numWalkersInt, err := strconv.Atoi(numWalkers)
-		if err != nil {
-			log.Panicf("Invalid number of walkers %s\n", numWalkersInt)
-		}
-
-		mmuBuilder = mmuBuilder.WithMaxNumReqInFlight(numWalkersInt)
-	}
-
-	chiplet.MMU = mmuBuilder.Build(fmt.Sprintf("%s.AsyncCaPWQMMU", chiplet.name))
 
 	b.gpu.MMUs = append(b.gpu.MMUs, chiplet.MMU)
 }
