@@ -8,7 +8,6 @@ import (
 	"gitlab.com/akita/mem"
 	"gitlab.com/akita/mem/cache"
 	"gitlab.com/akita/mem/device"
-	"gitlab.com/akita/mem/profile"
 	"gitlab.com/akita/util/tracing"
 )
 
@@ -539,28 +538,4 @@ func (t *CaPWQAddressTranslator) handleRestartReq(
 	t.CtrlPort.Retrieve(now)
 
 	return true
-}
-
-func (t *CaPWQAddressTranslator) CheckTopPort(port akita.Port) bool {
-	return port == t.TopPort
-}
-
-func (t *CaPWQAddressTranslator) CheckBottomPort(port akita.Port) bool {
-	return port == t.BottomPort
-}
-
-func (t *CaPWQAddressTranslator) GetName() string {
-	return t.Name()
-}
-
-func (t *CaPWQAddressTranslator) Attribute() profile.CachePSVStatus {
-	if len(t.transactions) == 0 {
-		return profile.IDLE
-	}
-
-	return profile.TRANSLATION
-}
-
-func (t *CaPWQAddressTranslator) SetProvider(provider profile.CachePSVComponent) {
-	panic("No provider")
 }

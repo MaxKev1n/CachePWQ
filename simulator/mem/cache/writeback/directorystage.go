@@ -90,13 +90,6 @@ func (ds *directoryStage) handleReadMSHRHit(
 		)
 	}
 
-	tracing.AddTaskStep(
-		"PowerStat",
-		now,
-		ds.cache,
-		"l2_read_hits",
-	)
-
 	return true
 }
 
@@ -143,13 +136,6 @@ func (ds *directoryStage) handleReadMiss(
 				now, ds.cache,
 				"read-miss",
 			)
-
-			tracing.AddTaskStep(
-				"PowerStat",
-				now,
-				ds.cache,
-				"l2_read_misses",
-			)
 		}
 		if trans.read.Info != nil {
 			readReqInfo := trans.read.Info.(*mem.ReadReqInfo)
@@ -171,12 +157,6 @@ func (ds *directoryStage) handleReadMiss(
 			tracing.MsgIDAtReceiver(trans.read, ds.cache),
 			now, ds.cache,
 			"read-miss",
-		)
-		tracing.AddTaskStep(
-			"PowerStat",
-			now,
-			ds.cache,
-			"l2_read_misses",
 		)
 		if trans.read.Info != nil {
 			readReqInfo := trans.read.Info.(*mem.ReadReqInfo)
@@ -208,12 +188,6 @@ func (ds *directoryStage) doWrite(
 			now, ds.cache,
 			"write-mshr-hit",
 		)
-		tracing.AddTaskStep(
-			"PowerStat",
-			now,
-			ds.cache,
-			"l2_write_hits",
-		)
 
 		return ok
 	}
@@ -227,12 +201,6 @@ func (ds *directoryStage) doWrite(
 				now, ds.cache,
 				"write-hit",
 			)
-			tracing.AddTaskStep(
-				"PowerStat",
-				now,
-				ds.cache,
-				"l2_write_hits",
-			)
 		}
 
 		return ok
@@ -244,12 +212,6 @@ func (ds *directoryStage) doWrite(
 			tracing.MsgIDAtReceiver(trans.write, ds.cache),
 			now, ds.cache,
 			"write-miss",
-		)
-		tracing.AddTaskStep(
-			"PowerStat",
-			now,
-			ds.cache,
-			"l2_write_misses",
 		)
 	}
 
@@ -358,13 +320,6 @@ func (ds *directoryStage) readFromBank(
 			"ptw-read-hit",
 		)
 	}
-
-	tracing.AddTaskStep(
-		"PowerStat",
-		now,
-		ds.cache,
-		"l2_read_hits",
-	)
 
 	ds.cache.directory.Visit(block)
 	block.ReadCount++

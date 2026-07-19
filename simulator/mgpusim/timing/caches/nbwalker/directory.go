@@ -1,4 +1,4 @@
-package l1v
+package NBWalker
 
 import (
 	"strconv"
@@ -19,6 +19,7 @@ type directory struct {
 func (d *directory) Tick(now akita.VTimeInSec) bool {
 	d.numExecutedReqs = 0
 	d.collectMSHROccupancy(now)
+	d.collectWalkMSHROccupancy(now)
 
 	item := d.cache.dirBuf.Peek()
 	if item == nil {
@@ -26,6 +27,7 @@ func (d *directory) Tick(now akita.VTimeInSec) bool {
 	}
 
 	trans := item.(*transaction)
+
 	if trans.read != nil {
 		return d.processRead(now, trans)
 	}
@@ -54,6 +56,33 @@ func (d *directory) collectMSHROccupancy(now akita.VTimeInSec) {
 
 	if d.cache.monitorStats != nil {
 		d.cache.monitorStats.L1VLength = uint64(uniqEntries)
+	}
+}
+
+func (d *directory) collectWalkMSHROccupancy(now akita.VTimeInSec) {
+	m := d.cache.mshr
+	uniqEntries := 0
+	totalEntries := 0
+	for _, me := range m.AllEntries() {
+		if me.PTW {
+			uniqEntries++
+			totalEntries += len(me.Requests)
+		}
+	}
+
+	tracing.StartTask("", "", now, d.cache,
+		"WalkMSHRlen", strconv.Itoa(totalEntries), nil)
+	tracing.StartTask("", "", now, d.cache,
+		"WalkMSHRuniq", strconv.Itoa(uniqEntries), nil)
+	if uniqEntries > 0 {
+		tracing.StartTask("", "", now, d.cache,
+			"WalkMSHRlen_g0", strconv.Itoa(totalEntries), nil)
+		tracing.StartTask("", "", now, d.cache,
+			"WalkMSHRuniq_g0", strconv.Itoa(uniqEntries), nil)
+	}
+
+	if d.cache.monitorStats != nil {
+		d.cache.monitorStats.L1VWalkerLength = uint64(uniqEntries)
 	}
 }
 
@@ -145,6 +174,11 @@ func (d *directory) processReadMiss(
 		return false
 	}
 
+	if !d.cache.isInstCache &&
+		d.cache.mshr.IsPartialFull(d.cache.numReservedPTWEntry) {
+		return false
+	}
+
 	if !d.fetchFromBottom(now, trans, victim) {
 		return false
 	}
@@ -224,6 +258,11 @@ func (d *directory) partialWriteMiss(
 	trans.fetchAndWrite = true
 
 	if d.cache.mshr.IsFull() {
+		return false
+	}
+
+	if !d.cache.isInstCache &&
+		d.cache.mshr.IsPartialFull(d.cache.numReservedPTWEntry) {
 		return false
 	}
 

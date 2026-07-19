@@ -13,9 +13,6 @@ import (
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	"gitlab.com/akita/mgpusim/timing/caches/rob"
 	"gitlab.com/akita/mgpusim/timing/cu"
-	noc "gitlab.com/akita/noc/networking/booksim"
-	"gitlab.com/akita/noc/networking/multiplexer"
-	"gitlab.com/akita/noc/networking/ring"
 )
 
 type Chiplet struct {
@@ -52,20 +49,8 @@ type Chiplet struct {
 	L1ToL2Connection       *akita.DirectConnection
 	L2ToDramConnection     *akita.DirectConnection
 
-	L1ToL2NoC       *noc.BookSimNoCImpl
-	L1TLBToL2TLBNoC *noc.BookSimNoCImpl
-
-	// For HierarchicalGPUs use only
-	GlobalNoC *noc.HybridBookSimNoC
-
-	tpcMux []*multiplexer.Multiplexer
-	gpcMux []*multiplexer.Multiplexer
-	l2Mux  []*multiplexer.Multiplexer
-
 	name      string
 	ChipletID uint64
-
-	gpcSwitches []*ring.Switch
 }
 
 // NewChiplet returna a new Chiplet instance with only name and ID set.

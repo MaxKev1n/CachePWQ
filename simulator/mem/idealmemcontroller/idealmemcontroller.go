@@ -137,8 +137,6 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	c.currNumTransaction--
 	c.TickLater(now)
 
-	tracing.AddTaskStep("PowerStat", now, c, "dram_reads")
-
 	return nil
 }
 
@@ -203,8 +201,6 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	tracing.TraceReqComplete(req, now, c)
 	c.currNumTransaction--
 	c.TickLater(now)
-
-	tracing.AddTaskStep("PowerStat", now, c, "dram_writes")
 
 	return nil
 }
