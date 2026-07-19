@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"math"
-	"math/bits"
 	"sync/atomic"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	"gitlab.com/akita/mgpusim/emu"
 	"gitlab.com/akita/mgpusim/insts"
 	"gitlab.com/akita/mgpusim/timing/wavefront"
-	"gitlab.com/akita/util/tracing"
 )
 
 // ScratchpadPreparer does its jobs
@@ -139,7 +137,6 @@ func (p *ScratchpadPreparerImpl) prepareSOP1(
 	layout := scratchPad.AsSOP1()
 
 	p.readOperand(inst.Src0, wf, 0, scratchPad[0:8])
-	p.RegisterAccessCount(inst.Src0, wf, true)
 	layout.SCC = wf.SCC
 	layout.EXEC = wf.EXEC
 }
@@ -154,8 +151,6 @@ func (p *ScratchpadPreparerImpl) prepareSOP2(
 
 	p.readOperand(inst.Src0, wf, 0, scratchPad[0:8])
 	p.readOperand(inst.Src1, wf, 0, scratchPad[8:16])
-	p.RegisterAccessCount(inst.Src0, wf, true)
-	p.RegisterAccessCount(inst.Src1, wf, true)
 
 	layout.SCC = wf.SCC
 }
@@ -176,7 +171,6 @@ func (p *ScratchpadPreparerImpl) prepareVOP1(
 		p.readOperand(inst.Src0, wf, i, sp[offset:offset+8])
 		offset += 8
 	}
-	p.RegisterAccessCount(inst.Src0, wf, true)
 }
 
 func (p *ScratchpadPreparerImpl) prepareVOP2(
@@ -191,7 +185,6 @@ func (p *ScratchpadPreparerImpl) prepareVOP2(
 	layout.VCC = wf.VCC
 	if inst.Src2 != nil {
 		p.readOperand(inst.Src2, wf, 0, sp[1552:1560])
-		p.RegisterAccessCount(inst.Src2, wf, true)
 	}
 	dstOffset := 8
 	src0Offset := 528
@@ -204,13 +197,6 @@ func (p *ScratchpadPreparerImpl) prepareVOP2(
 		p.readOperand(inst.Src1, wf, i, sp[src1Offset:src1Offset+8])
 		src1Offset += 8
 	}
-
-	if inst.IsSdwa {
-		p.RegisterAccessCount(inst.Dst, wf, true)
-	}
-
-	p.RegisterAccessCount(inst.Src0, wf, true)
-	p.RegisterAccessCount(inst.Src1, wf, true)
 }
 
 func (p *ScratchpadPreparerImpl) prepareVOP3a(
@@ -236,11 +222,6 @@ func (p *ScratchpadPreparerImpl) prepareVOP3a(
 			p.readOperand(inst.Src2, wf, i, sp[src2Offset:src2Offset+8])
 			src2Offset += 8
 		}
-	}
-	p.RegisterAccessCount(inst.Src0, wf, true)
-	p.RegisterAccessCount(inst.Src1, wf, true)
-	if inst.Src2 != nil {
-		p.RegisterAccessCount(inst.Src2, wf, true)
 	}
 }
 
@@ -268,11 +249,6 @@ func (p *ScratchpadPreparerImpl) prepareVOP3b(
 			src2Offset += 8
 		}
 	}
-	p.RegisterAccessCount(inst.Src0, wf, true)
-	p.RegisterAccessCount(inst.Src1, wf, true)
-	if inst.Src2 != nil {
-		p.RegisterAccessCount(inst.Src2, wf, true)
-	}
 }
 
 func (p *ScratchpadPreparerImpl) prepareVOPC(
@@ -290,8 +266,6 @@ func (p *ScratchpadPreparerImpl) prepareVOPC(
 		p.readOperand(inst.Src1, wf, i, sp[src1Offset:src1Offset+8])
 		src1Offset += 8
 	}
-	p.RegisterAccessCount(inst.Src0, wf, true)
-	p.RegisterAccessCount(inst.Src1, wf, true)
 
 	layout := sp.AsVOPC()
 	layout.EXEC = wf.EXEC
@@ -310,8 +284,6 @@ func (p *ScratchpadPreparerImpl) prepareFlat(
 		p.readOperand(inst.Addr, wf, i, sp[8+i*8:8+i*8+8])
 		p.readOperand(inst.Data, wf, i, sp[520+i*16:520+i*16+16])
 	}
-	p.RegisterAccessCount(inst.Addr, wf, true)
-	p.RegisterAccessCount(inst.Data, wf, true)
 }
 
 func (p *ScratchpadPreparerImpl) prepareSMEM(
@@ -323,13 +295,10 @@ func (p *ScratchpadPreparerImpl) prepareSMEM(
 
 	if inst.Opcode >= 16 && inst.Opcode <= 26 { // Store instructions
 		p.readOperand(inst.Data, wf, 0, scratchpad[0:16])
-		p.RegisterAccessCount(inst.Data, wf, true)
 	}
 
 	p.readOperand(inst.Offset, wf, 0, scratchpad[16:24])
 	p.readOperand(inst.Base, wf, 0, scratchpad[24:32])
-	p.RegisterAccessCount(inst.Offset, wf, true)
-	p.RegisterAccessCount(inst.Base, wf, true)
 }
 
 func (p *ScratchpadPreparerImpl) prepareSOPP(
@@ -345,7 +314,6 @@ func (p *ScratchpadPreparerImpl) prepareSOPP(
 	layout.EXEC = wf.EXEC
 	layout.VCC = wf.VCC
 	p.readOperand(inst.SImm16, wf, 0, scratchPad[16:24])
-	p.RegisterAccessCount(inst.SImm16, wf, true)
 }
 
 func (p *ScratchpadPreparerImpl) prepareSOPK(
@@ -358,8 +326,6 @@ func (p *ScratchpadPreparerImpl) prepareSOPK(
 	layout.SCC = wf.SCC
 	p.readOperand(inst.Dst, wf, 0, scratchPad[0:8])
 	p.readOperand(inst.SImm16, wf, 0, scratchPad[8:16])
-	p.RegisterAccessCount(inst.Dst, wf, true)
-	p.RegisterAccessCount(inst.SImm16, wf, true)
 }
 
 func (p *ScratchpadPreparerImpl) prepareSOPC(
@@ -371,8 +337,6 @@ func (p *ScratchpadPreparerImpl) prepareSOPC(
 
 	p.readOperand(inst.Src0, wf, 0, scratchPad[0:8])
 	p.readOperand(inst.Src1, wf, 0, scratchPad[8:16])
-	p.RegisterAccessCount(inst.Src0, wf, true)
-	p.RegisterAccessCount(inst.Src1, wf, true)
 }
 
 func (p *ScratchpadPreparerImpl) prepareDS(
@@ -389,14 +353,12 @@ func (p *ScratchpadPreparerImpl) prepareDS(
 	for i := 0; i < 64; i++ {
 		p.readOperand(inst.Addr, wf, i, sp[offset+i*4:offset+i*4+4])
 	}
-	p.RegisterAccessCount(inst.Addr, wf, true)
 
 	if inst.Data != nil {
 		offset = 8 + 64*4
 		for i := 0; i < 64; i++ {
 			p.readOperand(inst.Data, wf, i, sp[offset+i*16:offset+i*16+16])
 		}
-		p.RegisterAccessCount(inst.Data, wf, true)
 	}
 
 	if inst.Data1 != nil {
@@ -404,7 +366,6 @@ func (p *ScratchpadPreparerImpl) prepareDS(
 		for i := 0; i < 64; i++ {
 			p.readOperand(inst.Data1, wf, i, sp[offset+i*16:offset+i*16+16])
 		}
-		p.RegisterAccessCount(inst.Data1, wf, true)
 	}
 }
 
@@ -459,7 +420,6 @@ func (p *ScratchpadPreparerImpl) commitSOP1(
 	layout := scratchpad.AsSOP1()
 
 	p.writeOperand(inst.Dst, wf, 0, scratchpad[8:16])
-	p.RegisterAccessCount(inst.Dst, wf, false)
 	wf.EXEC = layout.EXEC
 	wf.SCC = layout.SCC
 }
@@ -472,7 +432,6 @@ func (p *ScratchpadPreparerImpl) commitSOP2(
 	scratchpad := instEmuState.Scratchpad()
 	layout := scratchpad.AsSOP2()
 	p.writeOperand(inst.Dst, wf, 0, scratchpad[16:24])
-	p.RegisterAccessCount(inst.Dst, wf, false)
 	wf.SCC = layout.SCC
 }
 
@@ -493,7 +452,6 @@ func (p *ScratchpadPreparerImpl) commitVOP1(
 		offset := 8 + i*8
 		p.writeOperand(inst.Dst, wf, i, scratchpad[offset:offset+8])
 	}
-	p.RegisterAccessCount(inst.Dst, wf, false)
 }
 
 func (p *ScratchpadPreparerImpl) commitVOP2(
@@ -513,7 +471,6 @@ func (p *ScratchpadPreparerImpl) commitVOP2(
 		offset := 8 + i*8
 		p.writeOperand(inst.Dst, wf, i, scratchpad[offset:offset+8])
 	}
-	p.RegisterAccessCount(inst.Dst, wf, false)
 }
 
 func (p *ScratchpadPreparerImpl) commitVOP3a(
@@ -539,7 +496,6 @@ func (p *ScratchpadPreparerImpl) commitVOP3a(
 		offset := 8 + i*8
 		p.writeOperand(inst.Dst, wf, i, sp[offset:offset+8])
 	}
-	p.RegisterAccessCount(inst.Dst, wf, false)
 }
 
 func (p *ScratchpadPreparerImpl) commitVOP3aCmp(
@@ -550,7 +506,6 @@ func (p *ScratchpadPreparerImpl) commitVOP3aCmp(
 	sp := instEmuState.Scratchpad()
 
 	p.writeOperand(inst.Dst, wf, 0, sp[8:16])
-	p.RegisterAccessCount(inst.Dst, wf, false)
 }
 
 func (p *ScratchpadPreparerImpl) commitVOP3b(
@@ -573,8 +528,6 @@ func (p *ScratchpadPreparerImpl) commitVOP3b(
 		p.writeOperand(inst.Dst, wf, i, sp[offset:offset+8])
 	}
 	p.writeOperand(inst.SDst, wf, 0, insts.Uint64ToBytes(layout.SDST))
-	p.RegisterAccessCount(inst.Dst, wf, false)
-	p.RegisterAccessCount(inst.SDst, wf, false)
 }
 
 func (p *ScratchpadPreparerImpl) commitVOPC(
@@ -601,7 +554,6 @@ func (p *ScratchpadPreparerImpl) commitFlat(
 			}
 			p.writeOperand(inst.Dst, wf, i, scratchpad[1544+i*16:1544+i*16+16])
 		}
-		p.RegisterAccessCount(inst.Dst, wf, false)
 	}
 }
 
@@ -614,7 +566,6 @@ func (p *ScratchpadPreparerImpl) commitSMEM(
 
 	if inst.Opcode <= 12 { // Load instructions
 		p.writeOperand(inst.Data, wf, 0, scratchpad[32:96])
-		p.RegisterAccessCount(inst.Data, wf, false)
 	}
 }
 
@@ -625,7 +576,6 @@ func (p *ScratchpadPreparerImpl) commitSOPK(
 	inst := instEmuState.Inst()
 	scratchpad := instEmuState.Scratchpad()
 	p.writeOperand(inst.Dst, wf, 0, scratchpad[0:8])
-	p.RegisterAccessCount(inst.Dst, wf, false)
 	wf.SCC = scratchpad.AsSOPK().SCC
 }
 
@@ -661,40 +611,6 @@ func (p *ScratchpadPreparerImpl) commitDS(
 			}
 			p.writeOperand(inst.Dst, wf, i, sp[offset+i*16:offset+i*16+16])
 		}
-		p.RegisterAccessCount(inst.Dst, wf, false)
-	}
-}
-
-func (p *ScratchpadPreparerImpl) RegisterAccessCount(
-	operand *insts.Operand,
-	wf *wavefront.Wavefront,
-	isRead bool,
-) {
-	if operand.OperandType == insts.RegOperand {
-		active := uint64(1)
-
-		if operand.Register.IsVReg() {
-			active = uint64(bits.OnesCount64(wf.EXEC))
-		}
-
-		what := "register_writes"
-		if isRead {
-			what = "register_reads"
-		}
-		tracing.AddTaskStepWithDetail(
-			"PowerStat",
-			0,
-			p.cu,
-			what,
-			active,
-		)
-	} else {
-		tracing.AddTaskStep(
-			"PowerStat",
-			0,
-			p.cu,
-			"register_non_reg_ops",
-		)
 	}
 }
 

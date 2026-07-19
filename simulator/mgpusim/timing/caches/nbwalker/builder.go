@@ -1,4 +1,4 @@
-package l1v
+package NBWalker
 
 import (
 	"fmt"
@@ -25,6 +25,7 @@ type Builder struct {
 	lowModuleFinder cache.LowModuleFinder
 	visTracer       tracing.Tracer
 	isInstCache     bool
+	extendBits      uint64
 }
 
 // NewBuilder creates a builder with default parameter setting
@@ -39,6 +40,7 @@ func NewBuilder() *Builder {
 		numReqPerCycle:  4,
 		bankLatency:     20,
 		isInstCache:     false,
+		extendBits:      0,
 	}
 }
 
@@ -119,6 +121,14 @@ func (b *Builder) WithInstCache() *Builder {
 	return b
 }
 
+// WithExtendBits sets the number of bits used to extend the address when indexing
+// the directory. This is used to support larger block size without increasing
+// the directory size.
+func (b *Builder) WithExtendBits(n uint64) *Builder {
+	b.extendBits = n
+	return b
+}
+
 // Build returns a new cache unit
 func (b *Builder) Build(name string) *Cache {
 	b.assertAllRequiredInformationIsAvailable()
@@ -134,15 +144,18 @@ func (b *Builder) Build(name string) *Cache {
 	c.BottomPort = akita.NewLimitNumMsgPort(c, b.numReqPerCycle,
 		name+".BottomPort")
 	c.ControlPort = akita.NewLimitNumMsgPort(c, b.numReqPerCycle,
-		name+"ControlPort")
+		name+".ControlPort")
+	c.WalkerPort = akita.NewLimitNumMsgPort(c, b.numReqPerCycle,
+		name+".WalkerPort")
 
 	c.dirBuf = util.NewBuffer(b.numReqPerCycle)
+	c.walkerDirBuf = util.NewBuffer(b.numReqPerCycle)
 	c.bankBufs = make([]util.Buffer, b.numBank)
 	for i := 0; i < b.numBank; i++ {
 		c.bankBufs[i] = util.NewBuffer(b.numReqPerCycle)
 	}
 
-	c.mshr = cache.NewMSHR(b.numMSHREntry)
+	c.mshr = cache.NewWalkerMSHR(b.numMSHREntry)
 	blockSize := 1 << b.log2BlockSize
 	numSets := int(b.totalByteSize / uint64(b.wayAssocitivity*blockSize))
 	c.directory = cache.NewDirectory(
@@ -168,6 +181,7 @@ func (b *Builder) Build(name string) *Cache {
 
 func (b *Builder) buildStages(c *Cache) {
 	c.coalesceStage = &coalescer{cache: c}
+	c.walkerStage = &walkerStage{cache: c}
 	c.directoryStage = &directory{cache: c}
 	for i := 0; i < b.numBank; i++ {
 		pipelineName := fmt.Sprintf("%s.Bank_%02d.Pipeline", c.Name(), i)
@@ -202,6 +216,10 @@ func (b *Builder) buildStages(c *Cache) {
 		bankStages:   c.bankStages,
 		coalescer:    c.coalesceStage,
 	}
+
+	c.extendBits = b.extendBits
+	c.offsetMask = (1 << c.extendBits) - 1
+	c.numReservedPTWEntry = 4
 }
 
 func (b *Builder) assertAllRequiredInformationIsAvailable() {

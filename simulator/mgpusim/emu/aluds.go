@@ -2,8 +2,6 @@ package emu
 
 import (
 	"log"
-
-	"gitlab.com/akita/util/tracing"
 )
 
 func (u *ALUImpl) BankAccesses(addr []uint32) {
@@ -11,23 +9,6 @@ func (u *ALUImpl) BankAccesses(addr []uint32) {
 	for _, a := range addr {
 		bank := (a >> 2) & 0x1F
 		bankAccessCount[bank]++
-	}
-
-	var maxAccess uint32
-	for _, count := range bankAccessCount {
-		if count > maxAccess {
-			maxAccess = count
-		}
-	}
-
-	for maxAccess > 0 {
-		tracing.AddTaskStep(
-			"PowerStat",
-			0,
-			u,
-			"LDS_accesses",
-		)
-		maxAccess--
 	}
 }
 

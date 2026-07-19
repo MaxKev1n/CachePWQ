@@ -41,15 +41,8 @@ type CommonPlatformBuilder struct {
 	memAllocatorType         string
 	customHSLpmdUnits        uint64
 
-	booksimGlobal string
-	booksimMemory string
-	booksimTLB    string
-	booksimDir    string
-
 	useTLBMonitor   bool
 	useCaPWQMonitor bool
-	useCacheTEA     bool
-	usePowerModel   bool
 }
 
 // Makebuilder creates a EmuBuilder with default parameters.
@@ -132,36 +125,12 @@ func (b *CommonPlatformBuilder) WithCustomHSL(pmdUnits uint64) {
 	b.customHSLpmdUnits = pmdUnits
 }
 
-func (b *CommonPlatformBuilder) WithBookSimGlobal(config string) {
-	b.booksimGlobal = config
-}
-
-func (b *CommonPlatformBuilder) WithBookSimMemoryNoC(config string) {
-	b.booksimMemory = config
-}
-
-func (b *CommonPlatformBuilder) WithBookSimTLBNoC(config string) {
-	b.booksimTLB = config
-}
-
-func (b *CommonPlatformBuilder) WithBookSimDir(dir string) {
-	b.booksimDir = dir
-}
-
 func (b *CommonPlatformBuilder) WithTLBMonitor() {
 	b.useTLBMonitor = true
 }
 
 func (b *CommonPlatformBuilder) WithCaPWQMonitor() {
 	b.useCaPWQMonitor = true
-}
-
-func (b *CommonPlatformBuilder) WithCacheTEA() {
-	b.useCacheTEA = true
-}
-
-func (b *CommonPlatformBuilder) WithPowerModel() {
-	b.usePowerModel = true
 }
 
 // // WithNumChiplets sets the number of chiplets in the mcm GPU.

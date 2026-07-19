@@ -17,9 +17,7 @@ import (
 	"github.com/tebeka/atexit"
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem/monitor"
-	"gitlab.com/akita/mem/profile"
 	"gitlab.com/akita/mem/trace"
-	"gitlab.com/akita/mgpusim/power"
 	"gitlab.com/akita/mgpusim/timing/caches/l1cache"
 	"gitlab.com/akita/mgpusim/yamlconfig"
 
@@ -136,22 +134,10 @@ var customHSL = flag.Uint64("custom-hsl", 1,
 	"Specify the value of custom HSL directly to the builder")
 var yamlConfigFile = flag.String("yaml-config-file", "",
 	"Specify the path to a yaml config file to override default config values.")
-var GlobalNoCConfigFile = flag.String("global-noc-config-file", "",
-	"Specify the path to a booksim config file to configure the Global NoC.")
-var MemoryConfigFile = flag.String("memory-noc-config-file", "",
-	"Specify the path to a booksim config file to configure the Memory NoC.")
-var TLBConfigFile = flag.String("tlb-noc-config-file", "",
-	"Specify the path to a booksim config file to configure the TLB NoC.")
-var booksimDir = flag.String("booksim-dir", "",
-	"Specify the path to the booksim directory.")
 var monitorTLBFlag = flag.Bool("tlb-monitor", false,
 	"Enable the TLB monitor that tracks the number of the TLB queues.")
 var monitorCaPWQFlag = flag.Bool("capwq-monitor", false,
 	"Enable the CaPWQ monitor that tracks the number of the capwq queues.")
-var cacheUtilizationFlag = flag.Bool("cache-utilization", false,
-	"Enable the cache utilization tracer that tracks the utilization of the cache.")
-var powerFlag = flag.Bool("power", false,
-	"Enable power modeling using GPUWattch.")
 
 type verificationPreEnablingBenchmark interface {
 	benchmarks.Benchmark
@@ -171,11 +157,6 @@ type cacheLatencyTracer struct {
 
 type cacheHitRateTracer struct {
 	tracer *tracing.StepCountTracer
-	cache  akita.Component
-}
-
-type cacheUtilizationTracer struct {
-	tracer *profile.CacheUtilizationTracer
 	cache  akita.Component
 }
 
@@ -207,16 +188,6 @@ type TLBHitRateTracer struct {
 type CDMAAccessTracer struct {
 	tracer     *tracing.StepCountTracer
 	cdmaEngine akita.Component
-}
-
-type BookSimAccessTracer struct {
-	tracer *tracing.StepCountTracer
-	noc    tracing.NamedHookable
-}
-
-type BookSimLatencyTracer struct {
-	tracer *tracing.NocTracer
-	noc    tracing.NamedHookable
 }
 
 type L2AccessSourceTracer struct {
@@ -350,7 +321,6 @@ type Runner struct {
 	DRAMLatencyTracers               []DRAMLatencyTracer
 	AddressTranslatorLatencyTracers  []AddressTranslatorLatencyTracer
 	CacheHitRateTracers              []cacheHitRateTracer
-	cacheUtilizationTracers          []cacheUtilizationTracer
 	RTUCoalescingTracers             [][][][]*tracing.AverageCountTracer
 	TLBHitRateTracers                []TLBHitRateTracer
 	PWCHitRateTracers                []PWCHitRateTracer
@@ -364,8 +334,6 @@ type Runner struct {
 	RTUTransactionCounters           []rtuTransactionCountTracer
 	CDMAAccessTracers                []CDMAAccessTracer
 	PageAccessTracers                []CDMAAccessTracer
-	BookSimAccessTracers             []BookSimAccessTracer
-	BookSimLatencyTracers            []BookSimLatencyTracer
 	L2AccessSourceTracers            []L2AccessSourceTracer
 	DRAMAccessSourceTracers          []DRAMAccessSourceTracer
 	RTUAccessTracers                 []RTUAccessTracer
@@ -404,7 +372,6 @@ type Runner struct {
 	MMUStallTracers                  []MMUStallTracer
 	TLBReqStallTracers               []TLBReqStallTracer
 	TLBAverageTracers                []TLBMonitorTracer
-	PowerStatTracer                  *power.PowerStatTracer
 	Benchmarks                       []benchmarks.Benchmark
 	Timing                           bool
 	Verify                           bool
@@ -430,7 +397,6 @@ type Runner struct {
 	ReportDRAMTransactionCount       bool
 	ReportRDMATransactionCount       bool
 	ReportCDMATransactionCount       bool
-	ReportBookSimNoc                 bool
 	ReportRTUTransactionCount        bool
 	ReportActiveWalkerCount          bool
 	L3TLBSQLTracing                  bool
@@ -442,7 +408,6 @@ type Runner struct {
 	ReportTLBMSHRStallTracing        bool
 	ReportTLBReqStalls               bool
 	ReportTLBMonitor                 bool
-	ReportCacheUtilization           bool
 	UseUnifiedMemory                 bool
 	UseLASPMemoryAlloc               bool
 	UseLASPHSLMemoryAlloc            bool
@@ -609,7 +574,6 @@ func (r *Runner) ParseFlag() *Runner {
 		r.ReportTLBSetMissTracing = true
 		r.ReportTLBMSHRStallTracing = true
 		r.ReportTLBReqStalls = true
-		r.ReportBookSimNoc = true
 	}
 
 	// who decides what is essential?
@@ -677,7 +641,6 @@ func (r *Runner) Init() *Runner {
 	r.parseGPUFlag()
 
 	r.metricsCollector = &collector{}
-	r.addPowerStatTracer()
 	r.addMaxInstStopper()
 	r.addKernelTimeTracer()
 	r.addInstCountTracer()
@@ -695,11 +658,9 @@ func (r *Runner) Init() *Runner {
 	r.addPageWalkLatencyTracer()
 	r.addAddressTranslatorLatencyTracer()
 	r.addCacheHitRateTracer()
-	r.addCacheUtilizationTracer()
 	r.addPWCHitRateTracer()
 	r.addRDMAEngineTracer()
 	r.addCDMAEngineTracer()
-	r.addBookSimTracer()
 	r.addRTUTracer()
 	r.addActiveWalkerTracer()
 	r.addL3TLBQueueingImbalanceTracer()
@@ -1118,22 +1079,10 @@ func (r *Runner) buildTimingPlatform() {
 			b.WithCaPWQMonitor()
 		}
 
-		if *cacheUtilizationFlag {
-			b.WithCacheTEA()
-
-			r.ReportCacheUtilization = true
-		}
-
-		if *powerFlag {
-			b.WithPowerModel()
-		}
-
 		b.WithAlg(*schedulingAlg)
 		b.WithSchedulingPartition(*schedulingPartition)
 		b.WithMemAllocatorType(*memAllocatorType)
 		b.WithLog2PageSize(*log2PageSize)
-		b.WithBookSimGlobal(*GlobalNoCConfigFile)
-		b.WithBookSimDir(*booksimDir)
 		r.Engine, r.GPUDriver = b.Build()
 	case "privateh2tlb":
 		b := platform.MakePrivateH2TLBPlatformBuilder()
@@ -1511,64 +1460,6 @@ func (r *Runner) buildTimingPlatform() {
 	default:
 		panic("oh no!")
 	}
-}
-
-func (r *Runner) addPowerStatTracer() {
-	if !*powerFlag {
-		return
-	}
-
-	r.PowerStatTracer = power.NewPowerStatTracer(
-		func(task tracing.Task) bool {
-			return task.ID == "PowerStat"
-		})
-
-	for _, gpu := range r.GPUDriver.GPUs {
-		for _, cu := range gpu.CUs {
-			tracing.CollectTrace(cu.(tracing.NamedHookable), r.PowerStatTracer)
-		}
-		for _, alu := range gpu.ALUs {
-			tracing.CollectTrace(alu.(tracing.NamedHookable), r.PowerStatTracer)
-		}
-		for _, l1v := range gpu.L1VCaches {
-			tracing.CollectTrace(l1v, r.PowerStatTracer)
-		}
-		for _, l1s := range gpu.L1SCaches {
-			tracing.CollectTrace(l1s, r.PowerStatTracer)
-		}
-		for _, l1i := range gpu.L1ICaches {
-			tracing.CollectTrace(l1i, r.PowerStatTracer)
-		}
-		for _, l2 := range gpu.L2Caches {
-			tracing.CollectTrace(l2, r.PowerStatTracer)
-		}
-		for _, dram := range gpu.MemoryControllers {
-			tracing.CollectTrace(dram, r.PowerStatTracer)
-		}
-		for _, tlb := range gpu.L1ITLBs {
-			tracing.CollectTrace(tlb, r.PowerStatTracer)
-		}
-		for _, tlb := range gpu.L1STLBs {
-			tracing.CollectTrace(tlb, r.PowerStatTracer)
-		}
-		for _, tlb := range gpu.L1VTLBs {
-			tracing.CollectTrace(tlb, r.PowerStatTracer)
-		}
-		for _, tlb := range gpu.L2TLBs {
-			tracing.CollectTrace(tlb, r.PowerStatTracer)
-		}
-		for _, tlb := range gpu.L3TLBs {
-			tracing.CollectTrace(tlb, r.PowerStatTracer)
-		}
-		for _, mmu := range gpu.MMUs {
-			tracing.CollectTrace(mmu, r.PowerStatTracer)
-		}
-		for _, noc := range gpu.NoCs {
-			tracing.CollectTrace(noc, r.PowerStatTracer)
-		}
-	}
-
-	power.Model.SetPowerStatTracer(r.PowerStatTracer)
 }
 
 func (r *Runner) addMaxInstStopper() {
@@ -2414,27 +2305,6 @@ func (r *Runner) addCacheHitRateTracer() {
 	}
 }
 
-func (r *Runner) addCacheUtilizationTracer() {
-	if !r.ReportCacheUtilization {
-		return
-	}
-
-	for _, gpu := range r.GPUDriver.GPUs {
-		cp := gpu.CommandProcessor
-
-		for _, cache := range gpu.L1VCaches {
-			tracer := profile.NewCacheUtilizationTracer(
-				func(task tracing.Task) bool {
-					return task.Kind == "cache_utilization"
-				})
-			r.cacheUtilizationTracers = append(r.cacheUtilizationTracers,
-				cacheUtilizationTracer{tracer: tracer, cache: cache})
-			tracing.CollectTrace(cache, tracer)
-			tracing.CollectTrace(cp, tracer)
-		}
-	}
-}
-
 func (r *Runner) addTLBHitRateTracer() {
 	if !r.ReportTLBHitRate {
 		return
@@ -2534,42 +2404,6 @@ func (r *Runner) addRDMAEngineTracer() {
 		tracing.CollectTrace(t.rdmaEngine, t.outgoingTracer)
 
 		r.RDMATransactionCounters = append(r.RDMATransactionCounters, t)
-	}
-}
-
-func (r *Runner) addBookSimTracer() {
-	if !r.ReportBookSimNoc {
-		return
-	}
-
-	for _, gpu := range r.GPUDriver.GPUs {
-		for _, noc := range gpu.NoCs {
-			t := BookSimAccessTracer{}
-			t.noc = noc.(tracing.NamedHookable)
-
-			tracer := tracing.NewStepCountTracer(
-				func(task tracing.Task) bool { /*return true*/
-					return task.Kind == "req_in"
-				})
-			t.tracer = tracer
-			tracing.CollectTrace(t.noc, t.tracer)
-
-			r.BookSimAccessTracers = append(r.BookSimAccessTracers, t)
-		}
-
-		for _, noc := range gpu.NoCs {
-			t := BookSimLatencyTracer{}
-			t.noc = noc.(tracing.NamedHookable)
-
-			tracer := tracing.NewNocTracer(
-				func(task tracing.Task) bool { /*return true*/
-					return task.Kind == "req_out"
-				})
-			t.tracer = tracer
-			tracing.CollectTrace(t.noc, t.tracer)
-
-			r.BookSimLatencyTracers = append(r.BookSimLatencyTracers, t)
-		}
 	}
 }
 
@@ -3258,7 +3092,6 @@ func (r *Runner) reportStats() {
 	r.reportInstCount()
 	r.reportCacheLatency()
 	r.reportCacheHitRate()
-	r.reportCacheUtilization()
 	r.reportMemoryAccessSource()
 	r.reportTLBLatency()
 	r.reportPageWalkLatency()
@@ -3280,7 +3113,6 @@ func (r *Runner) reportStats() {
 	r.reportTLBMSHRStallTracing()
 	r.reportTLBReqStalls()
 	r.reportTLBMonitor()
-	r.reportBookSimTracer()
 	r.reportMMUCacheReqLatency()
 
 	if *platformType != "ideal" {
@@ -3829,30 +3661,6 @@ func (r *Runner) reportCacheHitRate() {
 	}
 }
 
-func (r *Runner) reportCacheUtilization() {
-	for _, tracer := range r.cacheUtilizationTracers {
-		idle := tracer.tracer.GetStepCount("idle")
-		base := tracer.tracer.GetStepCount("base")
-		translation := tracer.tracer.GetStepCount("translation")
-		miss := tracer.tracer.GetStepCount("miss")
-
-		totalAttribution := idle + base + translation + miss
-
-		if totalAttribution == 0 {
-			continue
-		}
-
-		r.metricsCollector.Collect(
-			tracer.cache.Name(), "idle", float64(idle))
-		r.metricsCollector.Collect(
-			tracer.cache.Name(), "base", float64(base))
-		r.metricsCollector.Collect(
-			tracer.cache.Name(), "translation", float64(translation))
-		r.metricsCollector.Collect(
-			tracer.cache.Name(), "miss", float64(miss))
-	}
-}
-
 func (r *Runner) reportTLBHitRate() {
 	for _, tracer := range r.TLBHitRateTracers {
 		//fmt.Println(tracer.tlb.Name())
@@ -3946,53 +3754,6 @@ func (r *Runner) reportRDMATransactionCount() {
 			t.rdmaEngine.Name(),
 			"incoming_trans_count",
 			float64(t.incomingTracer.TotalCount()),
-		)
-	}
-}
-
-func (r *Runner) reportBookSimTracer() {
-	for _, t := range r.BookSimAccessTracers {
-		noc := t.noc
-		booksimAccessTracer := t.tracer
-		for _, step := range booksimAccessTracer.GetStepNames() {
-			r.metricsCollector.Collect(
-				noc.Name(),
-				"BookSimNocTraffic: "+step,
-				float64(booksimAccessTracer.GetStepCount(step)),
-			)
-		}
-	}
-
-	for _, t := range r.BookSimLatencyTracers {
-		r.metricsCollector.Collect(
-			t.noc.Name(),
-			"total_count",
-			float64(t.tracer.TotalCount()),
-		)
-		r.metricsCollector.Collect(
-			t.noc.Name(),
-			"total_latency",
-			float64(t.tracer.AverageTime()),
-		)
-		r.metricsCollector.Collect(
-			t.noc.Name(),
-			"translation_count",
-			float64(t.tracer.TranslationCount()),
-		)
-		r.metricsCollector.Collect(
-			t.noc.Name(),
-			"translation_latency",
-			float64(t.tracer.TranslationAvgTime()),
-		)
-		r.metricsCollector.Collect(
-			t.noc.Name(),
-			"data_count",
-			float64(t.tracer.DataCount()),
-		)
-		r.metricsCollector.Collect(
-			t.noc.Name(),
-			"data_latency",
-			float64(t.tracer.DataAvgTime()),
 		)
 	}
 }

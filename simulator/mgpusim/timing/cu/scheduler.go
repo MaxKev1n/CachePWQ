@@ -3,7 +3,6 @@ package cu
 import (
 	"fmt"
 	"log"
-	"math/bits"
 
 	"gitlab.com/akita/akita"
 	"gitlab.com/akita/mem"
@@ -114,32 +113,6 @@ func (s *SchedulerImpl) DecodeNextInst(now akita.VTimeInSec) bool {
 				wf.InstToIssue = wavefront.NewInst(inst)
 				// s.cu.logInstTask(now, wf, wf.InstToIssue, false)
 				madeProgress = true
-
-				tracing.AddTaskStep(
-					"PowerStat",
-					now,
-					s.cu,
-					"num_instructions",
-				)
-
-				switch inst.OperationType() {
-				case insts.OpcodeType_IALU, insts.OpcodeType_SALU, insts.OpcodeType_MEM:
-					tracing.AddTaskStep(
-						"PowerStat",
-						now,
-						s.cu,
-						"num_int_instructions",
-					)
-				case insts.OpcodeType_FPU, insts.OpcodeType_SFU:
-					tracing.AddTaskStep(
-						"PowerStat",
-						now,
-						s.cu,
-						"num_fp_instructions",
-					)
-				default:
-					panic("Unknown inst operation type for power model")
-				}
 			} else {
 				fmt.Println(err)
 				panic("Heheheeeee: newwwwww instructionnnnn")
@@ -246,23 +219,6 @@ func (s *SchedulerImpl) DoIssue(now akita.VTimeInSec) bool {
 	if s.isPaused == false {
 		wfs := s.issueArbiter.Arbitrate(s.cu.WfPools)
 		for _, wf := range wfs {
-			numActiveLanes := bits.OnesCount64(wf.EXEC)
-
-			tracing.AddTaskStepWithDetail(
-				"PowerStat",
-				now,
-				s.cu,
-				"num_active_threads",
-				uint64(numActiveLanes),
-			)
-
-			tracing.AddTaskStep(
-				"PowerStat",
-				now,
-				s.cu,
-				"num_active_wf",
-			)
-
 			if wf.InstToIssue.ExeUnit == insts.ExeUnitSpecial {
 				madeProgress = s.issueToInternal(wf, now) || madeProgress
 
