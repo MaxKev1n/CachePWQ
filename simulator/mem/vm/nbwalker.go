@@ -4,7 +4,7 @@ import (
 	"gitlab.com/akita/util/ca"
 )
 
-type CaPWQBlock struct {
+type NBWalkerBlock struct {
 	PID            ca.PID
 	Address        uint64
 	Level          int

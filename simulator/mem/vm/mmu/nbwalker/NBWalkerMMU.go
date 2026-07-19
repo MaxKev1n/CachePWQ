@@ -779,7 +779,7 @@ func (impl *NBWalkerMMU) ToPageWalkCachePort() akita.Port {
 	return impl.ToPageWalkCache
 }
 
-func (impl *CaPWQMMU) checkDemandPaging(
+func (impl *NBWalkerMMU) checkDemandPaging(
 	req *device.TranslationReq,
 ) {
 	// Demand Paging
@@ -845,7 +845,7 @@ func (impl *CaPWQMMU) checkDemandPaging(
 	}
 }
 
-func (impl *CaPWQMMU) writePageTablePage(
+func (impl *NBWalkerMMU) writePageTablePage(
 	pid ca.PID,
 ) {
 	pageTablePages := impl.pageTable.PageTablePagesAsBytes(pid)
@@ -868,7 +868,7 @@ func (impl *CaPWQMMU) writePageTablePage(
 	}
 }
 
-func (impl *CaPWQMMU) writeMultiplePages(
+func (impl *NBWalkerMMU) writeMultiplePages(
 	pid ca.PID,
 	addr uint64,
 ) {
@@ -899,7 +899,7 @@ func (impl *CaPWQMMU) writeMultiplePages(
 	}
 }
 
-func (impl *CaPWQMMU) writeToDRAM(
+func (impl *NBWalkerMMU) writeToDRAM(
 	pAddr uint64,
 	data []byte,
 ) {
