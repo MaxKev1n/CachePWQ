@@ -238,7 +238,7 @@ func (b *MGPUSimNUMAGPUBuilder) establishL1ToL2RoutingPath(chiplet *Chiplet) {
 		switch walker := comp.(type) {
 		case *baseline.MMUImpl:
 			walker.DramLowModuleFinder = lowModuleFinder
-		case *caPWQL5.CaPWQMMU:
+		case *NBWalkerMMU.NBWalkerMMU:
 			walker.DramLowModuleFinder = lowModuleFinder
 		default:
 			panic("MMU type not supported in establishL1ToL2RoutingPath")
@@ -703,6 +703,20 @@ func (b *MGPUSimNUMAGPUBuilder) buildNBWalkerMMU(chiplet *Chiplet) {
 
 		chiplet.MMUs = append(chiplet.MMUs, component)
 		b.gpu.MMUs = append(b.gpu.MMUs, component)
+
+		for _, dram := range chiplet.DRAMs {
+			component.(*NBWalkerMMU.NBWalkerMMU).Drams = append(
+				component.(*NBWalkerMMU.NBWalkerMMU).Drams, dram,
+			)
+		}
+
+		for _, l2 := range chiplet.L2Caches {
+			component.(*NBWalkerMMU.NBWalkerMMU).L2Caches = append(
+				component.(*NBWalkerMMU.NBWalkerMMU).L2Caches, l2,
+			)
+		}
+
+		component.(*NBWalkerMMU.NBWalkerMMU).CPU = b.cpuStorage
 	}
 
 	b.establishMMUToNBWalkerL1RoutingPath(chiplet)
